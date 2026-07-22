@@ -273,11 +273,11 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
             <h3 className="font-semibold text-slate-800 flex items-center"><Sparkles className="w-4 h-4 mr-2 text-blue-500" /> Feature Discovery</h3>
             <Link href={`/repository/${repoName}/summary`} className="text-xs text-blue-600 hover:underline cursor-pointer">View model &rarr;</Link>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto pr-2" style={{ maxHeight: "320px" }}>
             {isLoading ? (
               <p className="text-sm text-slate-500">Loading features...</p>
             ) : discoveredFeatures.length > 0 ? (
-              discoveredFeatures.slice(0, 4).map((feature) => (
+              discoveredFeatures.slice(0, 8).map((feature) => (
                 <div key={feature.id} className="rounded-lg border border-slate-200 p-3 bg-white">
                   <div className="flex items-start justify-between gap-3">
                     <div>
