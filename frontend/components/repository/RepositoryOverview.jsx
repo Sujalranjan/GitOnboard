@@ -265,111 +265,148 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
       </div>
       
       {/* Bottom Section (AI Summary, Findings, Actions) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+      {/* Bottom Section (Insights & Composition) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Feature Discovery */}
-        <Card className="lg:col-span-1">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-slate-800 flex items-center"><Sparkles className="w-4 h-4 mr-2 text-blue-500" /> Feature Discovery</h3>
-            <Link href={`/repository/${repoName}/summary`} className="text-xs text-blue-600 hover:underline cursor-pointer">View model &rarr;</Link>
+        {/* Repository Composition */}
+        <Card className="lg:col-span-1 flex flex-col">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-semibold text-slate-800 flex items-center"><Box className="w-4 h-4 mr-2 text-blue-500" /> Composition</h3>
           </div>
-          <div className="space-y-3 overflow-y-auto pr-2" style={{ maxHeight: "320px" }}>
-            {isLoading ? (
-              <p className="text-sm text-slate-500">Loading features...</p>
-            ) : discoveredFeatures.length > 0 ? (
-              discoveredFeatures.slice(0, 8).map((feature) => (
-                <div key={feature.id} className="rounded-lg border border-slate-200 p-3 bg-white">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{feature.name}</p>
-                      {feature.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{feature.description}</p>}
-                    </div>
-                    <Badge variant={feature.confidence >= 0.75 ? "success" : feature.confidence >= 0.5 ? "warning" : "neutral"}>
-                      {Math.round((feature.confidence || 0) * 100)}%
-                    </Badge>
+          <div className="flex-1 flex flex-col justify-between space-y-6">
+            <div>
+              <p className="text-sm text-slate-600 mb-4">Breakdown of repository elements:</p>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-slate-600 font-medium">Functions</span>
+                    <span className="text-slate-900 font-bold">{funcsCount}</span>
                   </div>
-                  <div className="mt-3 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                    <div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.max(8, Math.round((feature.confidence || 0) * 100))}%` }} />
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, (funcsCount / Math.max(1, funcsCount + classesCount)) * 100)}%` }} />
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {feature.member_count} members · {feature.evidence_count} evidence items
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-slate-600 font-medium">Classes</span>
+                    <span className="text-slate-900 font-bold">{classesCount}</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min(100, (classesCount / Math.max(1, funcsCount + classesCount)) * 100)}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">AI Understanding</p>
+                  <p className="text-xs text-slate-500">
+                    {discoveredFeatures.length > 0 
+                      ? `${discoveredFeatures.length} features mapped (${Math.round(discoveredFeatures.reduce((acc, f) => acc + (f.confidence || 0), 0) / discoveredFeatures.length * 100)}% confidence)`
+                      : "No features mapped yet."}
                   </p>
                 </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-500">No features reconstructed yet.</p>
-            )}
-          </div>
-        </Card>
-        
-        {/* AI Summary */}
-        <Card className="lg:col-span-1">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-slate-800 flex items-center"><Sparkles className="w-4 h-4 mr-2 text-blue-500" /> AI Summary</h3>
-            <Link href={`/repository/${repoName}/summary`} className="text-xs text-blue-600 hover:underline cursor-pointer">View full report &rarr;</Link>
-          </div>
-          <div className="bg-blue-50/50 p-4 rounded-lg text-sm text-slate-700 mb-4 border border-blue-100">
-            This repository has a calculated health score of {healthScore}.
-          </div>
-          <div className="space-y-3">
-            <div>
-              <span className="text-xs font-semibold text-slate-500 uppercase block mb-2">Metrics Status</span>
-              <div className="flex gap-2">
-                <Badge variant={healthScore > 60 ? "success" : "warning"}>{status}</Badge>
               </div>
             </div>
           </div>
         </Card>
-
-        {/* Recent Findings */}
-        <Card className="lg:col-span-1">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-slate-800">Recent Findings</h3>
-            <Link href={`/repository/${repoName}/health`} className="text-xs text-blue-600 hover:underline cursor-pointer">View all &rarr;</Link>
+        
+        {/* Detailed Health Breakdown */}
+        <Card className="lg:col-span-1 flex flex-col">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-semibold text-slate-800 flex items-center"><ShieldCheck className="w-4 h-4 mr-2 text-green-500" /> Health Breakdown</h3>
+            <Link href={`/repository/${repoName}/health`} className="text-xs text-blue-600 hover:underline cursor-pointer">Details &rarr;</Link>
           </div>
-          <div className="space-y-4">
-            {isLoading ? (
-              <p className="text-sm text-slate-500">Loading findings...</p>
-            ) : topFindings.length > 0 ? (
-              topFindings.map((finding, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  {getSeverityIcon(finding.severity)}
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{finding.title || finding.description}</p>
-                    {finding.file_path && <p className="text-xs text-slate-500 mt-0.5">{finding.file_path}</p>}
-                  </div>
+          
+          <div className="space-y-5 flex-1">
+            {[
+              { label: 'Maintainability', score: healthData?.categories?.maintainability?.score || 0, color: 'bg-emerald-500' },
+              { label: 'Reliability', score: healthData?.categories?.reliability?.score || 0, color: 'bg-blue-500' },
+              { label: 'Security', score: healthData?.categories?.security?.score || 0, color: 'bg-violet-500' }
+            ].map((cat, idx) => (
+              <div key={idx}>
+                <div className="flex justify-between text-sm mb-1.5">
+                  <span className="text-slate-700 font-medium">{cat.label}</span>
+                  <span className="text-slate-900 font-bold">{Math.round(cat.score)}/100</span>
                 </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-500">No major issues found.</p>
-            )}
+                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${cat.color}`} style={{ width: `${Math.max(5, cat.score)}%` }} />
+                </div>
+              </div>
+            ))}
+            
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-sm text-slate-600">
+                Your overall score of <span className="font-bold text-slate-900">{healthScore}</span> is weighted heavily towards maintainability and security. 
+              </p>
+            </div>
           </div>
         </Card>
 
-        {/* Quick Actions */}
-        <Card className="lg:col-span-1">
-          <h3 className="font-semibold text-slate-800 mb-4">Quick Actions</h3>
-          <div className="space-y-2">
-            <Link href={`/repository/${repoName}/architecture`} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-200">
-              <div className="flex items-center gap-3">
-                <Network className="w-4 h-4 text-blue-600" />
-                <div>
-                  <p className="text-sm font-medium text-slate-900">Explore Architecture</p>
-                  <p className="text-xs text-slate-500">Visualize system architecture</p>
+        {/* Action Center */}
+        <Card className="lg:col-span-1 flex flex-col">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-semibold text-slate-800 flex items-center"><AlertTriangle className="w-4 h-4 mr-2 text-amber-500" /> Action Center</h3>
+          </div>
+          
+          <div className="space-y-3 flex-1 flex flex-col">
+            {isLoading ? (
+              <p className="text-sm text-slate-500">Evaluating actions...</p>
+            ) : (
+              <>
+                {(() => {
+                  const critical = findings.filter(f => f.severity === 'CRITICAL' || f.severity === 'ERROR').length;
+                  const warning = findings.filter(f => f.severity === 'WARNING').length;
+                  
+                  if (critical === 0 && warning === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-6 text-center h-full">
+                        <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center mb-3">
+                          <ShieldCheck className="w-6 h-6 text-green-500" />
+                        </div>
+                        <p className="text-sm font-medium text-slate-900">All clear!</p>
+                        <p className="text-xs text-slate-500 mt-1">No major issues require your attention right now.</p>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <>
+                      {critical > 0 && (
+                        <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-bold text-red-900">{critical} Critical Issues</p>
+                            <p className="text-xs text-red-700 mt-0.5">These vulnerabilities or bugs need immediate fixing.</p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {warning > 0 && (
+                        <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-bold text-amber-900">{warning} Warnings</p>
+                            <p className="text-xs text-amber-700 mt-0.5">Code smells or structural issues to review.</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+                
+                <div className="mt-auto pt-4">
+                  <Link href={`/repository/${repoName}/health`} className="w-full inline-flex justify-center items-center px-4 py-2 bg-white border border-slate-200 text-sm font-medium rounded-lg text-slate-700 hover:bg-slate-50 transition-colors">
+                    Review all findings
+                  </Link>
                 </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-slate-400" />
-            </Link>
-            <Link href={`/repository/${repoName}/graph`} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-200">
-              <div className="flex items-center gap-3">
-                <Share2 className="w-4 h-4 text-blue-600" />
-                <div>
-                  <p className="text-sm font-medium text-slate-900">View Dependency Graph</p>
-                  <p className="text-xs text-slate-500">Analyze dependencies</p>
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-slate-400" />
-            </Link>
+              </>
+            )}
           </div>
         </Card>
 

@@ -123,6 +123,8 @@ def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_c
         
         parts = r.url.rstrip("/").split("/")
         repo_name = parts[-1]
+        if repo_name.endswith(".git"):
+            repo_name = repo_name[:-4]
         
         # Fetch languages from enriched_metadata if available
         language_str = "Unknown"

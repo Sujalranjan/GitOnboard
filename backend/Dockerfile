@@ -44,11 +44,9 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy the application code (backend directory and others as needed)
 # Assumes build context is repo root
 COPY backend ./backend
-COPY data ./data
-COPY src ./src
 
-# Set PYTHONPATH so the app can find the src/analysis module
-ENV PYTHONPATH="/app/src:/app:$PYTHONPATH"
+# Set PYTHONPATH so the app can find modules
+ENV PYTHONPATH="/app:$PYTHONPATH"
 
 EXPOSE 8000
 

@@ -58,5 +58,5 @@ frontend/coverage/
 Thumbs.db
 
 # Project Specific
-data/repos/
-data/
+data/*
+!data/.gitkeep

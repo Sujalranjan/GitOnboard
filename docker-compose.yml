@@ -26,7 +26,6 @@ services:
       - ./data:/app/data
       # Mount source code for local development
       - ./backend:/app/backend
-      - ./src:/app/src
     env_file:
       - .env
     environment:
