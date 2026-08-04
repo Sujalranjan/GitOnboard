@@ -18,12 +18,23 @@ export function Header() {
       .catch(() => setUser(null));
   }, []);
 
-  const handleLogout = async () => {
-    await fetch('/api/auth/github/logout', { method: 'POST' });
-    setUser(null);
-    router.push('/');
-  };
+const handleLogout = async () => {
+  try {
+    await fetch('/api/auth/github/logout', {
+      method: 'POST',
+      credentials: 'include',   // <-- IMPORTANT
+    });
 
+    // Remove any frontend stored data if present
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // Redirect to home page
+    window.location.href = '/';
+  } catch (err) {
+    console.error('Logout failed:', err);
+  }
+};
   return (
     <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-4 sm:px-6 z-10 flex-shrink-0">
       <div className="flex items-center">

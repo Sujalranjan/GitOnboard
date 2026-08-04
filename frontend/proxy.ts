@@ -10,6 +10,13 @@ const protectedPaths = [
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
+  // Explicitly handle logout route to delete the cookie on client side
+  if (pathname === '/logout') {
+    const response = NextResponse.redirect(new URL('/', request.url));
+    response.cookies.delete('access_token');
+    return response;
+  }
+
   // Check if the current path starts with any of the protected paths
   const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path));
   

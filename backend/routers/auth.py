@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 import logging
 
 from backend.database import get_db
 from backend.config import settings
+from backend.dependencies.auth import get_current_user
+from backend.models.user import User
 from backend.services.github_oauth import (
     get_github_login_url,
     exchange_code_for_token,
@@ -18,11 +20,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/github", tags=["auth"])
 
 @router.get("/login")
-def github_login():
+def github_login(prompt: str = "consent"):
     """
     Redirects the user to the GitHub OAuth authorization page.
+    Forces consent prompt by appending prompt=consent parameter.
     """
-    return RedirectResponse(url=get_github_login_url())
+    login_url = get_github_login_url()
+    
+    # Append prompt parameter to URL to force GitHub login/consent screen
+    separator = "&" if "?" in login_url else "?"
+    full_url = f"{login_url}{separator}prompt={prompt}"
+    
+    return RedirectResponse(url=full_url)
 
 @router.get("/callback")
 def github_callback(code: str, db: Session = Depends(get_db)):
@@ -69,9 +78,6 @@ def github_callback(code: str, db: Session = Depends(get_db)):
         error_url = f"{settings.frontend_url}/login?error=oauth_failed"
         return RedirectResponse(url=error_url, status_code=302)
 
-from backend.dependencies.auth import get_current_user
-from backend.models.user import User
-
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user)):
     """Returns the currently authenticated user."""
@@ -85,7 +91,18 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.post("/logout")
 def logout():
-    """Logs out the user by clearing the JWT cookie."""
-    response = Response(content='{"message": "Logged out successfully"}', media_type="application/json")
-    response.delete_cookie("access_token", path="/")
+    """Clears the access_token session cookie and logs out user."""
+    response = JSONResponse({"message": "Logged out successfully"})
+
+    is_secure = settings.environment.lower() == "production"
+    same_site = "none" if is_secure else "lax"
+
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        httponly=True,
+        samesite=same_site,
+        secure=is_secure
+    )
+
     return response

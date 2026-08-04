@@ -9,8 +9,8 @@ export default function LandingPage() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   const handleLogin = () => {
-    // Redirect directly to the backend OAuth login route
-    window.location.href = "http://localhost:8000/api/auth/github/login";
+    // Appended prompt=consent query param to force GitHub to re-prompt user consent/login
+    window.location.href = "http://localhost:8000/api/auth/github/login?prompt=consent";
   };
 
   return (
