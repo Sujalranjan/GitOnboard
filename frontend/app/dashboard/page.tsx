@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { repositoryService } from '@/services/repository';
 import { Button } from '@/components/common/Button';
 import { Modal } from '@/components/common/Modal';
 import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
-import { Plus, Trash2, FolderGit2 } from 'lucide-react';
+import { Plus, FolderGit2 } from 'lucide-react';
 
 export default function Dashboard() {
   const [repos, setRepos] = useState<any[]>([]);
@@ -17,7 +17,9 @@ export default function Dashboard() {
   const [importUrl, setImportUrl] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState('');
-  const router = useRouter();
+  
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get('search') || '';
 
   const fetchRepos = async () => {
     try {
@@ -46,6 +48,16 @@ export default function Dashboard() {
   useEffect(() => {
     fetchRepos();
   }, []);
+
+  const filteredRepos = repos.filter((repo) => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return true;
+    
+    const projectName = (repo.project_name || '').toLowerCase();
+    const repoPath = getRepositoryPath(repo).toLowerCase();
+    
+    return projectName.includes(query) || repoPath.includes(query);
+  });
 
   const handleDelete = async (e: React.MouseEvent, repoName: string) => {
     e.preventDefault();
@@ -127,9 +139,13 @@ export default function Dashboard() {
             Import your first repository
           </Button>
         </div>
+      ) : filteredRepos.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center max-w-md mx-auto">
+          <p className="text-slate-500">No repositories found matching "{searchQuery}".</p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {repos.map((repo, idx) => (
+          {filteredRepos.map((repo, idx) => (
             <Link key={idx} href={`/repository/${repo.project_name}`}>
               <Card className="h-full hover:shadow-md transition-shadow cursor-pointer group flex flex-col">
                 <div className="flex justify-between items-start mb-4">
