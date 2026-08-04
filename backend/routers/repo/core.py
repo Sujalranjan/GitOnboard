@@ -37,22 +37,41 @@ async def import_repo(req: ImportRequest, db: Session = Depends(get_db), current
         logger.error(f"GitHub API error: {e}")
         raise HTTPException(status_code=500, detail="Failed to communicate with GitHub API.")
 
-    # Check if repo exists
+    # Check if repo exists by github_repo_id or url
+    normalized_url = url.rstrip("/")
     repo = db.query(Repository).filter(
-        Repository.user_id == current_user.id,
-        Repository.github_repo_id == limit_data["github_repo_id"]
+        (Repository.github_repo_id == str(limit_data["github_repo_id"])) | 
+        (Repository.url == normalized_url) | 
+        (Repository.url == normalized_url + "/")
     ).first()
 
     if not repo:
-        repo = Repository(
-            github_repo_id=limit_data["github_repo_id"],
-            url=url,
-            default_branch=limit_data["default_branch"],
-            user_id=current_user.id
-        )
-        db.add(repo)
-        db.commit()
-        db.refresh(repo)
+        try:
+            repo = Repository(
+                github_repo_id=str(limit_data["github_repo_id"]),
+                url=normalized_url,
+                default_branch=limit_data["default_branch"],
+                user_id=current_user.id
+            )
+            db.add(repo)
+            db.commit()
+            db.refresh(repo)
+        except Exception as err:
+            db.rollback()
+            # Retry fetching existing repo if concurrent insertion occurred
+            repo = db.query(Repository).filter(
+                (Repository.github_repo_id == str(limit_data["github_repo_id"])) | 
+                (Repository.url == normalized_url)
+            ).first()
+            if not repo:
+                logger.error(f"Database insertion failed: {err}")
+                raise HTTPException(status_code=500, detail="Database error while registering repository.")
+    else:
+        # Assign ownership to current_user so the imported repo appears in their dashboard
+        if repo.user_id != current_user.id:
+            repo.user_id = current_user.id
+            db.commit()
+            db.refresh(repo)
 
     # Check for unfinished jobs
     unfinished = db.query(AnalysisJob).join(Analysis).filter(

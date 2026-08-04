@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 
 from backend.main import app
 from backend.models.repository import Analysis
-from backend.routers import repo as repo_module
+from backend.routers.repo import intelligence as intelligence_module
+from backend.dependencies.auth import get_current_user
+from backend.database import get_db
 from backend.intelligence.features.model import Feature, FeatureMembership, FeatureRelationship, FeatureRelationshipType
 
 
@@ -38,11 +40,10 @@ def test_feature_discovery_endpoint_returns_sorted_features(monkeypatch):
     model = SimpleNamespace(features={feature_b.id: feature_b, feature_a.id: feature_a}, feature_relationships={relationship.id: relationship})
     query_layer = SimpleNamespace(model=model)
 
-    monkeypatch.setattr(repo_module, "get_or_build_model", lambda repo_name, db, current_user: query_layer)
-    monkeypatch.setattr(repo_module, "_get_latest_analysis", lambda repo_name, db, current_user: (SimpleNamespace(id=1, url="https://github.com/acme/repo"), Analysis(id=1, repository_id=1, status="Completed")))
+    monkeypatch.setattr(intelligence_module, "get_or_build_model", lambda repo_name, db, current_user: query_layer)
 
-    app.dependency_overrides[repo_module.get_current_user] = lambda: SimpleNamespace(id=1, username="alice", github_id="1", email="alice@example.com", avatar=None)
-    app.dependency_overrides[repo_module.get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=1, username="alice", github_id="1", email="alice@example.com", avatar=None)
+    app.dependency_overrides[get_db] = lambda: MagicMock()
 
     try:
         client = TestClient(app)

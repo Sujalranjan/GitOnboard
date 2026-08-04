@@ -13,7 +13,8 @@ import ReactFlow, {
   Position,
   BaseEdge,
   getBezierPath,
-  EdgeLabelRenderer
+  EdgeLabelRenderer,
+  MiniMap
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { layoutGraph, applyLocalRelaxation } from '@/utils/layout';
@@ -22,70 +23,135 @@ import { buildVisibleGraph } from '@/utils/graphBuilder';
 
 import { PythonIcon, JavascriptIcon, TypescriptIcon, ReactIcon, JavaIcon } from './common/LanguageIcons';
 
+// Language configuration map with curated colors & icons
 const getLanguageConfig = (lang) => {
-  switch (lang) {
-    case 'Python': return { color: '#6366f1', Icon: PythonIcon };
-    case 'JavaScript': return { color: '#eab308', Icon: JavascriptIcon };
-    case 'TypeScript': return { color: '#2563eb', Icon: TypescriptIcon };
-    case 'React': return { color: '#06b6d4', Icon: ReactIcon };
-    case 'Java': return { color: '#ef4444', Icon: JavaIcon };
-    default: return { color: '#9ca3af', Icon: null };
+  const normalized = (lang || '').toLowerCase();
+  switch (normalized) {
+    case 'python':
+      return { label: 'Python', color: '#6366f1', Icon: PythonIcon };
+    case 'javascript':
+    case 'js':
+      return { label: 'JavaScript', color: '#d97706', Icon: JavascriptIcon };
+    case 'typescript':
+    case 'ts':
+      return { label: 'TypeScript', color: '#2563eb', Icon: TypescriptIcon };
+    case 'react':
+    case 'jsx':
+    case 'tsx':
+      return { label: 'React', color: '#0891b2', Icon: ReactIcon };
+    case 'java':
+      return { label: 'Java', color: '#dc2626', Icon: JavaIcon };
+    case 'go':
+    case 'golang':
+      return { label: 'Go', color: '#0d9488', Icon: null };
+    default:
+      return { label: lang || 'File', color: '#64748b', Icon: null };
   }
 };
 
-// Custom Node for Files
-const CustomNode = memo(({ data }) => {
+// Sleek Custom Node for Files
+const CustomNode = memo(({ data, selected }) => {
   const config = getLanguageConfig(data.language);
   const Icon = config.Icon;
-  
+  const isDimmed = data.isDimmed;
+  const role = data.highlightRole; // 'inbound' | 'outbound' | 'selected' | null
+
+  // Dynamic border & shadow based on selection / highlight state
+  let borderStyle = `2px solid ${config.color}`;
+  let shadowStyle = '0 4px 12px -2px rgba(0, 0, 0, 0.08)';
+  let bgStyle = '#ffffff';
+
+  if (selected || role === 'selected') {
+    borderStyle = `2px solid ${config.color}`;
+    shadowStyle = `0 0 0 4px ${config.color}33, 0 8px 20px -4px ${config.color}44`;
+  } else if (role === 'inbound') {
+    borderStyle = '2px solid #10b981'; // Emerald Green for inbound callers
+    shadowStyle = '0 0 0 3px #10b98133, 0 6px 16px -2px #10b98144';
+    bgStyle = '#f0fdf4';
+  } else if (role === 'outbound') {
+    borderStyle = '2px solid #8b5cf6'; // Violet/Purple for outbound dependencies
+    shadowStyle = '0 0 0 3px #8b5cf633, 0 6px 16px -2px #8b5cf644';
+    bgStyle = '#f5f3ff';
+  }
+
   return (
-    <div style={{
-      background: '#ffffff',
-      border: `2px solid ${config.color}`,
-      borderRadius: '24px',
-      padding: '8px 16px',
-      fontSize: '12px',
-      fontWeight: '600',
-      color: '#374151',
-      fontFamily: 'sans-serif',
-      boxShadow: '0 2px 4px -1px rgb(0 0 0 / 0.1)',
-      minWidth: '50px',
-      textAlign: 'center',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px'
-    }}>
-      <Handle type="target" position={Position.Top} style={{ visibility: 'hidden', top: '50%' }} />
-      <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden', top: '50%' }} />
-      {Icon && <Icon style={{ width: '14px', height: '14px' }} />}
-      {data.label}
+    <div
+      className={`transition-all duration-200 cursor-pointer select-none rounded-xl px-3.5 py-2 flex items-center gap-2.5 min-w-[150px] max-w-[250px] ${
+        isDimmed ? 'opacity-25 filter blur-[0.3px]' : 'opacity-100'
+      }`}
+      style={{
+        background: bgStyle,
+        border: borderStyle,
+        boxShadow: shadowStyle,
+      }}
+    >
+      {/* Handles for both LR and TB flow */}
+      <Handle type="target" position={Position.Left} style={{ visibility: 'hidden' }} />
+      <Handle type="source" position={Position.Right} style={{ visibility: 'hidden' }} />
+      <Handle type="target" position={Position.Top} id="top" style={{ visibility: 'hidden' }} />
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ visibility: 'hidden' }} />
+
+      {/* Language Icon */}
+      <div 
+        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+        style={{ backgroundColor: `${config.color}15` }}
+      >
+        {Icon ? <Icon className="w-4 h-4" /> : <span className="text-xs font-bold" style={{ color: config.color }}>📄</span>}
+      </div>
+
+      {/* File Details */}
+      <div className="flex flex-col min-w-0 flex-1">
+        <div className="text-xs font-semibold text-gray-800 truncate" title={data.label}>
+          {data.label}
+        </div>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[10px] font-medium px-1.5 py-0.2 rounded border bg-slate-50 text-slate-600 border-slate-200">
+            {data.language || 'Code'}
+          </span>
+          {data.degreeInfo && (
+            <span className="text-[9px] text-gray-400 font-mono">
+              in:{data.degreeInfo.inbound} out:{data.degreeInfo.outbound}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 });
 
-// Custom Node for Folders
-const FolderNode = memo(({ data }) => (
-  <div style={{
-    background: '#f8fafc',
-    border: '2px dashed #94a3b8',
-    borderRadius: '8px',
-    padding: '12px 20px',
-    fontSize: '13px',
-    fontWeight: '700',
-    color: '#475569',
-    fontFamily: 'sans-serif',
-    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)',
-    minWidth: '80px',
-    textAlign: 'center',
-    cursor: 'pointer'
-  }}>
-    <Handle type="target" position={Position.Top} style={{ visibility: 'hidden', top: '50%' }} />
-    <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden', top: '50%' }} />
-    📁 {data.label} <span style={{fontSize: '10px', color: '#94a3b8', marginLeft: '4px'}}>({data.descendants})</span>
-  </div>
-));
+// Sleek Custom Node for Folders
+const FolderNode = memo(({ data, selected }) => {
+  const isDimmed = data.isDimmed;
 
-// Custom Edge for Aggregates
+  return (
+    <div
+      className={`transition-all duration-200 cursor-pointer select-none rounded-xl px-3.5 py-2.5 flex items-center gap-2.5 min-w-[170px] bg-slate-900/90 text-white backdrop-blur-md border border-slate-700/80 shadow-lg hover:border-indigo-400 ${
+        selected ? 'ring-2 ring-indigo-500 shadow-indigo-500/20' : ''
+      } ${isDimmed ? 'opacity-25' : 'opacity-100'}`}
+    >
+      <Handle type="target" position={Position.Left} style={{ visibility: 'hidden' }} />
+      <Handle type="source" position={Position.Right} style={{ visibility: 'hidden' }} />
+      <Handle type="target" position={Position.Top} id="top" style={{ visibility: 'hidden' }} />
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ visibility: 'hidden' }} />
+
+      <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 font-bold text-sm">
+        📁
+      </div>
+
+      <div className="flex flex-col min-w-0 flex-1">
+        <div className="text-xs font-bold text-slate-100 truncate" title={data.label}>
+          {data.label}
+        </div>
+        <div className="text-[10px] text-indigo-300 font-medium flex items-center gap-1 mt-0.5">
+          <span>{data.descendants || 0} files inside</span>
+          <span className="text-slate-400">• click to expand</span>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// Custom Edge for Aggregated Folder Imports
 const AggregateEdge = memo(({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, style, markerEnd }) => {
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -105,12 +171,13 @@ const AggregateEdge = memo(({ id, sourceX, sourceY, targetX, targetY, sourcePosi
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
             background: '#ffffff',
-            padding: '2px 6px',
-            borderRadius: '12px',
-            fontSize: '9px',
+            padding: '2px 8px',
+            borderRadius: '10px',
+            fontSize: '10px',
             fontWeight: 700,
-            color: '#64748b',
-            border: '1px solid #e2e8f0',
+            color: '#475569',
+            border: '1px solid #cbd5e1',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
             pointerEvents: 'all',
           }}
           className="nodrag nopan"
@@ -131,32 +198,31 @@ const edgeTypes = {
   aggregateEdge: AggregateEdge
 };
 
-let renderCount = 0;
-
 export default function DependencyGraph({ repoName }) {
-  renderCount++;
-  console.log(`[Profiler] DependencyGraph rendered. Total renders: ${renderCount}`);
-
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Custom Control States
+  // Controls & Display Options
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [selectedNode, setSelectedNode] = useState(null);
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  
+  const [languageFilter, setLanguageFilter] = useState('ALL');
+  const [layoutDirection, setLayoutDirection] = useState('LR'); // 'LR' or 'TB'
+  const [showMinimap, setShowMinimap] = useState(true);
+  const [showInspector, setShowInspector] = useState(true);
+
   // Architecture States
   const [vfsRoot, setVfsRoot] = useState(null);
   const [rawGraphData, setRawGraphData] = useState(null);
   const [expandedPaths, setExpandedPaths] = useState(new Set());
-  
+
   const containerRef = useRef(null);
   const rfInstance = useRef(null);
   const expandAnchorIdRef = useRef(null);
-  
-  // History State
+
+  // History State for Undo/Redo
   const [history, setHistory] = useState([]);
   const [currentStep, setCurrentStep] = useState(-1);
   const isRestoringHistory = useRef(false);
@@ -173,6 +239,7 @@ export default function DependencyGraph({ repoName }) {
     setCurrentStep(prev => prev + 1);
   }, [currentStep]);
 
+  // Fetch graph on mount or repoName change
   useEffect(() => {
     let isMounted = true;
     
@@ -186,25 +253,21 @@ export default function DependencyGraph({ repoName }) {
         }
         const data = await res.json();
         if (!isMounted) return;
-        
-        // Ensure nodes have full_path
+
         const validNodes = data.nodes.filter(n => n.full_path);
-        
-        // Build VFS
         const root = buildVFS(validNodes);
         const nodePathMap = buildNodePathMap(validNodes);
         
-        // Filter edges where both source and target exist
         const nodeIds = new Set(validNodes.map(n => n.id));
         const validEdges = data.edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
-        
+
         calculateVisualComplexity(root, validEdges, nodePathMap);
         const initialExpanded = getAutoExpandedPaths(root);
-        
+
         setVfsRoot(root);
         setRawGraphData({ nodes: validNodes, edges: validEdges, nodePathMap });
         setExpandedPaths(initialExpanded);
-        
+
       } catch (err) {
         if (isMounted) setError(err.message);
       } finally {
@@ -217,14 +280,13 @@ export default function DependencyGraph({ repoName }) {
     return () => {
       isMounted = false;
     };
-  }, [repoName]); 
+  }, [repoName]);
 
-  // Re-build visible graph when expansion state changes
+  // Rebuild graph layout when expansion or layout direction changes
   useEffect(() => {
     if (!vfsRoot || !rawGraphData) return;
-    
+
     if (isRestoringHistory.current) {
-      // Skip layout algorithms when restoring history, just rebuild edges
       const { edges: newEdges } = buildVisibleGraph(
         vfsRoot, 
         rawGraphData.nodes, 
@@ -244,59 +306,181 @@ export default function DependencyGraph({ repoName }) {
       rawGraphData.edges, 
       rawGraphData.nodePathMap, 
       expandedPaths,
-      nodes // pass existing nodes to preserve positions
+      nodes
     );
-    
+
     let positionedNodes = newNodes;
-    
-    // If we have an anchor, this was a manual expansion
+
     if (expandAnchorIdRef.current) {
       positionedNodes = applyLocalRelaxation(positionedNodes, expandAnchorIdRef.current, true);
       expandAnchorIdRef.current = null;
     } else {
-      // Global layout for initial load or search (only moves unpositioned/new nodes)
-      positionedNodes = layoutGraph(positionedNodes, newEdges, { direction: 'LR' });
+      positionedNodes = layoutGraph(positionedNodes, newEdges, { direction: layoutDirection });
     }
-    
+
     setNodes(positionedNodes);
     setEdges(newEdges);
-    
-    // Save history after a structural layout change
+
     saveHistory(expandedPaths, positionedNodes);
-    
-    // Center view only on initial load
+
     if (nodes.length === 0) {
       setTimeout(() => {
         if (rfInstance.current) {
-          rfInstance.current.fitView({ padding: 0.2, duration: 800 });
+          rfInstance.current.fitView({ padding: 0.2, duration: 600 });
         }
       }, 100);
     }
-  }, [vfsRoot, rawGraphData, expandedPaths]);
+  }, [vfsRoot, rawGraphData, expandedPaths, layoutDirection]);
 
-  const onNodesChange = useCallback(
+  // Unique list of available languages for filtering
+  const availableLanguages = useMemo(() => {
+    if (!rawGraphData) return [];
+    const langs = new Set(rawGraphData.nodes.map(n => n.language).filter(Boolean));
+    return Array.from(langs);
+  }, [rawGraphData]);
+
+  // Degree calculation map for each node (inbound vs outbound count)
+  const nodeDegrees = useMemo(() => {
+    const map = new Map();
+    if (!rawGraphData) return map;
+
+    rawGraphData.nodes.forEach(n => map.set(n.id, { inbound: 0, outbound: 0 }));
+    rawGraphData.edges.forEach(e => {
+      if (map.has(e.source)) map.get(e.source).outbound += 1;
+      if (map.has(e.target)) map.get(e.target).inbound += 1;
+    });
+    return map;
+  }, [rawGraphData]);
+
+  // Compute selected node details for Inspector
+  const selectedNodeDetails = useMemo(() => {
+    if (!selectedNodeId || !rawGraphData) return null;
+    const rawNode = rawGraphData.nodes.find(n => n.id === selectedNodeId);
+    if (!rawNode) return null;
+
+    // Incoming files (files importing this selected file)
+    const inboundEdges = rawGraphData.edges.filter(e => e.target === selectedNodeId);
+    const inboundFiles = inboundEdges.map(e => rawGraphData.nodes.find(n => n.id === e.source)).filter(Boolean);
+
+    // Outgoing files (files imported by this selected file)
+    const outboundEdges = rawGraphData.edges.filter(e => e.source === selectedNodeId);
+    const outboundFiles = outboundEdges.map(e => rawGraphData.nodes.find(n => n.id === e.target)).filter(Boolean);
+
+    return {
+      node: rawNode,
+      inboundFiles,
+      outboundFiles,
+      degrees: nodeDegrees.get(selectedNodeId) || { inbound: 0, outbound: 0 }
+    };
+  }, [selectedNodeId, rawGraphData, nodeDegrees]);
+
+  // Compute active node & edge visual states (highlighting & sub-graph dimming)
+  const { renderedNodes, renderedEdges } = useMemo(() => {
+    // 1. Identify highlighted nodes & edges when a node is selected
+    const inboundSources = new Set();
+    const outboundTargets = new Set();
+
+    if (selectedNodeId && rawGraphData) {
+      edges.forEach(e => {
+        if (e.target === selectedNodeId) inboundSources.add(e.source);
+        if (e.source === selectedNodeId) outboundTargets.add(e.target);
+      });
+    }
+
+    // 2. Prepare nodes with roles and dimming
+    const updatedNodes = nodes.map(n => {
+      const degrees = nodeDegrees.get(n.id) || null;
+      let role = null;
+      let isDimmed = false;
+
+      if (selectedNodeId) {
+        if (n.id === selectedNodeId) {
+          role = 'selected';
+        } else if (inboundSources.has(n.id)) {
+          role = 'inbound';
+        } else if (outboundTargets.has(n.id)) {
+          role = 'outbound';
+        } else {
+          isDimmed = true;
+        }
+      }
+
+      // Language Filter check
+      if (languageFilter !== 'ALL' && n.data?.language && n.data.language.toLowerCase() !== languageFilter.toLowerCase()) {
+        isDimmed = true;
+      }
+
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          degreeInfo: degrees,
+          highlightRole: role,
+          isDimmed: isDimmed
+        }
+      };
+    });
+
+    // 3. Prepare edges with color coding & animations
+    const updatedEdges = edges.map(e => {
+      const isSelected = selectedNodeId && (e.source === selectedNodeId || e.target === selectedNodeId);
+      const isInbound = selectedNodeId && e.target === selectedNodeId;
+      const isOutbound = selectedNodeId && e.source === selectedNodeId;
+      const isAggregate = e.type === 'aggregateEdge';
+
+      let stroke = '#cbd5e1';
+      let strokeWidth = isAggregate ? 2 : 1.5;
+      let opacity = 0.4;
+      let animated = false;
+
+      if (selectedNodeId) {
+        if (isInbound) {
+          stroke = '#10b981'; // Emerald for inbound callers
+          strokeWidth = 2.5;
+          opacity = 1;
+          animated = true;
+        } else if (isOutbound) {
+          stroke = '#8b5cf6'; // Violet for outbound dependencies
+          strokeWidth = 2.5;
+          opacity = 1;
+          animated = true;
+        } else {
+          opacity = 0.05; // Subdue unrelated edges
+        }
+      }
+
+      return {
+        ...e,
+        animated,
+        style: { stroke, strokeWidth, opacity },
+        markerEnd: { type: MarkerType.ArrowClosed, color: stroke, width: 16, height: 16 },
+        zIndex: isSelected ? 10 : 0
+      };
+    });
+
+    return { renderedNodes: updatedNodes, renderedEdges: updatedEdges };
+  }, [nodes, edges, selectedNodeId, rawGraphData, languageFilter, nodeDegrees]);
+
+  const onNodesChangeHandler = useCallback(
     (changes) => {
       setNodes((nds) => {
         let updatedNodes = applyNodeChanges(changes, nds);
-        
         const dragChange = changes.find(c => c.type === 'position' && c.dragging);
         if (dragChange) {
           updatedNodes = applyLocalRelaxation(updatedNodes, dragChange.id, false);
         }
-        
         return updatedNodes;
       });
     },
     []
   );
-  
-  const onEdgesChange = useCallback(
+
+  const onEdgesChangeHandler = useCallback(
     (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
     []
   );
 
   const onNodeDragStop = useCallback(() => {
-    // Save history after dragging
     saveHistory(expandedPaths, nodes);
   }, [expandedPaths, nodes, saveHistory]);
 
@@ -326,7 +510,7 @@ export default function DependencyGraph({ repoName }) {
     if (!document.fullscreenElement) {
       if (containerRef.current) {
         containerRef.current.requestFullscreen().catch((err) => {
-          console.error(`Error attempting to enable fullscreen mode: ${err.message}`);
+          console.error(`Fullscreen error: ${err.message}`);
         });
       }
     } else {
@@ -335,20 +519,16 @@ export default function DependencyGraph({ repoName }) {
   };
 
   const onNodeClick = useCallback((_, node) => {
-    setSelectedNode(node.id);
-    
-    // Handle Folder Expansion/Collapse
+    setSelectedNodeId(node.id);
+
     if (node.type === 'folderNode') {
       const path = node.data.path;
-      
       setExpandedPaths(prev => {
         const next = new Set(prev);
         if (next.has(path)) {
           next.delete(path);
-          // When collapsing, we don't need a click coordinate because nodes are disappearing
         } else {
           next.add(path);
-          // Store ID so the local layout spawns children here and anchors the parent
           expandAnchorIdRef.current = node.id;
         }
         return next;
@@ -357,160 +537,376 @@ export default function DependencyGraph({ repoName }) {
   }, []);
 
   const onPaneClick = useCallback(() => {
-    setSelectedNode(null);
+    setSelectedNodeId(null);
   }, []);
-
-  // Compute styles dynamically for selection effects
-  const renderedEdges = useMemo(() => {
-    return edges.map(e => {
-      const isSelectedNodeConnected = selectedNode && (e.source === selectedNode || e.target === selectedNode);
-      
-      const isAggregate = e.type === 'aggregateEdge';
-      
-      let stroke = '#cbd5e1';
-      let opacity = 0.15;
-      let strokeWidth = isAggregate ? 2 : 1;
-      
-      if (selectedNode) {
-        if (isSelectedNodeConnected) {
-          stroke = '#6366f1';
-          opacity = 1;
-          strokeWidth = isAggregate ? 3 : 2;
-        } else {
-          opacity = 0.05; // heavily subdue unrelated edges
-        }
-      } else {
-        // Default unselected state
-        opacity = 0.4;
-      }
-      
-      return {
-        ...e,
-        style: { stroke, strokeWidth, opacity },
-        animated: isSelectedNodeConnected && !isAggregate,
-        markerEnd: { type: MarkerType.ArrowClosed, color: stroke, width: 20, height: 20 },
-        zIndex: isSelectedNodeConnected ? 10 : 0
-      };
-    });
-  }, [edges, selectedNode]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     if (!searchQuery || !rawGraphData) return;
-    
+
     const query = searchQuery.toLowerCase();
-    
-    // Find file in raw nodes
     const foundNode = rawGraphData.nodes.find(n => 
       n.full_path.toLowerCase().includes(query) || n.id.toLowerCase().includes(query)
     );
-    
+
     if (foundNode) {
-      // Find its path and expand all ancestors
       const path = rawGraphData.nodePathMap.get(foundNode.id);
       if (path) {
         const parts = path.split('/');
         setExpandedPaths(prev => {
           const next = new Set(prev);
           let currentPath = '';
-          // We don't expand the file itself, just its parent folders
           for (let i = 0; i < parts.length - 1; i++) {
             currentPath = currentPath === '' ? parts[i] : `${currentPath}/${parts[i]}`;
             next.add(currentPath);
           }
           return next;
         });
-        
-        // Wait for render, then center
+
         setTimeout(() => {
           if (rfInstance.current) {
             rfInstance.current.fitView({ nodes: [{ id: foundNode.id }], duration: 800, padding: 0.5 });
-            setSelectedNode(foundNode.id);
+            setSelectedNodeId(foundNode.id);
           }
         }, 200);
       }
     }
   };
 
+  const handleAutoOrganize = useCallback(() => {
+    if (!nodes.length) return;
+    const reorderedNodes = layoutGraph(nodes, edges, { direction: layoutDirection, forceReorder: true });
+    setNodes(reorderedNodes);
+    setTimeout(() => {
+      if (rfInstance.current) {
+        rfInstance.current.fitView({ padding: 0.25, duration: 800 });
+      }
+    }, 50);
+  }, [nodes, edges, layoutDirection]);
+
+  const focusOnNode = (nodeId) => {
+    setSelectedNodeId(nodeId);
+    if (rfInstance.current) {
+      rfInstance.current.fitView({ nodes: [{ id: nodeId }], duration: 600, padding: 0.6 });
+    }
+  };
+
   if (isLoading) {
-    return <div className="h-full flex items-center justify-center text-gray-500">Building Virtual File System...</div>;
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center bg-slate-900 text-slate-300 gap-3">
+        <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <span className="text-sm font-medium">Building Virtual Dependency Graph...</span>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="h-full flex items-center justify-center text-red-500">{error}</div>;
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-slate-900 text-rose-400 text-sm">
+        ⚠️ {error}
+      </div>
+    );
   }
 
   if (nodes.length === 0) {
-    return <div className="h-full flex items-center justify-center text-gray-400">No supported source files found to analyze.</div>;
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-slate-900 text-slate-400 text-sm">
+        No supported dependency nodes found.
+      </div>
+    );
   }
 
   return (
     <div 
       ref={containerRef}
-      className="w-full h-full bg-white rounded-lg border border-gray-200 overflow-hidden relative"
+      className="w-full h-full bg-slate-950 rounded-xl border border-slate-800 overflow-hidden relative flex"
     >
-      <ReactFlow
-        nodes={nodes}
-        edges={renderedEdges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={onNodeClick}
-        onPaneClick={onPaneClick}
-        onInit={(instance) => { rfInstance.current = instance; }}
-        minZoom={0.05}
-        maxZoom={2.5}
-        nodesDraggable={true}
-        onNodeDragStop={onNodeDragStop}
-      >
-        <Background color="#f3f4f6" gap={20} size={1} />
-        
-        <Controls showInteractive={false} showFitView={true} position="bottom-right">
-          <ControlButton onClick={handleUndo} disabled={currentStep <= 0} title="Undo">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px', opacity: currentStep <= 0 ? 0.3 : 1 }}>
-              <path d="M3 7v6h6" />
-              <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
-            </svg>
-          </ControlButton>
-          <ControlButton onClick={handleRedo} disabled={currentStep >= history.length - 1} title="Redo">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px', opacity: currentStep >= history.length - 1 ? 0.3 : 1 }}>
-              <path d="M21 7v6h-6" />
-              <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
-            </svg>
-          </ControlButton>
-          <ControlButton onClick={toggleFullscreen} title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
-            {isFullscreen ? (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
-                <path d="M4 14h6v6" />
-                <path d="M20 10h-6V4" />
-                <path d="M14 10l7-7" />
-                <path d="M3 21l7-7" />
+      {/* Main Canvas Area */}
+      <div className="flex-1 h-full relative">
+        <ReactFlow
+          nodes={renderedNodes}
+          edges={renderedEdges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodesChange={onNodesChangeHandler}
+          onEdgesChange={onEdgesChangeHandler}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
+          onInit={(instance) => { rfInstance.current = instance; }}
+          minZoom={0.05}
+          maxZoom={2.5}
+          nodesDraggable={true}
+          onNodeDragStop={onNodeDragStop}
+        >
+          {/* Rich Canvas Grid Background */}
+          <Background color="#334155" gap={24} size={1} />
+
+          {/* Top Floating Glassmorphism Toolbar */}
+          <Panel position="top-left" className="m-3 flex flex-wrap items-center gap-2.5 pointer-events-auto">
+            {/* Search Box */}
+            <form onSubmit={handleSearch} className="flex items-center bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-lg p-1.5 shadow-lg">
+              <input 
+                type="text" 
+                placeholder="Search file in graph..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="text-xs px-2.5 py-1 bg-transparent text-slate-100 placeholder-slate-400 outline-none w-48"
+              />
+              <button 
+                type="submit" 
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-xs font-semibold transition"
+              >
+                Find
+              </button>
+            </form>
+
+            {/* Layout Direction & Auto-Organize Switcher */}
+            <div className="flex items-center bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-lg p-1 shadow-lg gap-1">
+              <button
+                onClick={() => setLayoutDirection('LR')}
+                className={`text-xs px-2.5 py-1 rounded font-medium transition ${
+                  layoutDirection === 'LR' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Horizontal Flow"
+              >
+                ➔ LR
+              </button>
+              <button
+                onClick={() => setLayoutDirection('TB')}
+                className={`text-xs px-2.5 py-1 rounded font-medium transition ${
+                  layoutDirection === 'TB' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Vertical Flow"
+              >
+                ⬇ TB
+              </button>
+              <button
+                onClick={handleAutoOrganize}
+                className="text-xs px-3 py-1 rounded font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1 shadow-md shadow-emerald-600/20"
+                title="Auto-organize nodes into clean hierarchical layout"
+              >
+                ⚡ Auto-Organize
+              </button>
+            </div>
+
+            {/* Language Filter Chips */}
+            <div className="flex items-center bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-lg p-1 shadow-lg gap-1 max-w-[320px] overflow-x-auto">
+              <button
+                onClick={() => setLanguageFilter('ALL')}
+                className={`text-[11px] px-2 py-0.5 rounded font-medium transition ${
+                  languageFilter === 'ALL' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                All ({rawGraphData?.nodes.length || 0})
+              </button>
+              {availableLanguages.map(lang => (
+                <button
+                  key={lang}
+                  onClick={() => setLanguageFilter(lang)}
+                  className={`text-[11px] px-2 py-0.5 rounded font-medium transition ${
+                    languageFilter === lang ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {lang}
+                </button>
+              ))}
+            </div>
+
+            {/* Minimap & Inspector Toggles */}
+            <div className="flex items-center bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-lg p-1 shadow-lg gap-1">
+              <button
+                onClick={() => setShowMinimap(!showMinimap)}
+                className={`text-xs px-2 py-1 rounded font-medium transition ${
+                  showMinimap ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Toggle MiniMap"
+              >
+                🗺 Map
+              </button>
+              <button
+                onClick={() => setShowInspector(!showInspector)}
+                className={`text-xs px-2 py-1 rounded font-medium transition ${
+                  showInspector ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Toggle Inspector Sidebar"
+              >
+                ℹ Inspector
+              </button>
+            </div>
+          </Panel>
+
+          {/* Interactive Legend Bar at Bottom Left */}
+          <Panel position="bottom-left" className="m-3 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-lg p-2 text-[11px] text-slate-300 flex items-center gap-4 shadow-lg pointer-events-auto">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <span>Inbound (Importers)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-violet-500"></span>
+              <span>Outbound (Dependencies)</span>
+            </div>
+            <div className="text-slate-500">|</div>
+            <div className="text-slate-400">
+              Click node to trace imports & dependencies
+            </div>
+          </Panel>
+
+          {/* Custom Controls in Bottom Right */}
+          <Controls showInteractive={false} showFitView={true} position="bottom-right">
+            <ControlButton onClick={handleUndo} disabled={currentStep <= 0} title="Undo">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px', opacity: currentStep <= 0 ? 0.3 : 1 }}>
+                <path d="M3 7v6h6" />
+                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
               </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
-                <path d="M15 3h6v6" />
-                <path d="M9 21H3v-6" />
-                <path d="M21 3l-7 7" />
-                <path d="M3 21l7-7" />
+            </ControlButton>
+            <ControlButton onClick={handleRedo} disabled={currentStep >= history.length - 1} title="Redo">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px', opacity: currentStep >= history.length - 1 ? 0.3 : 1 }}>
+                <path d="M21 7v6h-6" />
+                <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
               </svg>
-            )}
-          </ControlButton>
-        </Controls>
-        
-        <Panel position="top-left" className="bg-white/90 shadow-sm border border-gray-100 p-2 rounded-lg flex flex-col pointer-events-auto">
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <input 
-              type="text" 
-              placeholder="Search file..." 
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:border-indigo-500 w-48"
+            </ControlButton>
+            <ControlButton onClick={toggleFullscreen} title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+              {isFullscreen ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
+                  <path d="M4 14h6v6" />
+                  <path d="M20 10h-6V4" />
+                  <path d="M14 10l7-7" />
+                  <path d="M3 21l7-7" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
+                  <path d="M15 3h6v6" />
+                  <path d="M9 21H3v-6" />
+                  <path d="M21 3l-7 7" />
+                  <path d="M3 21l7-7" />
+                </svg>
+              )}
+            </ControlButton>
+          </Controls>
+
+          {/* MiniMap */}
+          {showMinimap && (
+            <MiniMap
+              position="bottom-right"
+              style={{ bottom: 50, right: 10 }}
+              nodeColor={(node) => {
+                if (node.type === 'folderNode') return '#475569';
+                const langConfig = getLanguageConfig(node.data?.language);
+                return langConfig.color || '#94a3b8';
+              }}
+              maskColor="rgba(15, 23, 42, 0.7)"
+              className="border border-slate-700 rounded-lg overflow-hidden"
             />
-            <button type="submit" className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded text-xs font-semibold hover:bg-indigo-100">Find</button>
-          </form>
-        </Panel>
-      </ReactFlow>
+          )}
+        </ReactFlow>
+      </div>
+
+      {/* Node Inspector Side Sidebar */}
+      {showInspector && selectedNodeDetails && (
+        <div className="w-80 h-full bg-slate-900 border-l border-slate-800 p-4 flex flex-col gap-4 overflow-y-auto shrink-0 shadow-2xl z-20 animate-in slide-in-from-right duration-200">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-base">📄</span>
+              <div className="truncate font-semibold text-sm text-slate-100" title={selectedNodeDetails.node.label}>
+                {selectedNodeDetails.node.label}
+              </div>
+            </div>
+            <button 
+              onClick={() => setSelectedNodeId(null)}
+              className="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded bg-slate-800"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* File Path & Language */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">File Path</span>
+            <div className="text-xs font-mono bg-slate-950 text-slate-300 p-2 rounded border border-slate-800 break-all">
+              {selectedNodeDetails.node.full_path}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs text-slate-400">Language:</span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                {selectedNodeDetails.node.language || 'Unknown'}
+              </span>
+            </div>
+          </div>
+
+          {/* Metrics summary */}
+          <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-slate-400">Inbound Importers</span>
+              <span className="text-lg font-bold text-emerald-400">{selectedNodeDetails.degrees.inbound}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] text-slate-400">Outbound Imports</span>
+              <span className="text-lg font-bold text-violet-400">{selectedNodeDetails.degrees.outbound}</span>
+            </div>
+          </div>
+
+          {/* Quick Focus Button */}
+          <button
+            onClick={() => focusOnNode(selectedNodeDetails.node.id)}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 rounded-lg transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20"
+          >
+            🎯 Center View on Node
+          </button>
+
+          {/* Inbound Importers List */}
+          <div className="flex flex-col gap-2">
+            <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+              <span>📥 Imported By</span>
+              <span className="text-[10px] text-slate-500">({selectedNodeDetails.inboundFiles.length})</span>
+            </span>
+            {selectedNodeDetails.inboundFiles.length === 0 ? (
+              <div className="text-xs text-slate-500 italic px-1">No files import this module directly.</div>
+            ) : (
+              <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
+                {selectedNodeDetails.inboundFiles.map(file => (
+                  <div 
+                    key={file.id}
+                    onClick={() => focusOnNode(file.id)}
+                    className="p-2 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800/80 cursor-pointer transition flex items-center justify-between text-xs group"
+                  >
+                    <span className="text-slate-200 group-hover:text-emerald-300 font-mono text-[11px] truncate" title={file.full_path}>
+                      {file.label}
+                    </span>
+                    <span className="text-[10px] text-slate-500 shrink-0">➔</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Outbound Imports List */}
+          <div className="flex flex-col gap-2">
+            <span className="text-[11px] font-semibold text-violet-400 uppercase tracking-wider flex items-center gap-1">
+              <span>📤 Imports Dependencies</span>
+              <span className="text-[10px] text-slate-500">({selectedNodeDetails.outboundFiles.length})</span>
+            </span>
+            {selectedNodeDetails.outboundFiles.length === 0 ? (
+              <div className="text-xs text-slate-500 italic px-1">This module imports no local dependencies.</div>
+            ) : (
+              <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
+                {selectedNodeDetails.outboundFiles.map(file => (
+                  <div 
+                    key={file.id}
+                    onClick={() => focusOnNode(file.id)}
+                    className="p-2 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800/80 cursor-pointer transition flex items-center justify-between text-xs group"
+                  >
+                    <span className="text-slate-200 group-hover:text-violet-300 font-mono text-[11px] truncate" title={file.full_path}>
+                      {file.label}
+                    </span>
+                    <span className="text-[10px] text-slate-500 shrink-0">➔</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

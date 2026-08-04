@@ -11,25 +11,27 @@ import dagre from 'dagre';
  * @returns {Array} nodes - A new array of nodes with computed position coordinates
  */
 export const layoutGraph = (nodes, edges, options = {}) => {
-  const { direction = 'LR' } = options;
+  const { direction = 'LR', forceReorder = false } = options;
   
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   
-  // Set global layout config (nodesep, ranksep, rankdir)
+  // Set global layout config with optimal ranker and generous spacing
   dagreGraph.setGraph({ 
     rankdir: direction,
-    nodesep: 50, // horizontal distance between nodes
-    ranksep: 100 // vertical distance between ranks (layers)
+    nodesep: 80,  // horizontal distance between sibling nodes
+    ranksep: 180, // vertical/layer distance between ranks
+    ranker: 'network-simplex',
+    marginx: 40,
+    marginy: 40
   });
 
-  // Add nodes to Dagre
+  // Add nodes to Dagre with accurate bounding dimensions
   nodes.forEach((node) => {
-    // Estimate node dimensions based on label length to prevent overlap
-    // CustomNode has padding: 8px 16px, minWidth 50px, fontSize 12px.
     const label = node.data?.label || '';
-    const estimatedWidth = Math.max(50, label.length * 8 + 32);
-    const estimatedHeight = 40; 
+    const isFolder = node.type === 'folderNode';
+    const estimatedWidth = isFolder ? 220 : Math.max(180, label.length * 8 + 48);
+    const estimatedHeight = isFolder ? 65 : 55; 
     
     dagreGraph.setNode(node.id, { 
       width: estimatedWidth, 
@@ -46,19 +48,19 @@ export const layoutGraph = (nodes, edges, options = {}) => {
   dagre.layout(dagreGraph);
 
   const layoutedNodes = nodes.map((node) => {
-    // If a node already has a stable position (not at 0,0) and is not new, we don't move it
-    if (node.position && (node.position.x !== 0 || node.position.y !== 0) && !node._isNew) {
+    // If forceReorder is false, preserve existing stable positions
+    if (!forceReorder && node.position && (node.position.x !== 0 || node.position.y !== 0) && !node._isNew) {
       return node;
     }
     
     const nodeWithPosition = dagreGraph.node(node.id);
     
+    if (!nodeWithPosition) return node;
+
     return {
       ...node,
-      // Pass the updated position. React Flow will merge this internally.
+      _isNew: false,
       position: {
-        // Dagre computes the center of the node, but React Flow expects the top-left corner.
-        // We subtract half the width/height to center the node exactly at the computed coordinate.
         x: nodeWithPosition.x - nodeWithPosition.width / 2,
         y: nodeWithPosition.y - nodeWithPosition.height / 2,
       },
