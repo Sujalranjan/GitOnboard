@@ -1,73 +1,51 @@
 name: Prevent Stale PRs
 
 on:
-  pull_request:
-    # Run on all PR events (opened, synchronize, reopened)
-    types: [opened, synchronize, reopened]
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   check-stale:
+    name: Check PR is up to date
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          # Fetch all history for all tags and branches
-          fetch-depth: 0
-
-      - name: Check if PR is behind target branch
+      - name: Check if PR is behind the base branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
-          set -e
+          set -euo pipefail
 
-          # The target branch the PR is trying to merge into (e.g. main)
-          TARGET_BRANCH="${{ github.base_ref }}"
-          echo "Target branch: $TARGET_BRANCH"
+          echo "Checking PR #$PR..."
 
-          # 1. Check if upstream remote is configured in this repository context
-          # In GitHub Actions, a PR from a fork has 'origin' pointing to the fork,
-          # but the base repo's git URL is needed if we want to simulate upstream.
-          # However, actions/checkout checks out the base repo as origin when testing the merge commit.
-          # Actually, if we checkout the PR, 'origin' is the base repo.
-          
-          # Since GitHub Actions automatically sets up the local repository and handles fork checkouts
-          # elegantly, the base branch is simply "origin/${{ github.base_ref }}".
-          # We'll explicitly check the upstream logic just to fulfill requirements.
-          
-          git fetch origin "$TARGET_BRANCH"
-          
-          # Determine if an upstream remote actually exists
-          HAS_UPSTREAM=0
-          if git remote | grep -q "^upstream$"; then
-            HAS_UPSTREAM=1
-            echo "Upstream remote found."
-            git fetch upstream "$TARGET_BRANCH"
-          else
-            echo "No upstream remote found. Skipping upstream check."
+          BASE_REF=$(gh api repos/$REPO/pulls/$PR --jq '.base.ref')
+          HEAD_LABEL=$(gh api repos/$REPO/pulls/$PR --jq '.head.label')
+
+          echo "Base branch : $BASE_REF"
+          echo "Head branch : $HEAD_LABEL"
+
+          COMPARE=$(gh api "repos/$REPO/compare/$BASE_REF...$HEAD_LABEL")
+
+          STATUS=$(jq -r '.status' <<<"$COMPARE")
+          BEHIND_BY=$(jq -r '.behind_by' <<<"$COMPARE")
+          AHEAD_BY=$(jq -r '.ahead_by' <<<"$COMPARE")
+
+          echo "Compare status : $STATUS"
+          echo "Ahead by       : $AHEAD_BY"
+          echo "Behind by      : $BEHIND_BY"
+
+          if [ "$BEHIND_BY" -gt 0 ]; then
+            echo "::error::This PR branch is behind '$BASE_REF' by $BEHIND_BY commit(s). Please merge or rebase the latest changes from '$BASE_REF'."
+            exit 1
           fi
 
-          echo "Checking if current PR branch is behind the target branch..."
-
-          # Function to check if our HEAD is missing any commits from a target ref
-          check_behind() {
-            local remote_ref="$1"
-            
-            # Use git rev-list to count commits that are in the remote branch but NOT in HEAD
-            # (i.e. commits we are missing)
-            MISSING_COMMITS=$(git rev-list HEAD.."$remote_ref" --count)
-            
-            if [ "$MISSING_COMMITS" -gt 0 ]; then
-              echo "::error::Stale PR detected! Your branch is behind $remote_ref by $MISSING_COMMITS commits."
-              echo "Please update your branch by rebasing or merging the latest changes from $remote_ref."
-              exit 1
-            else
-              echo "✅ Branch is up to date with $remote_ref."
-            fi
-          }
-
-          # Check against origin
-          check_behind "origin/$TARGET_BRANCH"
-
-          # Check against upstream if it exists
-          if [ "$HAS_UPSTREAM" -eq 1 ]; then
-            check_behind "upstream/$TARGET_BRANCH"
-          fi
+          echo "✅ PR branch is up to date with $BASE_REF."
