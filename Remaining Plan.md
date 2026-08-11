@@ -87,17 +87,18 @@ Extract: files, directories, classes, functions, methods, variables, parameters,
 
 **Plan Requirements:**
 
-* SQLite (default) or PostgreSQL
-* Specific schema: repositories, files, symbols, relationships, routes, database_objects, capabilities, capability_members, evidence
+* PostgreSQL only (Supabase-compatible)
+* Schema: `repositories`, `files`, `symbols`, `relationships`, `routes`, `database_objects`, `capabilities`, `capability_members`, `evidence`
 
 **Implementation Evidence:**
 
-* ❌ Uses PostgreSQL but with completely different schema
-* ❌ Actual schema in : repositories, analyses, analysis_artifacts, analysis_jobs, task_statuses
-* ❌ No separate symbols, relationships, routes, database_objects, capabilities, evidence tables
-* 🔄 Stores analysis artifacts as JSONB blobs instead of structured fact tables
+* ❌ Uses PostgreSQL, but with a different schema
+* ❌ Current tables: `repositories`, `analyses`, `analysis_artifacts`, `analysis_jobs`, `task_statuses`
+* ❌ Missing the canonical fact-store tables
+* 🔄 Stores analysis artifacts as JSONB instead of structured fact tables
 
-**What's Missing:** The entire canonical fact store schema specified in the plan is not implemented.
+**What's Missing:** The canonical PostgreSQL fact-store schema needs to be implemented. SQLite is removed from the plan so the database remains directly compatible with a future Supabase migration.
+
 
 ### Layer 5: Repository Intelligence Model (RIM)
 
