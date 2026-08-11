@@ -1,65 +1,82 @@
 #!/bin/sh
 
+###############################################################################
+# MANDATORY PRE-PUSH HOOK
+#
+# This hook is a required part of the repository's development workflow.
+#
+# DO NOT:
+#   - Modify this hook.
+#   - Disable this hook.
+#   - Remove this hook.
+#   - Bypass this hook (e.g. using --no-verify or any other mechanism).
+#
+# All contributors are required to use this hook unmodified. Any attempt to
+# alter, disable, or bypass this validation is considered a violation of the
+# repository's contribution requirements.
+###############################################################################
+
 # pre-push hook to prevent pushing stale code
-# It ensures the current branch is not behind upstream/origin target branches.
+# Uses upstream if available (fork workflow), otherwise falls back
+# to origin (repository maintainer workflow).
+
+set -eu
 
 echo "Running pre-push hook: checking for stale branch..."
 
 # Determine current branch
-current_branch=$(git symbolic-ref HEAD --short 2>/dev/null)
+current_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null)
+
 if [ -z "$current_branch" ]; then
-    echo "Not on any branch. Skipping pre-push check."
+    echo "Not on a branch. Skipping pre-push check."
     exit 0
 fi
 
-# Define the base branch you want to check against (e.g. main or master)
-# You could potentially deduce this dynamically, but 'main' is standard.
+# Base branch to compare against
 BASE_BRANCH="main"
 
-# Fetch latest from remotes in the background
-echo "Fetching latest changes from remotes..."
-git fetch origin "$BASE_BRANCH" --quiet 2>/dev/null || true
-
-HAS_UPSTREAM=0
-if git remote | grep -q "^upstream$"; then
-    HAS_UPSTREAM=1
-    git fetch upstream "$BASE_BRANCH" --quiet 2>/dev/null || true
+# Determine which remote is authoritative
+if git remote | grep -qx "upstream"; then
+    REMOTE="upstream"
+else
+    REMOTE="origin"
 fi
 
-# Function to check if we are behind a specific remote branch
-check_behind() {
-    local remote_ref="$1"
-    
-    # Check if the remote ref actually exists locally after fetch
-    if ! git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
-        return 0
-    fi
-    
-    # Count commits that are in remote_ref but NOT in HEAD
-    missing_commits=$(git rev-list HEAD.."$remote_ref" --count)
-    
-    if [ "$missing_commits" -gt 0 ]; then
-        echo ""
-        echo "❌ ERROR: Stale Branch Detected!"
-        echo "Your branch '$current_branch' is behind '$remote_ref' by $missing_commits commit(s)."
-        echo "Push rejected to prevent stale code conflicts."
-        echo ""
-        echo "To fix this, update your branch:"
-        echo "  git pull --rebase ${remote_ref%/*} ${remote_ref#*/}"
-        echo "    - or - "
-        echo "  git merge $remote_ref"
-        echo ""
-        exit 1
-    fi
-}
+REMOTE_REF="$REMOTE/$BASE_BRANCH"
 
-# Check against origin
-check_behind "origin/$BASE_BRANCH"
+echo "Using remote: $REMOTE"
+echo "Fetching latest changes from $REMOTE..."
 
-# Check against upstream if it exists
-if [ "$HAS_UPSTREAM" -eq 1 ]; then
-    check_behind "upstream/$BASE_BRANCH"
+# Fetch latest state of the base branch
+git fetch "$REMOTE" "$BASE_BRANCH" --quiet
+
+# Ensure the remote branch exists
+if ! git rev-parse --verify "$REMOTE_REF" >/dev/null 2>&1; then
+    echo ""
+    echo "❌ ERROR: Remote branch '$REMOTE_REF' does not exist."
+    exit 1
 fi
 
-echo "✅ Branch is up to date. Proceeding with push."
+# Count commits that are in the remote branch but not in HEAD
+missing_commits=$(git rev-list HEAD.."$REMOTE_REF" --count)
+
+if [ "$missing_commits" -gt 0 ]; then
+    echo ""
+    echo "❌ ERROR: Stale branch detected!"
+    echo "Your branch '$current_branch' is behind '$REMOTE_REF' by $missing_commits commit(s)."
+    echo "Push rejected to prevent stale code conflicts."
+    echo ""
+    echo "To update your branch:"
+    echo "  git fetch $REMOTE"
+    echo "  git rebase $REMOTE_REF"
+    echo ""
+    echo "Or merge instead:"
+    echo "  git merge $REMOTE_REF"
+    echo ""
+    exit 1
+fi
+
+echo "✅ Branch '$current_branch' is up to date with '$REMOTE_REF'."
+echo "Proceeding with push."
+
 exit 0
