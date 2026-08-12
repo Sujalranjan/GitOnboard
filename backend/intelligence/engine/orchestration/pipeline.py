@@ -15,17 +15,32 @@ class AnalysisEngine:
         self.target_dir = str(Path(target_dir).resolve())
         self.registry = registry
         
-    def run(self, repo_name: str) -> RepositoryModel:
+    def run(self, repo_name: str, commit_info: Optional[dict] = None) -> RepositoryModel:
         # 1. Scan Repository
         scanner = RepositoryScanner(self.target_dir)
         manifest = scanner.scan()
+        
+        # Inject GitHub commit info if provided (since we use zipballs without .git dirs)
+        if commit_info:
+            manifest.metadata.commit_hash = commit_info.get("hash")
+            manifest.metadata.commit_timestamp = commit_info.get("timestamp")
+            manifest.metadata.branch = commit_info.get("branch")
+            manifest.metadata.remote_url = commit_info.get("remote_url")
         
         # Initialize RIM
         model = RepositoryModel(
             metadata=RepositoryMetadata(
                 name=repo_name,
                 path=self.target_dir,
-                languages=manifest.languages
+                languages=manifest.languages,
+                commit=manifest.metadata.commit_hash or "",
+                branch=manifest.metadata.branch or "",
+                metadata={
+                    "primary_language": manifest.primary_language,
+                    "frameworks": manifest.frameworks,
+                    "commit_timestamp": manifest.metadata.commit_timestamp,
+                    "remote_url": manifest.metadata.remote_url
+                }
             )
         )
         

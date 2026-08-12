@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models.user import User
-from backend.models.repository import AnalysisJob
+from backend.models.repository import AnalysisJob, Analysis
 from backend.dependencies.auth import get_current_user
 from backend.services.github import fetch_file_content
 from backend.routers.repo.services.analysis import get_latest_analysis
@@ -22,6 +22,28 @@ def scan_repo(repo_name: str, db: Session = Depends(get_db), current_user: User 
     except HTTPException:
         return {"status": "no_analysis"}
     
+    if analysis.status in ["Failed", "Cancelled"]:
+        safe_analysis = db.query(Analysis).filter(
+            Analysis.repository_id == repo.id,
+            Analysis.status == "Completed"
+        ).order_by(Analysis.created_at.desc()).first()
+        
+        if safe_analysis:
+            # Revert changes: clean up the failed/cancelled analyses
+            failed_analyses = db.query(Analysis).filter(
+                Analysis.repository_id == repo.id,
+                Analysis.id > safe_analysis.id
+            ).all()
+            for fa in failed_analyses:
+                db.delete(fa)
+            db.commit()
+            analysis = safe_analysis
+        else:
+            # First scan failed, clear the scan entirely
+            db.delete(repo)
+            db.commit()
+            return {"status": "failed", "message": f"Analysis {analysis.status.lower()} due to a network or processing error. The repository has been removed."}
+
     if analysis.status != "Completed":
         job = db.query(AnalysisJob).filter(AnalysisJob.analysis_id == analysis.id).first()
         job_status = job.status if job else analysis.status
@@ -102,6 +124,16 @@ def scan_repo(repo_name: str, db: Session = Depends(get_db), current_user: User 
             lang_counts[fm["language"]] = lang_counts.get(fm["language"], 0) + 1
     language_str = ", ".join(sorted(lang_counts.keys(), key=lambda k: lang_counts[k], reverse=True)[:3]) if lang_counts else "Unknown"
     
+    # Extract metadata if available
+    commit = ""
+    branch = ""
+    commit_timestamp = ""
+    if query_layer and query_layer.model and query_layer.model.metadata:
+        commit = query_layer.model.metadata.commit
+        branch = query_layer.model.metadata.branch
+        if hasattr(query_layer.model.metadata, "metadata") and isinstance(query_layer.model.metadata.metadata, dict):
+            commit_timestamp = query_layer.model.metadata.metadata.get("commit_timestamp") or ""
+            
     return {
         "status": "completed",
         "overview": {
@@ -109,7 +141,10 @@ def scan_repo(repo_name: str, db: Session = Depends(get_db), current_user: User 
             "total_directories": len(dirs),
             "total_functions": len(functions),
             "total_classes": len(classes),
-            "language": language_str
+            "language": language_str,
+            "commit": commit,
+            "branch": branch,
+            "commit_timestamp": commit_timestamp
         },
         "hierarchy": hierarchy,
         "files": files_metadata

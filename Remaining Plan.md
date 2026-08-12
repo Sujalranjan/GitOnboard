@@ -27,19 +27,15 @@ The implementation has diverged significantly from the original architecture pla
 
 * ✅ Local directory scanning implemented in `RepositoryScanner` (`backend/intelligence/engine/scanner/scanner.py`)
 * ✅ File extension-based language mapping implemented in `LanguageDetector` (`backend/intelligence/engine/scanner/detector.py`)
-* 🟡 Framework detection exists in legacy post-parsing stage (`backend/intelligence/stages/metadata_stage.py`), but is missing upfront in scanner/manifest phase
-* ❌ Git metadata (commit hash, commit timestamp, branch) is not captured in `RepositoryManifest` (`backend/intelligence/engine/scanner/manifest.py`)
-* ❌ Primary/dominant language breakdown calculation is missing in scanner phase
+* ✅ Upfront framework detection implemented with robust dependency file parsing (`requirements.txt`, `pyproject.toml` via `tomllib`) in `FrameworkDetector` (`backend/intelligence/engine/scanner/detector.py`)
+* ✅ Git metadata (commit hash, commit timestamp, branch, remote_url) is now captured dynamically from the GitHub API and injected into the `RepositoryManifest` (`backend/intelligence/engine/scanner/manifest.py`)
+* ✅ Primary/dominant language breakdown calculation implemented in `scanner.py`, prioritizing actual source code languages over documentation.
 
 **What's Missing:**
-1. **Upfront Framework Detection**: Scanning `requirements.txt`, `pyproject.toml`, or `setup.py` for FastAPI/Flask/Django keywords during manifest creation.
-2. **Git Metadata Extraction**: Capturing HEAD commit hash, commit timestamp, branch, and remote URL.
-3. **Primary Language Calculation**: Determining dominant repo language and enforcing V1 scope validation.
+* All Layer 1 features are fully completed.
 
 **Suggested Fix:**
-1. **Extend `RepositoryManifest` (`backend/intelligence/engine/scanner/manifest.py`)**: Add `metadata: RepositoryMetadata` (with `commit_hash`, `commit_timestamp`, `branch`), `primary_language`, and `frameworks` list.
-2. **Add `FrameworkDetector` (`backend/intelligence/engine/scanner/detector.py`)**: Implement dependency file parsing (`requirements.txt`, `pyproject.toml`) to detect frameworks prior to AST parsing.
-3. **Integrate Git Collector (`backend/intelligence/engine/scanner/scanner.py`)**: Use `git log -1` via subprocess (falling back to OS stat timestamps) to populate commit hash and timestamp into `RepositoryManifest`.
+* N/A
 
 
 
@@ -287,7 +283,6 @@ The implementation includes several components not mentioned in the original pla
 5. **Implement Documentation Generator:** Add architecture documentation and Mermaid diagram generation
 6. **Implement AI Pipeline:** Add intent detection, planner, and evidence collection pipeline
 7. **Implement Incremental Update Pipeline:** Add fact diff, cascade updates, capability re-evaluation
-8. **Add Language/Framework Detection:** Implement detection heuristics as specified
 
 ### Low Priority (Validation & Polish)
 

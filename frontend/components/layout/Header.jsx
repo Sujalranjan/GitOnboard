@@ -11,6 +11,7 @@ export function Header() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(searchParams.get('search') || '');
+  const [debounceTimeout, setDebounceTimeout] = useState(null);
 
   useEffect(() => {
     fetch('/api/auth/github/me')
@@ -22,11 +23,18 @@ export function Header() {
   const handleSearchChange = (e) => {
     const val = e.target.value;
     setQuery(val);
-    if (val.trim()) {
-      router.push(`/dashboard?search=${encodeURIComponent(val)}`);
-    } else {
-      router.push('/dashboard');
-    }
+    
+    if (debounceTimeout) clearTimeout(debounceTimeout);
+    
+    const timeout = setTimeout(() => {
+      if (val.trim()) {
+        router.replace(`/dashboard?search=${encodeURIComponent(val)}`, { scroll: false });
+      } else {
+        router.replace('/dashboard', { scroll: false });
+      }
+    }, 300);
+    
+    setDebounceTimeout(timeout);
   };
 
   const handleLogout = async () => {

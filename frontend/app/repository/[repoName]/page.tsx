@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { repositoryService } from '@/services/repository';
 import RepositoryOverview from '@/components/repository/RepositoryOverview';
 
@@ -12,6 +12,8 @@ export default function RepositoryOverviewPage() {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isCanceling, setIsCanceling] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (!repoName) return;
@@ -25,9 +27,11 @@ export default function RepositoryOverviewPage() {
         if (cancelled) return;
         setData(json);
         
-        // Only keep polling when actively processing
         if (json?.status === 'processing') {
           pollInterval = setTimeout(fetchScanData, 3000);
+        } else if (json?.status === 'failed') {
+          setError(json.message || "Analysis failed.");
+          setIsLoading(false);
         } else {
           setIsLoading(false);
         }
@@ -53,8 +57,22 @@ export default function RepositoryOverviewPage() {
 
   if (error) {
     return (
-      <div className="p-8">
-        <div className="bg-red-50 text-red-600 p-4 rounded-md border border-red-100">Error: {error}</div>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 max-w-xl mx-auto text-center space-y-6">
+        <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center">
+          <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+          </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800">Scan Failed</h2>
+        <div className="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200 text-sm">
+          {error}
+        </div>
+        <button 
+          onClick={() => router.push('/dashboard')}
+          className="mt-6 px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-lg text-sm font-medium transition-colors"
+        >
+          Return to Dashboard
+        </button>
       </div>
     );
   }
@@ -70,6 +88,18 @@ export default function RepositoryOverviewPage() {
     };
     const currentStatus = data.job_status || "Queued";
     const progress = statusMap[currentStatus] || 10;
+
+    const handleCancel = async () => {
+      setIsCanceling(true);
+      try {
+        await repositoryService.cancel(repoName as string);
+        router.push('/dashboard');
+      } catch (err) {
+        console.error("Failed to cancel repo analysis", err);
+        alert("Error canceling repository analysis.");
+        setIsCanceling(false);
+      }
+    };
 
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 max-w-2xl mx-auto text-center space-y-6">
@@ -90,6 +120,14 @@ export default function RepositoryOverviewPage() {
           <span>{currentStatus}...</span>
           <span>{progress}%</span>
         </div>
+
+        <button 
+          onClick={handleCancel}
+          disabled={isCanceling}
+          className="mt-6 px-4 py-2 bg-white border border-amber-200 text-amber-700 hover:bg-amber-50 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {isCanceling ? "Canceling..." : "Cancel Analysis"}
+        </button>
       </div>
     );
   }

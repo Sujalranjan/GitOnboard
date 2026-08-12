@@ -65,10 +65,11 @@ class AnalysisWorker(WorkerInterface):
             try:
                 # 1. Download
                 try:
-                    await asyncio.wait_for(
+                    download_result = await asyncio.wait_for(
                         download_repo_zipball(owner, repo_name, repo.default_branch, str(target_dir), token),
                         timeout=120.0
                     )
+                    commit_info = download_result.get("commit_info")
                 except asyncio.TimeoutError:
                     raise Exception("Download timed out after 120 seconds")
 
@@ -87,7 +88,7 @@ class AnalysisWorker(WorkerInterface):
                     
                     # Run Phase 2 Static Analysis Pipeline
                     engine = AnalysisEngine(str(target_dir), get_default_registry())
-                    model = engine.run(repo_name)
+                    model = engine.run(repo_name, commit_info=commit_info)
                     
                     # Run Phase 3 Pattern Recognition Engine
                     pattern_registry = PatternRegistry()
@@ -104,6 +105,20 @@ class AnalysisWorker(WorkerInterface):
                     
                     # Serialize the populated RIM
                     json_str = serialize_rim(model)
+                    
+                    # Generate Enriched Metadata
+                    languages_dict = {lang: 1 for lang in model.metadata.languages}
+                    enriched_metadata = {
+                        "schema_version": 2,
+                        "repository": {
+                            "name": model.metadata.name,
+                            "languages": languages_dict,
+                            "primary_language": model.metadata.metadata.get("primary_language", "Unknown"),
+                            "frameworks": model.metadata.metadata.get("frameworks", []),
+                            "commit": model.metadata.commit,
+                            "branch": model.metadata.branch
+                        }
+                    }
                     
                     # Generate metrics
                     from backend.intelligence.rim.enums import EntityType
@@ -155,7 +170,8 @@ class AnalysisWorker(WorkerInterface):
                     
                     return {
                         "core_model": json_str.encode("utf-8"),
-                        "metrics": metrics_data
+                        "metrics": metrics_data,
+                        "enriched_metadata": enriched_metadata
                     }
 
                 logger.info(f"Analyzing {repo_name}...")

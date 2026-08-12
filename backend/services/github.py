@@ -42,11 +42,28 @@ async def check_repo_limits(owner: str, repo: str, token: str = None):
         }
 
 async def download_repo_zipball(owner: str, repo: str, branch: str, target_dir: str, token: str = None):
-    """Downloads zipball and extracts to target_dir. Returns total file count."""
+    """Downloads zipball and extracts to target_dir. Returns file count and commit metadata."""
     url = f"https://api.github.com/repos/{owner}/{repo}/zipball/{branch}"
     logger.info(f"Downloading zipball from {url}")
     
+    commit_info = {
+        "hash": None,
+        "timestamp": None,
+        "branch": branch,
+        "remote_url": f"https://github.com/{owner}/{repo}.git"
+    }
+    
     async with await get_github_client(token) as client:
+        # Fetch commit metadata first
+        try:
+            commit_resp = await client.get(f"https://api.github.com/repos/{owner}/{repo}/commits/{branch}")
+            if commit_resp.status_code == 200:
+                data = commit_resp.json()
+                commit_info["hash"] = data.get("sha")
+                commit_info["timestamp"] = data.get("commit", {}).get("author", {}).get("date")
+        except Exception as e:
+            logger.warning(f"Failed to fetch commit metadata: {e}")
+
         # Stream the download because it might be up to 500MB
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp_path = tmp.name
@@ -86,7 +103,7 @@ async def download_repo_zipball(owner: str, repo: str, branch: str, target_dir: 
                     if file_count > 50000:
                         raise HTTPException(status_code=400, detail="Repository exceeds 50,000 files limit.")
                         
-            return file_count
+            return {"file_count": file_count, "commit_info": commit_info}
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)

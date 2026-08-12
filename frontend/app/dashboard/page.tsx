@@ -17,6 +17,8 @@ export default function Dashboard() {
   const [importUrl, setImportUrl] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState('');
+  const [analyzingRepo, setAnalyzingRepo] = useState<string | null>(null);
+  const [cancelingRepo, setCancelingRepo] = useState<string | null>(null);
   
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get('search') || '';
@@ -25,6 +27,16 @@ export default function Dashboard() {
     try {
       const data = await repositoryService.getAll();
       setRepos(data.repositories || []);
+      
+      // If any repo is processing, queue up another fetch
+      const hasProcessing = data.repositories?.some((r: any) => 
+        ['Queued', 'Downloading', 'Analyzing', 'Saving', 'Processing'].includes(r.status) ||
+        ['Queued', 'Downloading', 'Analyzing', 'Saving'].includes(r.job_status)
+      );
+      
+      if (hasProcessing) {
+        setTimeout(fetchRepos, 3000);
+      }
     } catch (err) {
       console.error("Failed to fetch repos", err);
     } finally {
@@ -74,12 +86,32 @@ export default function Dashboard() {
 
   const handleReanalyze = async (e: React.MouseEvent, repoName: string) => {
     e.preventDefault();
+    setAnalyzingRepo(repoName);
     try {
       await repositoryService.reanalyze(repoName);
-      alert(`Re-analysis for ${repoName} started! You can click the repo to see progress.`);
+      // Let's refetch repos immediately to show the "Queued" status
+      fetchRepos();
     } catch (err) {
       console.error("Failed to re-analyze repo", err);
       alert("Error re-analyzing repository.");
+    } finally {
+      setAnalyzingRepo(null);
+    }
+  };
+
+  const handleCancel = async (e: React.MouseEvent, repoName: string) => {
+    e.preventDefault();
+    setCancelingRepo(repoName);
+    try {
+      await repositoryService.cancel(repoName);
+    } catch (err) {
+      console.error("Failed to cancel repo analysis", err);
+      if ((err as any).message !== "No active analysis to cancel.") {
+        alert("Error canceling repository analysis: " + (err as any).message);
+      }
+    } finally {
+      fetchRepos();
+      setCancelingRepo(null);
     }
   };
 
@@ -106,7 +138,8 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="p-8 w-full max-w-7xl mx-auto flex flex-col h-[calc(100vh-64px)] overflow-y-auto">
+    <div className="w-full h-[calc(100vh-64px)] overflow-y-auto">
+      <div className="p-8 w-full max-w-7xl mx-auto flex flex-col">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
         <Button 
@@ -150,7 +183,14 @@ export default function Dashboard() {
               <Card className="h-full hover:shadow-md transition-shadow cursor-pointer group flex flex-col">
                 <div className="flex justify-between items-start mb-4">
                   <h3 className="font-bold text-lg text-blue-600 group-hover:text-blue-700 transition-colors line-clamp-1">{repo.project_name}</h3>
-                  <Badge variant="neutral">{repo.language || "Unknown"}</Badge>
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    {repo.frameworks?.slice(0, 2).map((fw: string) => (
+                      <span key={fw} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                        {fw}
+                      </span>
+                    ))}
+                    <Badge variant="neutral">{repo.language || "Unknown"}</Badge>
+                  </div>
                 </div>
                 
                 <div className="space-y-4 flex-grow">
@@ -159,20 +199,69 @@ export default function Dashboard() {
                     <p className="text-sm text-slate-600 font-mono bg-slate-50 p-2 rounded line-clamp-1">{getRepositoryPath(repo)}</p>
                   </div>
                   
-                  <div>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Imported At</span>
-                    <p className="text-sm text-slate-700">{new Date(repo.import_time || Date.now()).toLocaleString()}</p>
-                  </div>
+                  {(repo.branch || repo.commit) && (
+                    <div>
+                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Git Info</span>
+                      <p className="text-sm text-slate-700 font-mono bg-slate-50 p-2 rounded line-clamp-1">
+                        {repo.branch ? <span className="text-blue-600 font-medium">{repo.branch}</span> : ''}
+                        {repo.branch && repo.commit ? ' @ ' : ''}
+                        {repo.commit ? <span className="text-slate-500">{repo.commit.substring(0, 7)}</span> : ''}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {['Queued', 'Downloading', 'Analyzing', 'Saving', 'Processing'].includes(repo.status) || ['Queued', 'Downloading', 'Analyzing', 'Saving'].includes(repo.job_status) ? (() => {
+                    const statusMap: Record<string, number> = {
+                      "Queued": 10,
+                      "Downloading": 30,
+                      "Analyzing": 60,
+                      "Saving": 90,
+                      "Completed": 100,
+                      "Failed": 0
+                    };
+                    const currentStatus = repo.job_status || "Queued";
+                    const progress = statusMap[currentStatus] || 10;
+                    
+                    return (
+                      <div className="mt-4">
+                        <div className="flex justify-between text-xs font-medium text-slate-500 mb-1">
+                          <span>{currentStatus}...</span>
+                          <span>{progress}%</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                          <div className="bg-blue-500 h-2 rounded-full transition-all duration-1000 ease-in-out relative" style={{ width: `${progress}%` }}>
+                            <div className="absolute top-0 left-0 right-0 bottom-0 bg-white/20 animate-[shimmer_1s_infinite]"></div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })() : (
+                    <div>
+                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Imported At</span>
+                      <p className="text-sm text-slate-700">{new Date(repo.import_time || Date.now()).toLocaleString()}</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-3">
-                  <button 
-                    onClick={(e) => handleReanalyze(e, repo.project_name)}
-                    className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-blue-50"
-                  >
-                    Re-analyze
-                  </button>
-                  <button 
+                  {['Queued', 'Downloading', 'Analyzing', 'Saving', 'Processing'].includes(repo.status) || ['Queued', 'Downloading', 'Analyzing', 'Saving'].includes(repo.job_status) ? (
+                    <button 
+                      onClick={(e) => handleCancel(e, repo.project_name)}
+                      disabled={cancelingRepo === repo.project_name}
+                      className="text-amber-600 hover:text-amber-800 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-amber-50 disabled:opacity-50"
+                    >
+                      {cancelingRepo === repo.project_name ? "Canceling..." : "Cancel"}
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={(e) => handleReanalyze(e, repo.project_name)}
+                      disabled={analyzingRepo === repo.project_name}
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-blue-50 disabled:opacity-50"
+                    >
+                      {analyzingRepo === repo.project_name ? "Starting..." : "Re-analyze"}
+                    </button>
+                  )}
+                  <button  
                     onClick={(e) => handleDelete(e, repo.project_name)}
                     className="text-red-500 hover:text-red-700 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-red-50"
                   >
@@ -231,6 +320,7 @@ export default function Dashboard() {
           </div>
         </form>
       </Modal>
+    </div>
     </div>
   );
 }

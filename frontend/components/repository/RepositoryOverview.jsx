@@ -19,9 +19,10 @@ import {
   Info,
   ChevronRight,
   Sparkles,
-  Network,
   Share2,
-  Search
+  Search,
+  Clock,
+  GitCommit
 } from 'lucide-react';
 
 const getLanguageConfig = (lang) => {
@@ -135,7 +136,16 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
                   </Badge>
                 );
               })()}
-              <Badge variant="neutral" icon={<GitBranch className="w-3 h-3 mr-1" />}>main</Badge>
+              {overview.branch && (
+                <Badge variant="neutral" icon={<GitBranch className="w-3 h-3 mr-1" />}>
+                  {overview.branch}
+                </Badge>
+              )}
+              {overview.commit && (
+                <Badge variant="neutral" icon={<GitCommit className="w-3 h-3 mr-1" />}>
+                  {overview.commit.substring(0, 7)}
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -200,10 +210,24 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
                     <span>{overview.language || "Unknown"}</span>
                   </div>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="text-slate-500 flex items-center"><GitBranch className="w-4 h-4 mr-2" /> Default Branch</span>
-                  <span className="font-medium text-slate-900">main</span>
+                  <span className="font-medium text-slate-900">{overview.branch || "unknown"}</span>
                 </div>
+                {overview.commit && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 flex items-center"><GitCommit className="w-4 h-4 mr-2" /> Latest Commit</span>
+                    <span className="font-medium text-slate-900 font-mono text-xs bg-slate-100 px-2 py-1 rounded">{overview.commit.substring(0, 7)}</span>
+                  </div>
+                )}
+                {overview.commit_timestamp && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 flex items-center"><Clock className="w-4 h-4 mr-2" /> Last Updated</span>
+                    <span className="font-medium text-slate-900">
+                      {new Date(overview.commit_timestamp).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

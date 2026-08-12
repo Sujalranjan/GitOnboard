@@ -36,12 +36,15 @@ class RepositoryMetadataStage:
         
         # 2. Framework Detection
         frameworks = self._detect_frameworks(model)
+        scanner_frameworks = model.metadata.metadata.get("frameworks", [])
+        merged_frameworks = sorted(list(set(frameworks + scanner_frameworks)))
         
         # 3. Project Type Detection
-        project_type = self._detect_project_type(frameworks, model)
+        project_type = self._detect_project_type(merged_frameworks, model)
         
         # 4. Language Profiling
         languages = self._profile_languages(model)
+        primary_language = model.metadata.metadata.get("primary_language", "Unknown")
         
         # 5. Entrypoint Detection
         entrypoints = self._detect_entrypoints(model)
@@ -57,8 +60,11 @@ class RepositoryMetadataStage:
             "repository": {
                 "name": model.metadata.repository_name,
                 "languages": languages,
-                "frameworks": frameworks,
-                "project_type": project_type
+                "primary_language": primary_language,
+                "frameworks": merged_frameworks,
+                "project_type": project_type,
+                "commit": model.metadata.commit,
+                "branch": model.metadata.branch
             },
             "entrypoints": entrypoints,
             "architecture": architecture,

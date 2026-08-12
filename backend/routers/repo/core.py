@@ -113,6 +113,43 @@ async def reanalyze_repo(repo_name: str, db: Session = Depends(get_db), current_
     enqueue_job(job.id)
     return {"message": "Reanalysis queued.", "job_id": job.id}
 
+@core_router.post("/{repo_name}/cancel")
+async def cancel_repo_analysis(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    repos = db.query(Repository).filter(Repository.user_id == current_user.id).all()
+    repo = None
+    for r in repos:
+        if r.url.rstrip("/").endswith(f"/{repo_name}") or r.url.rstrip("/").endswith(f"/{repo_name}.git"):
+            repo = r
+            break
+            
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    unfinished = db.query(AnalysisJob).join(Analysis).filter(
+        Analysis.repository_id == repo.id,
+        AnalysisJob.status.in_(["Queued", "Downloading", "Analyzing", "Saving"])
+    ).first()
+
+    if not unfinished:
+        raise HTTPException(status_code=400, detail="No active analysis to cancel.")
+
+    # Cancel task in queue
+    from backend.main import repo_queue
+    from datetime import datetime, timezone
+    
+    # Try cancelling the active task. If it returns False, it might be in the queue waiting.
+    # We update the DB regardless so the queue loop skips it.
+    repo_queue.cancel(unfinished.id)
+    
+    unfinished.status = "Cancelled"
+    unfinished.completed_at = datetime.now(timezone.utc)
+    analysis = db.query(Analysis).filter(Analysis.id == unfinished.analysis_id).first()
+    if analysis:
+        analysis.status = "Cancelled"
+    db.commit()
+
+    return {"message": "Analysis cancelled successfully."}
+
 def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     repos = db.query(Repository).filter(Repository.user_id == current_user.id).all()
     results = []
@@ -120,30 +157,52 @@ def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_c
         # Get latest analysis status
         latest = db.query(Analysis).filter(Analysis.repository_id == r.id).order_by(Analysis.created_at.desc()).first()
         status = latest.status if latest else "Unknown"
+        job_status = "Unknown"
+        if latest:
+            job = db.query(AnalysisJob).filter(AnalysisJob.analysis_id == latest.id).first()
+            if job:
+                job_status = job.status
+            else:
+                job_status = latest.status
         
         parts = r.url.rstrip("/").split("/")
         repo_name = parts[-1]
         if repo_name.endswith(".git"):
             repo_name = repo_name[:-4]
         
-        # Fetch languages from enriched_metadata if available
+        # Fetch metadata from enriched_metadata if available
         language_str = "Unknown"
+        frameworks = []
+        commit = ""
+        branch = ""
+        
         if latest:
             em_art = db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == latest.id, AnalysisArtifact.type == "enriched_metadata").first()
-            if em_art and em_art.data and "repository" in em_art.data and "languages" in em_art.data["repository"]:
-                langs_dict = em_art.data["repository"]["languages"]
-                if langs_dict:
-                    # Sort languages by count descending and take top 3
+            if em_art and em_art.data and "repository" in em_art.data:
+                repo_meta = em_art.data["repository"]
+                
+                if repo_meta.get("primary_language") and repo_meta["primary_language"] != "Unknown":
+                    language_str = repo_meta["primary_language"]
+                elif "languages" in repo_meta and repo_meta["languages"]:
+                    langs_dict = repo_meta["languages"]
                     sorted_langs = sorted(langs_dict.keys(), key=lambda k: langs_dict[k], reverse=True)[:3]
                     language_str = ", ".join(sorted_langs)
+                    
+                frameworks = repo_meta.get("frameworks", [])
+                commit = repo_meta.get("commit", "")
+                branch = repo_meta.get("branch", "")
 
         results.append({
             "id": r.id,
             "project_name": repo_name,
             "url": r.url,
             "status": status,
+            "job_status": job_status,
             "import_time": latest.created_at.isoformat() if latest else None,
-            "language": language_str
+            "language": language_str,
+            "frameworks": frameworks,
+            "commit": commit,
+            "branch": branch
         })
     return {"repositories": results}
 

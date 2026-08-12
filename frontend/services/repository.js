@@ -11,5 +11,7 @@ export const repositoryService = {
   
   import: (url) => fetchAPI('/import', { method: 'POST', body: JSON.stringify({ url }) }),
   
-  reanalyze: (repoName) => fetchAPI(`/repos/${repoName}/reanalyze`, { method: 'POST' })
+  reanalyze: (repoName) => fetchAPI(`/repos/${repoName}/reanalyze`, { method: 'POST' }),
+  
+  cancel: (repoName) => fetchAPI(`/repos/${repoName}/cancel`, { method: 'POST' })
 };
