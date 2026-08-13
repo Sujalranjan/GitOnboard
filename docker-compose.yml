@@ -37,6 +37,8 @@ services:
       - ./data:/app/data
       # Mount source code for local development
       - ./backend:/app/backend
+      # Mount ChromaDB embedding model cache to preserve ONNX downloads
+      - chroma_cache:/root/.cache/chroma
     env_file:
       - .env
     environment:
@@ -49,3 +51,4 @@ services:
 
 volumes:
   postgres_data:
+  chroma_cache:
