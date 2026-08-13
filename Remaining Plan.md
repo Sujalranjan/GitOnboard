@@ -100,16 +100,21 @@ The platform has achieved major milestones with the full implementation and veri
 
 ### Layer 6: Capability Detection Engine
 
-**Status: 🟡 Partially Completed**
+**Status: ✅ Completed**
 
 **Plan Requirements:**
 * Rule-based assembly of higher-level capabilities from extracted facts
 * Capabilities: Authentication, CRUD, Background Tasks, File Upload
 
 **Implementation Evidence:**
-* ✅ Candidate selection & consolidation in `backend/intelligence/capabilities/`
-* ✅ Capability members automatically projected into `capability_members` Fact Store table
-* 🟡 Uses candidate inference and taxonomy matching; rule-based heuristics can be further expanded.
+* ✅ Explicit multi-fact rule detectors implemented in `backend/intelligence/capabilities/detectors/` (`AuthenticationDetector`, `CRUDDetector`, `BackgroundTaskDetector`, `FileUploadDetector`)
+* ✅ Multi-signal per-rule predicates for Authentication (`AUTH_CREDENTIAL_LOGIN`, `AUTH_TOKEN_ENDPOINT`, `AUTH_SESSION_LOGOUT`, `AUTH_REGISTRATION`)
+* ✅ Resource identity resolution for CRUD capabilities (`CRUD_RESOURCE_MANAGEMENT`) tracing `Route -> Handler -> Database Object / Model`
+* ✅ Background Tasks detector matching FastAPI `BackgroundTasks`, Celery `@task`, `.delay()`, and worker routines while excluding standard `async def` functions
+* ✅ File Upload detector matching HTTP routes with `UploadFile`/`File(...)` parameters connected to storage handlers
+* ✅ Deterministic consolidation & deduplication stage in `CapabilityDeduplicator`
+* ✅ Structural member roles (`entry_point`, `handler`, `service`, `table`, `worker`) and first-class evidence persisted into Fact Store tables (`capabilities`, `capability_members`, `evidence`)
+* ✅ Automated test suite in `backend/tests/test_capabilities.py` enforcing positive detection, negative false-positive resistance, idempotence, and Fact Store persistence (100% pass rate)
 
 ---
 

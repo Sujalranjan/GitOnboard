@@ -210,7 +210,7 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                     ev_rec = FactEvidence(
                         id=ev_id,
                         analysis_id=analysis_id,
-                        fact_type=ev.get("type", "static_pattern"),
+                        fact_type=ev.get("fact_type", ev.get("type", "static_pattern")),
                         symbol_id=sym_db_id if (sym_id in seen_symbol_ids or sym_id in seen_file_ids) else None,
                         details=ev,
                         location=ev.get("location"),
@@ -218,7 +218,12 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                     db.add(ev_rec)
                     db.flush()
 
-                # Capability Members from representative_sources and evidence
+                # Capability Members from representative_sources and metadata role mapping
+                member_role_map = {}
+                if hasattr(cap, "metadata") and isinstance(cap.metadata, dict) and "member_roles" in cap.metadata:
+                    for item in cap.metadata["member_roles"]:
+                        member_role_map[item["symbol_id"]] = item["role"]
+
                 member_candidates = list(cap.representative_sources)
                 for ev in cap.evidence:
                     if ev.get("symbol_id"):
@@ -228,11 +233,12 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                 for idx, sym_id in enumerate(member_candidates):
                     if sym_id not in seen_mem_syms and (sym_id in seen_symbol_ids or sym_id in seen_file_ids):
                         seen_mem_syms.add(sym_id)
+                        assigned_role = member_role_map.get(sym_id, "member")
                         member_rec = FactCapabilityMember(
                             id=f"mem_{analysis_id}_{cap.id}_{idx}_{sym_id}",
                             capability_id=cap_db_id,
                             symbol_id=f"{analysis_id}:{sym_id}",
-                            role="member",
+                            role=assigned_role,
                             evidence_id=None,
                         )
                         db.add(member_rec)
