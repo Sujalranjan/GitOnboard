@@ -138,10 +138,10 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="w-full h-[calc(100vh-64px)] overflow-y-auto">
+    <div className="w-full h-[calc(100vh-64px)] overflow-y-auto bg-slate-50 dark:bg-slate-950 transition-colors">
       <div className="p-8 w-full max-w-7xl mx-auto flex flex-col">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Dashboard</h1>
         <Button 
           variant="primary" 
           icon={<Plus className="w-4 h-4" />} 
@@ -152,17 +152,17 @@ export default function Dashboard() {
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+        <div className="flex flex-col items-center justify-center py-20 text-slate-500 dark:text-slate-400">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400 mb-4"></div>
           <p>Loading your repositories...</p>
         </div>
       ) : repos.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center max-w-2xl mx-auto flex flex-col items-center">
-          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-6">
-            <FolderGit2 className="w-8 h-8 text-blue-600" />
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-12 text-center max-w-2xl mx-auto flex flex-col items-center">
+          <div className="w-16 h-16 bg-blue-50 dark:bg-blue-950/60 rounded-full flex items-center justify-center mb-6">
+            <FolderGit2 className="w-8 h-8 text-blue-600 dark:text-blue-400" />
           </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Welcome to GitOnboard</h2>
-          <p className="text-slate-500 mb-8 max-w-md">No repositories imported yet. Import a public GitHub repository to start analyzing its architecture, metrics, and dependencies.</p>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">Welcome to GitOnboard</h2>
+          <p className="text-slate-500 dark:text-slate-400 mb-8 max-w-md">No repositories imported yet. Import a public GitHub repository to start analyzing its architecture, metrics, and dependencies.</p>
           <Button 
             variant="primary" 
             size="lg"
@@ -173,8 +173,8 @@ export default function Dashboard() {
           </Button>
         </div>
       ) : filteredRepos.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center max-w-md mx-auto">
-          <p className="text-slate-500">No repositories found matching "{searchQuery}".</p>
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-12 text-center max-w-md mx-auto">
+          <p className="text-slate-500 dark:text-slate-400">No repositories found matching "{searchQuery}".</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -182,10 +182,10 @@ export default function Dashboard() {
             <Link key={idx} href={`/repository/${repo.project_name}`}>
               <Card className="h-full hover:shadow-md transition-shadow cursor-pointer group flex flex-col">
                 <div className="flex justify-between items-start mb-4">
-                  <h3 className="font-bold text-lg text-blue-600 group-hover:text-blue-700 transition-colors line-clamp-1">{repo.project_name}</h3>
+                  <h3 className="font-bold text-lg text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors line-clamp-1">{repo.project_name}</h3>
                   <div className="flex gap-2 flex-wrap justify-end">
                     {repo.frameworks?.slice(0, 2).map((fw: string) => (
-                      <span key={fw} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                      <span key={fw} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
                         {fw}
                       </span>
                     ))}
@@ -195,17 +195,17 @@ export default function Dashboard() {
                 
                 <div className="space-y-4 flex-grow">
                   <div>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Path</span>
-                    <p className="text-sm text-slate-600 font-mono bg-slate-50 p-2 rounded line-clamp-1">{getRepositoryPath(repo)}</p>
+                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Path</span>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/80 p-2 rounded line-clamp-1">{getRepositoryPath(repo)}</p>
                   </div>
                   
                   {(repo.branch || repo.commit) && (
                     <div>
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Git Info</span>
-                      <p className="text-sm text-slate-700 font-mono bg-slate-50 p-2 rounded line-clamp-1">
-                        {repo.branch ? <span className="text-blue-600 font-medium">{repo.branch}</span> : ''}
+                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Git Info</span>
+                      <p className="text-sm text-slate-700 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/80 p-2 rounded line-clamp-1">
+                        {repo.branch ? <span className="text-blue-600 dark:text-blue-400 font-medium">{repo.branch}</span> : ''}
                         {repo.branch && repo.commit ? ' @ ' : ''}
-                        {repo.commit ? <span className="text-slate-500">{repo.commit.substring(0, 7)}</span> : ''}
+                        {repo.commit ? <span className="text-slate-500 dark:text-slate-400">{repo.commit.substring(0, 7)}</span> : ''}
                       </p>
                     </div>
                   )}
@@ -224,12 +224,12 @@ export default function Dashboard() {
                     
                     return (
                       <div className="mt-4">
-                        <div className="flex justify-between text-xs font-medium text-slate-500 mb-1">
+                        <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
                           <span>{currentStatus}...</span>
                           <span>{progress}%</span>
                         </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                          <div className="bg-blue-500 h-2 rounded-full transition-all duration-1000 ease-in-out relative" style={{ width: `${progress}%` }}>
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                          <div className="bg-blue-500 dark:bg-blue-500 h-2 rounded-full transition-all duration-1000 ease-in-out relative" style={{ width: `${progress}%` }}>
                             <div className="absolute top-0 left-0 right-0 bottom-0 bg-white/20 animate-[shimmer_1s_infinite]"></div>
                           </div>
                         </div>
@@ -237,18 +237,18 @@ export default function Dashboard() {
                     );
                   })() : (
                     <div>
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Imported At</span>
-                      <p className="text-sm text-slate-700">{new Date(repo.import_time || Date.now()).toLocaleString()}</p>
+                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Imported At</span>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">{new Date(repo.import_time || Date.now()).toLocaleString()}</p>
                     </div>
                   )}
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-3">
+                <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
                   {['Queued', 'Downloading', 'Analyzing', 'Saving', 'Processing'].includes(repo.status) || ['Queued', 'Downloading', 'Analyzing', 'Saving'].includes(repo.job_status) ? (
                     <button 
                       onClick={(e) => handleCancel(e, repo.project_name)}
                       disabled={cancelingRepo === repo.project_name}
-                      className="text-amber-600 hover:text-amber-800 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-amber-50 disabled:opacity-50"
+                      className="text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/40 disabled:opacity-50"
                     >
                       {cancelingRepo === repo.project_name ? "Canceling..." : "Cancel"}
                     </button>
@@ -256,14 +256,14 @@ export default function Dashboard() {
                     <button 
                       onClick={(e) => handleReanalyze(e, repo.project_name)}
                       disabled={analyzingRepo === repo.project_name}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-blue-50 disabled:opacity-50"
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50"
                     >
                       {analyzingRepo === repo.project_name ? "Starting..." : "Re-analyze"}
                     </button>
                   )}
                   <button  
                     onClick={(e) => handleDelete(e, repo.project_name)}
-                    className="text-red-500 hover:text-red-700 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-red-50"
+                    className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/40"
                   >
                     Delete
                   </button>
@@ -281,22 +281,22 @@ export default function Dashboard() {
       >
         <form onSubmit={handleImport} className="space-y-4">
           {importError && (
-            <div className="p-3 bg-red-50 text-red-700 rounded-lg border border-red-100 text-sm flex items-start gap-2">
+            <div className="p-3 bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 rounded-lg border border-red-100 dark:border-red-900 text-sm flex items-start gap-2">
               <span className="font-bold mt-0.5">!</span>
               <p>{importError}</p>
             </div>
           )}
           
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Repository URL <span className="text-slate-400 font-normal">(Python only for MVP)</span>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              Repository URL <span className="text-slate-400 dark:text-slate-500 font-normal">(Python only for MVP)</span>
             </label>
             <input 
               type="text" 
               value={importUrl}
               onChange={(e) => setImportUrl(e.target.value)}
               placeholder="https://github.com/username/repo" 
-              className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-slate-900 transition-shadow bg-white"
+              className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 transition-shadow bg-white dark:bg-slate-800"
               disabled={isImporting}
               autoFocus
             />

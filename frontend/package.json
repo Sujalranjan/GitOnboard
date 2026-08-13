@@ -17,7 +17,8 @@
     "react-markdown": "^10.1.0",
     "reactflow": "^11.11.4",
     "lucide-react": "latest",
-    "framer-motion": "latest"
+    "framer-motion": "latest",
+    "next-themes": "^0.4.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

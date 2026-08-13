@@ -433,21 +433,21 @@ export default function DependencyGraph({ repoName }) {
   };
 
   if (isLoading) {
-    return <div className="h-full flex items-center justify-center text-gray-500">Building Virtual File System...</div>;
+    return <div className="h-full flex items-center justify-center text-gray-500 dark:text-slate-400">Building Virtual File System...</div>;
   }
 
   if (error) {
-    return <div className="h-full flex items-center justify-center text-red-500">{error}</div>;
+    return <div className="h-full flex items-center justify-center text-red-500 dark:text-red-400">{error}</div>;
   }
 
   if (nodes.length === 0) {
-    return <div className="h-full flex items-center justify-center text-gray-400">No supported source files found to analyze.</div>;
+    return <div className="h-full flex items-center justify-center text-gray-400 dark:text-slate-500">No supported source files found to analyze.</div>;
   }
 
   return (
     <div 
       ref={containerRef}
-      className="w-full h-full bg-white rounded-lg border border-gray-200 overflow-hidden relative"
+      className="w-full h-full bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-800 overflow-hidden relative"
     >
       <ReactFlow
         nodes={nodes}
@@ -464,7 +464,7 @@ export default function DependencyGraph({ repoName }) {
         nodesDraggable={true}
         onNodeDragStop={onNodeDragStop}
       >
-        <Background color="#f3f4f6" gap={20} size={1} />
+        <Background color="#94a3b8" gap={20} size={1} />
         
         <Controls showInteractive={false} showFitView={true} position="bottom-right">
           <ControlButton onClick={handleUndo} disabled={currentStep <= 0} title="Undo">
@@ -498,16 +498,16 @@ export default function DependencyGraph({ repoName }) {
           </ControlButton>
         </Controls>
         
-        <Panel position="top-left" className="bg-white/90 shadow-sm border border-gray-100 p-2 rounded-lg flex flex-col pointer-events-auto">
+        <Panel position="top-left" className="bg-white/90 dark:bg-slate-800/90 shadow-sm border border-gray-100 dark:border-slate-700 p-2 rounded-lg flex flex-col pointer-events-auto">
           <form onSubmit={handleSearch} className="flex gap-2">
             <input 
               type="text" 
               placeholder="Search file..." 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:border-indigo-500 w-48"
+              className="text-xs px-2 py-1 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded outline-none focus:border-indigo-500 w-48"
             />
-            <button type="submit" className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded text-xs font-semibold hover:bg-indigo-100">Find</button>
+            <button type="submit" className="bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-300 px-2 py-1 rounded text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/80">Find</button>
           </form>
         </Panel>
       </ReactFlow>

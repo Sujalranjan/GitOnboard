@@ -54,23 +54,23 @@ export default function ExplorerView({ repoName }) {
   };
 
   if (isLoading) {
-    return <div className="p-8 flex justify-center items-center h-full text-slate-500">Loading explorer...</div>;
+    return <div className="p-8 flex justify-center items-center h-full text-slate-500 dark:text-slate-400">Loading explorer...</div>;
   }
 
   if (error) {
-    return <div className="p-8 text-red-600 bg-red-50 m-4 rounded-lg">Error: {error}</div>;
+    return <div className="p-8 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 m-4 rounded-lg border border-red-100 dark:border-red-900">Error: {error}</div>;
   }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 h-full">
-      <div className="lg:col-span-4 flex flex-col overflow-hidden bg-white rounded-xl shadow-sm border border-slate-200">
+      <div className="lg:col-span-4 flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
         <FileExplorer 
           hierarchy={data?.hierarchy} 
           onFileClick={handleFileClick} 
           selectedFile={selectedFile} 
         />
       </div>
-      <div className="lg:col-span-8 flex flex-col overflow-hidden bg-white rounded-xl shadow-sm border border-slate-200">
+      <div className="lg:col-span-8 flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
         <CodeDetailsViewer 
           selectedFile={selectedFile}
           isParsing={isParsing}

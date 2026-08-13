@@ -8,11 +8,11 @@ const sizeClasses = {
 };
 
 const variantClasses = {
-  primary: 'bg-blue-600 text-white hover:bg-blue-700 border border-transparent shadow-sm',
-  secondary: 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 shadow-sm',
-  danger: 'bg-red-600 text-white hover:bg-red-700 border border-transparent shadow-sm',
-  ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-  soft: 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-transparent'
+  primary: 'bg-blue-600 dark:bg-blue-600 text-white hover:bg-blue-700 dark:hover:bg-blue-500 border border-transparent shadow-sm',
+  secondary: 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 shadow-sm',
+  danger: 'bg-red-600 dark:bg-red-600 text-white hover:bg-red-700 dark:hover:bg-red-500 border border-transparent shadow-sm',
+  ghost: 'bg-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
+  soft: 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-transparent'
 };
 
 /**
@@ -45,7 +45,7 @@ export function Button({
       onClick={onClick}
       className={`
         inline-flex items-center justify-center font-medium rounded-lg transition-colors
-        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900
         disabled:opacity-50 disabled:cursor-not-allowed
         ${sizeClasses[size]} 
         ${variantClasses[variant]} 

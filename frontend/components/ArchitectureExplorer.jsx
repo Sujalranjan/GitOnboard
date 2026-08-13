@@ -9,8 +9,7 @@ import ReactFlow, {
   useEdgesState,
   MarkerType,
   Handle,
-  Position,
-  Panel
+  Position
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
@@ -29,24 +28,24 @@ const ArchitectureNode = ({ data, selected }) => {
   };
   
   const bgMap = {
-    repository: 'bg-gray-100',
-    folder: 'bg-yellow-50',
-    file: 'bg-blue-50',
-    class: 'bg-purple-50',
-    function: 'bg-green-50'
+    repository: 'bg-gray-100 dark:bg-slate-800',
+    folder: 'bg-yellow-50 dark:bg-yellow-950/60',
+    file: 'bg-blue-50 dark:bg-blue-950/60',
+    class: 'bg-purple-50 dark:bg-purple-950/60',
+    function: 'bg-green-50 dark:bg-green-950/60'
   };
 
   return (
-    <div className={`px-3 py-2 shadow-sm rounded-md border-2 ${bgMap[data.type] || 'bg-white'} ${selected ? 'border-blue-500 shadow-md' : 'border-gray-300'} flex items-center gap-2 min-w-[150px]`}>
+    <div className={`px-3 py-2 shadow-sm rounded-md border-2 ${bgMap[data.type] || 'bg-white dark:bg-slate-900'} ${selected ? 'border-blue-500 shadow-md' : 'border-gray-300 dark:border-slate-700'} flex items-center gap-2 min-w-[160px] transition-colors`}>
       <Handle type="target" position={Position.Top} className="opacity-0" />
       
       <span className="text-xl">{iconMap[data.type] || '📌'}</span>
       
-      <div className="flex-grow flex flex-col">
-        <span className="font-mono text-sm font-semibold text-gray-800 truncate max-w-[150px]" title={data.name}>
+      <div className="flex-grow flex flex-col overflow-hidden">
+        <span className="font-mono text-sm font-semibold text-gray-800 dark:text-slate-100 truncate max-w-[140px]" title={data.name}>
           {data.name}
         </span>
-        <span className="text-xs text-gray-500 uppercase">{data.type}</span>
+        <span className="text-xs text-gray-500 dark:text-slate-400 uppercase">{data.type}</span>
       </div>
       
       {isExpandable && (
@@ -55,9 +54,9 @@ const ArchitectureNode = ({ data, selected }) => {
             e.stopPropagation();
             data.onToggleExpand(data.id);
           }}
-          className="w-6 h-6 flex items-center justify-center rounded-full bg-white border border-gray-300 hover:bg-gray-100 text-gray-600 font-bold"
+          className="w-6 h-6 flex items-center justify-center rounded-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-slate-200 font-bold transition-colors text-xs flex-shrink-0"
         >
-          {isExpanded ? '-' : '+'}
+          {isExpanded ? '−' : '+'}
         </button>
       )}
       
@@ -70,12 +69,10 @@ const nodeTypes = {
   archNode: ArchitectureNode,
 };
 
-// --- Layout Algorithm ---
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 30, edgesep: 10, ranksep: 60 });
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 40, edgesep: 15, ranksep: 70 });
 
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, { width: 220, height: 60 });
@@ -104,187 +101,240 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 export default function ArchitectureExplorer({ repoName }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
+  const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   
-  // Cache for lazily loaded children
-  const childrenCache = useRef({});
   const rfInstance = useRef(null);
 
-  const nodesRef = useRef(nodes);
-  const edgesRef = useRef(edges);
-
-  useEffect(() => {
-    nodesRef.current = nodes;
-    edgesRef.current = edges;
-  }, [nodes, edges]);
-
-  const applyLayout = useCallback((currentNodes, currentEdges) => {
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(currentNodes, currentEdges);
-    setNodes(layoutedNodes);
-    setEdges(layoutedEdges);
-  }, [setNodes, setEdges]);
-
-  const fetchRoot = useCallback(async () => {
+  const fetchRoot = async () => {
+    setIsLoading(true);
+    setError(null);
+    setSelectedNodeId(null);
+    setExpandedNodes(new Set());
+    
     try {
-      setIsLoading(true);
       const res = await fetch(`/api/repos/${repoName}/architecture?node_id=root`);
-      if (!res.ok) throw new Error("Failed to fetch architecture.");
+      if (!res.ok) throw new Error("Failed to fetch root architecture");
       const data = await res.json();
+      
+      const rawNodes = data.nodes || [];
       
       const rootNode = {
         id: 'root',
         type: 'archNode',
-        data: { id: 'root', name: repoName, type: 'repository', parent: null, has_children: true, expanded: true, onToggleExpand: handleToggleExpand },
-        position: { x: 0, y: 0 },
+        data: {
+          id: 'root',
+          name: repoName,
+          type: 'repository',
+          has_children: true,
+          expanded: true,
+          onToggleExpand: handleToggleExpand,
+        },
+        position: { x: 0, y: 0 }
       };
-      
-      childrenCache.current['root'] = data.nodes;
-      
-      const childNodes = data.nodes.map(n => ({
+
+      const initialExpanded = new Set(['root']);
+      setExpandedNodes(initialExpanded);
+
+      const formattedChildNodes = rawNodes.map(n => ({
         id: n.id,
         type: 'archNode',
-        data: { ...n, expanded: false, onToggleExpand: handleToggleExpand },
-        position: { x: 0, y: 0 },
+        data: {
+          ...n,
+          expanded: false,
+          onToggleExpand: handleToggleExpand,
+        },
+        position: { x: 0, y: 0 }
       }));
+
+      const initialNodes = [rootNode, ...formattedChildNodes];
       
-      const childEdges = data.nodes.map(n => ({
+      const initialEdges = rawNodes.map(n => ({
         id: `e-root-${n.id}`,
         source: 'root',
         target: n.id,
         type: 'smoothstep',
+        animated: true,
         style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
       }));
-      
-      applyLayout([rootNode, ...childNodes], childEdges);
-      
+
+      const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(initialNodes, initialEdges, 'TB');
+      setNodes(layoutedNodes);
+      setEdges(layoutedEdges);
+
+      setTimeout(() => {
+        if (rfInstance.current) rfInstance.current.fitView({ padding: 0.2, duration: 600 });
+      }, 100);
+
     } catch (err) {
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  }, [repoName, setNodes, setEdges, applyLayout]);
-
-  // Initial Load
-  useEffect(() => {
-    fetchRoot();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repoName]);
+  };
 
   const handleToggleExpand = useCallback(async (nodeId) => {
-    const currentNodes = nodesRef.current;
-    const currentEdges = edgesRef.current;
-    
-    const nodeToToggle = currentNodes.find(n => n.id === nodeId);
-    if (!nodeToToggle) return;
-    
-    const isExpanding = !nodeToToggle.data.expanded;
-    
-    if (isExpanding) {
-      let childrenData = childrenCache.current[nodeId];
-      
-      if (!childrenData) {
-        try {
-          const res = await fetch(`/api/repos/${repoName}/architecture?node_id=${encodeURIComponent(nodeId)}`);
-          if (!res.ok) throw new Error("Failed to load children");
-          const data = await res.json();
-          childrenData = data.nodes;
-          childrenCache.current[nodeId] = childrenData;
-        } catch (err) {
-          console.error(err);
-          return;
-        }
-      }
-      
-      const latestNodes = nodesRef.current;
-      const latestEdges = edgesRef.current;
-      
-      const updatedNodes = latestNodes.map(n => n.id === nodeId ? { ...n, data: { ...n.data, expanded: true } } : n);
-      
-      const newChildNodes = (childrenData || []).map(n => ({
-        id: n.id,
-        type: 'archNode',
-        data: { ...n, expanded: false, onToggleExpand: handleToggleExpand },
-        position: { x: 0, y: 0 },
-      }));
-      
-      const newChildEdges = (childrenData || []).map(n => ({
-        id: `e-${nodeId}-${n.id}`,
-        source: nodeId,
-        target: n.id,
-        type: 'smoothstep',
-        style: { stroke: '#94a3b8', strokeWidth: 1.5 },
-      }));
-      
-      const existingIds = new Set(updatedNodes.map(n => n.id));
-      const filteredChildNodes = newChildNodes.filter(n => !existingIds.has(n.id));
-      
-      const combinedNodes = [...updatedNodes, ...filteredChildNodes];
-      const combinedEdges = [...latestEdges, ...newChildEdges];
-      
-      applyLayout(combinedNodes, combinedEdges);
-      
-    } else {
-      // Collapse
-      const descendants = getDescendants(nodeId, currentEdges);
-      const newNodes = currentNodes.filter(n => !descendants.has(n.id)).map(n => n.id === nodeId ? { ...n, data: { ...n.data, expanded: false } } : n);
-      const newEdges = currentEdges.filter(e => !descendants.has(e.source) && !descendants.has(e.target));
-      
-      applyLayout(newNodes, newEdges);
-    }
-  }, [repoName, applyLayout]);
+    setNodes(currentNodes => {
+      setEdges(currentEdges => {
+        setExpandedNodes(prevExpanded => {
+          const isCurrentlyExpanded = prevExpanded.has(nodeId);
+          const nextExpanded = new Set(prevExpanded);
 
-  const getDescendants = (nodeId, allEdges) => {
-    const descendants = new Set();
-    const stack = [nodeId];
-    
-    while (stack.length > 0) {
-      const current = stack.pop();
-      const children = allEdges.filter(e => e.source === current).map(e => e.target);
-      children.forEach(child => {
-        descendants.add(child);
-        stack.push(child);
+          if (isCurrentlyExpanded) {
+            // Collapse: recursively find and remove all children of nodeId
+            nextExpanded.delete(nodeId);
+
+            const findChildIds = (parentIds) => {
+              const children = currentEdges.filter(e => parentIds.has(e.source)).map(e => e.target);
+              if (children.length === 0) return [];
+              const childrenSet = new Set(children);
+              return [...children, ...findChildIds(childrenSet)];
+            };
+
+            const descendantIds = new Set(findChildIds(new Set([nodeId])));
+
+            const filteredNodes = currentNodes.map(n => {
+              if (n.id === nodeId) {
+                return { ...n, data: { ...n.data, expanded: false } };
+              }
+              return n;
+            }).filter(n => !descendantIds.has(n.id));
+
+            const filteredEdges = currentEdges.filter(e => !descendantIds.has(e.source) && !descendantIds.has(e.target));
+
+            const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(filteredNodes, filteredEdges, 'TB');
+            
+            setTimeout(() => {
+              setNodes(layoutedNodes);
+              setEdges(layoutedEdges);
+            }, 0);
+
+            return nextExpanded;
+          } else {
+            // Expand: fetch children from backend API
+            nextExpanded.add(nodeId);
+
+            fetch(`/api/repos/${repoName}/architecture?node_id=${encodeURIComponent(nodeId)}`)
+              .then(res => res.ok ? res.json() : Promise.reject(new Error("Failed to load children")))
+              .then(data => {
+                const childNodesData = data.nodes || [];
+                if (childNodesData.length === 0) return;
+
+                const existingNodeIds = new Set(currentNodes.map(n => n.id));
+                const newChildNodes = childNodesData
+                  .filter(n => !existingNodeIds.has(n.id))
+                  .map(n => ({
+                    id: n.id,
+                    type: 'archNode',
+                    data: {
+                      ...n,
+                      expanded: false,
+                      onToggleExpand: handleToggleExpand,
+                    },
+                    position: { x: 0, y: 0 }
+                  }));
+
+                const newChildEdges = childNodesData.map(n => ({
+                  id: `e-${nodeId}-${n.id}`,
+                  source: nodeId,
+                  target: n.id,
+                  type: 'smoothstep',
+                  animated: true,
+                  style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+                  markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
+                }));
+
+                const updatedNodes = currentNodes.map(n => {
+                  if (n.id === nodeId) {
+                    return { ...n, data: { ...n.data, expanded: true } };
+                  }
+                  return n;
+                }).concat(newChildNodes);
+
+                const existingEdgeIds = new Set(currentEdges.map(e => e.id));
+                const updatedEdges = currentEdges.concat(newChildEdges.filter(e => !existingEdgeIds.has(e.id)));
+
+                const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(updatedNodes, updatedEdges, 'TB');
+
+                setNodes(layoutedNodes);
+                setEdges(layoutedEdges);
+              })
+              .catch(err => console.error("Error expanding node:", err));
+
+            return nextExpanded;
+          }
+        });
+        return currentEdges;
       });
+      return currentNodes;
+    });
+  }, [repoName]);
+
+  useEffect(() => {
+    if (repoName) {
+      fetchRoot();
     }
-    
-    return descendants;
-  };
+  }, [repoName]);
 
   const onNodeClick = useCallback((_, node) => {
     setSelectedNodeId(node.id);
   }, []);
-  
+
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
   }, []);
 
   const selectedNodeData = useMemo(() => {
     if (!selectedNodeId) return null;
-    return nodes.find(n => n.id === selectedNodeId)?.data;
+    const n = nodes.find(node => node.id === selectedNodeId);
+    return n ? n.data : null;
   }, [selectedNodeId, nodes]);
 
   if (isLoading) {
-    return <div className="h-full flex items-center justify-center text-gray-500">Loading Architecture...</div>;
+    return (
+      <div className="h-full flex items-center justify-center text-gray-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400 mb-2"></div>
+          <span>Building Architecture Hierarchy...</span>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="h-full p-4 text-red-600 bg-red-50">{error}</div>;
+    return (
+      <div className="h-full flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-950">
+        <div className="bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 p-4 rounded-lg max-w-md text-center">
+          <h3 className="font-bold mb-1">Architecture Error</h3>
+          <p className="text-sm">{error}</p>
+          <button 
+            onClick={fetchRoot}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex h-full w-full">
-      {/* Sidebar for Metadata */}
-      <div className="w-80 border-r border-gray-200 bg-gray-50 flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-gray-200 bg-white flex justify-between items-start">
+    <div className="flex h-full w-full bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
+      {/* Sidebar Details Panel */}
+      <div className="w-80 border-r border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shadow-sm z-10 transition-colors">
+        <div className="p-4 border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex justify-between items-start">
           <div>
-            <h2 className="text-lg font-bold text-gray-800">Architecture</h2>
-            <p className="text-sm text-gray-500 mt-1">Hierarchical Repository View</p>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-slate-100">Architecture</h2>
+            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Hierarchical Repository View</p>
           </div>
           <button 
             onClick={fetchRoot}
-            className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded"
+            className="text-xs bg-gray-200 dark:bg-slate-800 hover:bg-gray-300 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 px-2 py-1 rounded transition-colors"
             title="Reset to root view"
           >
             Reset
@@ -293,35 +343,35 @@ export default function ArchitectureExplorer({ repoName }) {
         
         <div className="flex-grow overflow-y-auto p-4">
           {!selectedNodeData ? (
-            <div className="text-gray-500 text-sm italic text-center mt-10">
+            <div className="text-gray-500 dark:text-slate-400 text-sm italic text-center mt-10">
               Select a node to view its details.
             </div>
           ) : (
             <div className="space-y-4">
               <div>
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Name</h3>
-                <div className="font-mono text-sm font-bold text-gray-900 break-all bg-white p-2 border border-gray-200 rounded">
+                <h3 className="text-xs font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider mb-1">Name</h3>
+                <div className="font-mono text-sm font-bold text-gray-900 dark:text-slate-100 break-all bg-white dark:bg-slate-800 p-2 border border-gray-200 dark:border-slate-700 rounded">
                   {selectedNodeData.name}
                 </div>
               </div>
               
               <div>
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Type</h3>
-                <div className="text-sm text-gray-700 bg-white p-2 border border-gray-200 rounded uppercase font-semibold">
+                <h3 className="text-xs font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider mb-1">Type</h3>
+                <div className="text-sm text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 p-2 border border-gray-200 dark:border-slate-700 rounded uppercase font-semibold">
                   {selectedNodeData.type}
                 </div>
               </div>
               
               <div>
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Path / ID</h3>
-                <div className="text-sm text-gray-600 font-mono bg-gray-100 p-2 rounded break-all">
+                <h3 className="text-xs font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider mb-1">Path / ID</h3>
+                <div className="text-sm text-gray-600 dark:text-slate-300 font-mono bg-gray-100 dark:bg-slate-800 p-2 rounded break-all border border-gray-200 dark:border-slate-700">
                   {selectedNodeData.id}
                 </div>
               </div>
               
               <div>
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Children</h3>
-                <div className="text-sm text-gray-700">
+                <h3 className="text-xs font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider mb-1">Children</h3>
+                <div className="text-sm text-gray-700 dark:text-slate-300">
                   {selectedNodeData.has_children ? 'Has children (can expand)' : 'Leaf node'}
                 </div>
               </div>
@@ -331,7 +381,7 @@ export default function ArchitectureExplorer({ repoName }) {
       </div>
       
       {/* Graph Area */}
-      <div className="flex-grow relative h-full">
+      <div className="flex-grow relative h-full bg-slate-50 dark:bg-slate-950">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -346,11 +396,11 @@ export default function ArchitectureExplorer({ repoName }) {
           maxZoom={2}
           nodesDraggable={false}
         >
-          <Background color="#f3f4f6" gap={20} size={1} />
+          <Background color="#94a3b8" gap={20} size={1} />
           <Controls />
           <MiniMap 
-            nodeColor={(n) => n.id === selectedNodeId ? '#3b82f6' : '#e5e7eb'}
-            maskColor="rgba(240, 240, 240, 0.6)" 
+            nodeColor={(n) => n.id === selectedNodeId ? '#3b82f6' : '#64748b'}
+            maskColor="rgba(15, 23, 42, 0.6)" 
           />
         </ReactFlow>
       </div>
