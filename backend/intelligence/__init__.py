@@ -8,8 +8,13 @@ built via an extensible analysis pipeline.
 from .repository_model import RepositoryModel
 from .pipeline import AnalysisPipeline
 from .query_layer import QueryLayer
-from .builder import RepositoryBuilder
-from .relationships import RelationshipBuilder
+
+try:
+    from .builder import RepositoryBuilder
+    from .relationships import RelationshipBuilder
+except ImportError:
+    RepositoryBuilder = None
+    RelationshipBuilder = None
 
 __all__ = [
     "RepositoryModel",

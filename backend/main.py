@@ -35,11 +35,27 @@ def cleanup_tmp_dirs():
             except Exception:
                 pass
 
+def drop_legacy_fk_constraints(bind_engine):
+    try:
+        from sqlalchemy import text
+        with bind_engine.connect() as conn:
+            conn.execute(text("ALTER TABLE relationships DROP CONSTRAINT IF EXISTS relationships_from_symbol_id_fkey;"))
+            conn.execute(text("ALTER TABLE relationships DROP CONSTRAINT IF EXISTS relationships_to_symbol_id_fkey;"))
+            conn.execute(text("ALTER TABLE routes DROP CONSTRAINT IF EXISTS routes_symbol_id_fkey;"))
+            conn.execute(text("ALTER TABLE routes DROP CONSTRAINT IF EXISTS routes_handler_symbol_id_fkey;"))
+            conn.execute(text("ALTER TABLE database_objects DROP CONSTRAINT IF EXISTS database_objects_symbol_id_fkey;"))
+            conn.execute(text("ALTER TABLE capability_members DROP CONSTRAINT IF EXISTS capability_members_symbol_id_fkey;"))
+            conn.execute(text("ALTER TABLE evidence DROP CONSTRAINT IF EXISTS evidence_symbol_id_fkey;"))
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"Note on legacy FK constraint drop: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up application...")
     Base.metadata.create_all(bind=engine)
+    drop_legacy_fk_constraints(engine)
     
     # Wire the running event loop into TaskManager so background
     # threads can safely push SSE notifications via call_soon_threadsafe

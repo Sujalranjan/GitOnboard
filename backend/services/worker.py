@@ -171,7 +171,8 @@ class AnalysisWorker(WorkerInterface):
                     return {
                         "core_model": json_str.encode("utf-8"),
                         "metrics": metrics_data,
-                        "enriched_metadata": enriched_metadata
+                        "enriched_metadata": enriched_metadata,
+                        "rim_model": model
                     }
 
                 logger.info(f"Analyzing {repo_name}...")
@@ -183,8 +184,16 @@ class AnalysisWorker(WorkerInterface):
                 job.status = "Saving"
                 db.commit()
 
-                # 3. Save artifacts
-                logger.info("Saving artifacts...")
+                # 3. Save artifacts & canonical Layer 4 Fact Store
+                logger.info("Saving artifacts and canonical Fact Store tables...")
+                rim_model = results.pop("rim_model", None)
+                if rim_model:
+                    try:
+                        from backend.intelligence.store.fact_store import save_rim_to_fact_store
+                        save_rim_to_fact_store(db, analysis.id, rim_model)
+                    except Exception as e:
+                        db.rollback()
+                        logger.error(f"Error persisting facts to Fact Store: {e}")
                 
                 for art_type, data in results.items():
                     if isinstance(data, bytes):
