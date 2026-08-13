@@ -89,23 +89,34 @@ class FrameworkDetector:
         pyproject_file = target / "pyproject.toml"
         if pyproject_file.exists():
             try:
-                import tomllib
                 content = pyproject_file.read_text(encoding="utf-8")
-                parsed = tomllib.loads(content)
-                
-                # Check [project.dependencies]
-                deps = parsed.get("project", {}).get("dependencies", [])
-                
-                # Check [tool.poetry.dependencies]
-                poetry_deps = parsed.get("tool", {}).get("poetry", {}).get("dependencies", {})
-                
-                all_deps = list(deps) + list(poetry_deps.keys())
+                all_deps = []
+                try:
+                    import tomllib
+                    parsed = tomllib.loads(content)
+                    
+                    top_deps = parsed.get("dependencies", [])
+                    project_deps = parsed.get("project", {}).get("dependencies", [])
+                    poetry_deps = parsed.get("tool", {}).get("poetry", {}).get("dependencies", {})
+                    
+                    for d in [top_deps, project_deps, poetry_deps]:
+                        if isinstance(d, list):
+                            all_deps.extend(d)
+                        elif isinstance(d, dict):
+                            all_deps.extend(d.keys())
+                except Exception:
+                    pass
                 
                 for dep in all_deps:
-                    dep = dep.lower()
-                    if dep.startswith("fastapi"): frameworks.add("FastAPI")
-                    if dep.startswith("flask"): frameworks.add("Flask")
-                    if dep.startswith("django"): frameworks.add("Django")
+                    dep = str(dep).lower()
+                    if "fastapi" in dep: frameworks.add("FastAPI")
+                    if "flask" in dep: frameworks.add("Flask")
+                    if "django" in dep: frameworks.add("Django")
+                    
+                content_lower = content.lower()
+                if "fastapi" in content_lower: frameworks.add("FastAPI")
+                if "flask" in content_lower: frameworks.add("Flask")
+                if "django" in content_lower: frameworks.add("Django")
             except Exception:
                 pass
                 
