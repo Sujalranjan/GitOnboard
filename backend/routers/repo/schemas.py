@@ -13,3 +13,8 @@ class GraphQueryRequest(BaseModel):
 class ExplainTraceRequest(BaseModel):
     feature_query: str
     trace_data: dict
+
+class TraceRequest(BaseModel):
+    feature_query: str = None
+    q: str = None
+    query: str = None
