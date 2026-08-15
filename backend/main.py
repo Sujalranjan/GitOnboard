@@ -103,12 +103,15 @@ app.add_middleware(
 )
 
 from backend.routers import auth_router, health_router
+from backend.routers.implementation import router as implementation_router
 from backend.routers.repo import repo_router, import_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
 app.include_router(import_router, prefix="/api/import")
 app.include_router(repo_router, prefix="/api/repos")
+
+app.include_router(implementation_router)
 
 @app.get("/")
 def read_root():
