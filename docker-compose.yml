@@ -32,6 +32,8 @@ services:
       dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Mount the data folder to preserve JSON files
       - ./data:/app/data
@@ -44,6 +46,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+psycopg://myuser:mypassword@postgres:5432/repository_intelligence
       - LOCAL_DATABASE_URL=postgresql+psycopg://myuser:mypassword@postgres:5432/repository_intelligence
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       # Other variables will be loaded from .env if present
     depends_on:
       postgres:
