@@ -11,7 +11,8 @@ Each step explicitly records:
 from __future__ import annotations
 import logging
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from typing import Any
 
 from backend.ai.service import LLMService
 from backend.ai.schemas import LLMRequest, Message, MessageRole
@@ -75,7 +76,26 @@ class PlanStep(BaseModel):
     acceptance_criteria: List[str] = Field(default_factory=list)
     evidence_ids: List[str] = Field(default_factory=list)
     expected_changes: Optional[str] = None
-    dependencies: List[int] = Field(default_factory=list)
+    dependencies: List[Any] = Field(default_factory=list)
+
+    @field_validator("dependencies", mode="before")
+    @classmethod
+    def parse_dependencies(cls, v):
+        if not v:
+            return []
+        cleaned = []
+        for item in v:
+            if isinstance(item, int):
+                cleaned.append(item)
+            elif isinstance(item, str):
+                # If it's digits like "1", convert to int; otherwise extract first number or store as 0
+                import re
+                nums = re.findall(r'\d+', item)
+                if nums:
+                    cleaned.append(int(nums[0]))
+                else:
+                    pass  # ignore file path strings put in dependencies
+        return cleaned
 
 
 class PlanOutput(BaseModel):
