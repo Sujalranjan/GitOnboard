@@ -30,9 +30,7 @@ const navItems = [
   { id: 'search', label: 'Search', icon: Search, path: '/search' },
   { id: 'symbols', label: 'Symbols', icon: Code2, path: '/symbols' },
   { id: 'summary', label: 'AI Summary', icon: Sparkles, path: '/summary' },
-  { id: 'health', label: 'Health', icon: Activity, path: '/health' },
   { id: 'metrics', label: 'Metrics', icon: BarChart3, path: '/metrics' },
-  { id: 'analysis', label: 'Analysis', icon: Microscope, path: '/analysis' },
 ];
 
 export function Sidebar({ repoName }) {

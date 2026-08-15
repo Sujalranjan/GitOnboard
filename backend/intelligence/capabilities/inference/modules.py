@@ -26,13 +26,7 @@ def infer_keywords_from_entity(entity: Entity, model: RepositoryModel) -> List[s
                 p = re.sub(r'[{}]', '', p)
                 keywords.add(p)
                 
-    # 3. Pattern Evidence
-    # Find if this entity is part of any pattern
-    for pattern in model.patterns.values():
-        if entity.id in pattern.participants:
-            keywords.add(pattern.type.value.lower())
-            
-    # 4. Structural Context
+    # 3. Structural Context
     if entity.location:
         path = entity.location.repository_path.lower()
         folders = path.split('/')

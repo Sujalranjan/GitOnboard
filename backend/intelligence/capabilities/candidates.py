@@ -12,13 +12,7 @@ class CandidateSelector:
     def select(self) -> List[str]:
         candidates = []
         
-        # 1. Select Pattern roots (e.g. the Route in an MVC pattern)
-        for pattern in self.model.patterns.values():
-            if pattern.participants:
-                # We can just pick the first participant, or just add all of them
-                candidates.extend(pattern.participants)
-                
-        # 2. Select high-level entities that might not be in patterns
+        # Select high-level entities
         for entity in self.model.entities.values():
             if entity.type in [EntityType.ROUTE, EntityType.CLASS, EntityType.FUNCTION]:
                 # Heuristic: skip short helper functions or DTOs

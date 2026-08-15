@@ -10,9 +10,7 @@ import Search from '@/components/Search';
 import SemanticSearch from '@/components/SemanticSearch';
 import RepositorySummary from '@/components/RepositorySummary';
 import SymbolExplorer from '@/components/SymbolExplorer';
-import RepositoryHealth from '@/components/RepositoryHealth';
 import RepositoryMetrics from '@/components/RepositoryMetrics';
-import RepositoryAnalysis from '@/components/RepositoryAnalysis';
 
 export default function TabPage() {
   const params = useParams();
@@ -79,22 +77,10 @@ export default function TabPage() {
             </div>
           </div>
         );
-      case 'health':
-        return (
-          <div className="p-6 h-full overflow-y-auto">
-            <RepositoryHealth repoName={repoName} />
-          </div>
-        );
       case 'metrics':
         return (
           <div className="p-6 h-full overflow-y-auto">
             <RepositoryMetrics repoName={repoName} />
-          </div>
-        );
-      case 'analysis':
-        return (
-          <div className="p-6 h-full overflow-y-auto">
-            <RepositoryAnalysis repoName={repoName} />
           </div>
         );
       default:

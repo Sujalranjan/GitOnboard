@@ -7,7 +7,7 @@ import { Button } from '@/components/common/Button';
 import { Badge } from '@/components/common/Badge';
 import { GitMerge, Search, Loader2, Sparkles, ArrowDown } from 'lucide-react';
 
-export default function FeatureTracingPage(props: any) {
+function FeatureTracingContent(props: any) {
   const [repoName, setRepoName] = useState<string>('');
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
@@ -287,5 +287,14 @@ export default function FeatureTracingPage(props: any) {
         </div>
       )}
     </div>
+  );
+}
+
+
+export default function FeatureTracingPage(props: any) {
+  return (
+    <React.Suspense fallback={<div className="p-6 text-slate-500">Loading trace...</div>}>
+      <FeatureTracingContent {...props} />
+    </React.Suspense>
   );
 }

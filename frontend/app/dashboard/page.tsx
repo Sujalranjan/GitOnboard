@@ -10,7 +10,7 @@ import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { Plus, FolderGit2 } from 'lucide-react';
 
-export default function Dashboard() {
+function DashboardContent() {
   const [repos, setRepos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -322,5 +322,13 @@ export default function Dashboard() {
       </Modal>
     </div>
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <React.Suspense fallback={<div className="p-6 text-slate-500">Loading dashboard...</div>}>
+      <DashboardContent />
+    </React.Suspense>
   );
 }
