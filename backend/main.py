@@ -1,3 +1,4 @@
+import backend.models  # Register all models with Base.metadata
 from fastapi import FastAPI, HTTPException, APIRouter, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
