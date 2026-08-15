@@ -117,7 +117,7 @@ class StepPlanner:
                 ),
             ],
             temperature=0.15,
-            max_tokens=3000,
+            max_tokens=2048,
         )
 
         import json as _json

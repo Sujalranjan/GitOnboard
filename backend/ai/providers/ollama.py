@@ -20,7 +20,7 @@ class OllamaProvider:
 
     provider_name = "ollama"
 
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = DEFAULT_MODEL, timeout: float = 120.0):
+    def __init__(self, base_url: str = "http://localhost:11434", model: str = DEFAULT_MODEL, timeout: float = 300.0):
         self.base_url = base_url.rstrip("/")
         self.default_model = model
         self.timeout = timeout
