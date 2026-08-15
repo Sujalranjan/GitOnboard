@@ -54,7 +54,7 @@ class PlanStepResponse(BaseModel):
     acceptance_criteria: List[str]
     evidence_ids: List[str]
     expected_changes: Optional[str]
-    dependencies: List[int]
+    dependencies: List[Any]
     status: str
 
 
