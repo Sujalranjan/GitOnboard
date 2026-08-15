@@ -2,54 +2,25 @@
 trigger: always_on
 ---
 
-# Code Quality
+# Code Quality & Maintainability
 
-Write production-quality code.
+Write clean, robust, and production-quality code.
 
-## Readability
+## Readability & Naming
+- Favor clear, descriptive variable and function names over brevity.
+- Keep functions cohesive and focused on a single responsibility.
+- Avoid deep conditional nesting (>3 levels). Use guard clauses and early returns.
+- Add type annotations to all Python function signatures (`typing` / `pydantic`).
+- Maintain TypeScript typing across all frontend code (`frontend/types/`).
 
-Prefer readability over reducing lines of code.
+## Anti-Duplication Rule
+- Never create parallel or duplicate implementations of an existing subsystem.
+- Do NOT create `_v2`, `_new`, `_fixed`, or `_old` variants of files.
+- Search the repository before creating a new service, utility, parser, graph abstraction, API endpoint, or data model.
+- If an existing module needs enhancement, modify the existing module in place while preserving backward compatibility.
 
-Use descriptive names.
-
-Avoid deeply nested logic.
-
-Keep functions focused.
-
-Keep modules cohesive.
-
-## Duplication
-
-Do not duplicate code.
-
-Do not duplicate implementations.
-
-Modify existing code whenever possible.
-
-Never create:
-
-parser_v2.py
-
-parser_new.py
-
-parser_fixed.py
-
-graph2.py
-
-old_parser.py
-
-There should be exactly one active implementation.
-
-## Comments
-
-Write comments only when the intent is not obvious.
-
-Do not comment obvious code.
-
-## Module Size
-
-Keep modules reasonably sized.
-
-Split modules only when they become difficult to understand.
-
-Do not split modules prematurely.
+## Error Handling & Logging
+- Use standard Python `logging` (`logger = logging.getLogger(__name__)`).
+- Never use bare `except:` blocks; catch specific exceptions and log tracebacks where appropriate.
+- FastAPI routes must raise standard `HTTPException` with meaningful error details and status codes.
+- Do NOT leave debug `print()` statements in production code.

@@ -1,49 +1,38 @@
 # Extending the Analysis Framework
 
-The Phase 2 Analysis Framework uses a plugin-based architecture designed around the Open/Closed Principle. This means you can add new analyzers without modifying the existing runner, registry, or other analyzers.
+The Repository Intelligence Platform is designed around modular, extensible analysis providers and pipeline stages.
 
-## Creating a New Analyzer
+---
 
-To create a new analyzer:
+## 1. Modular Analyzers (`backend/intelligence/engine/analyzers/`)
 
-1. Drop a new Python file into the `src/analysis/plugins/` directory (e.g., `complexity.py`).
-2. Implement a concrete subclass of the `Analyzer` abstract base class.
-3. The plugin will be automatically discovered and registered by the `AnalyzerRegistry` using its `discover()` method (or it can be manually registered).
+Analyzers inspect the extracted Concrete Syntax Tree (CST/AST) and populate entities and relationships into the Repository Intelligence Model (RIM).
 
-### Rules for Analyzers
-- Must inherit from `analysis.interfaces.Analyzer`.
-- Must implement the `@property def name(self) -> str` to return a unique identifier.
-- Must implement `def analyze(self, repository: 'Repository') -> AnalysisResult`.
-- **CRITICAL:** Analyzers must ONLY read from the Repository Intelligence Model (RIM). They must not parse source files directly from the filesystem.
+### Adding a New AST Analyzer
+1. Create a new analyzer module in `backend/intelligence/engine/analyzers/`.
+2. Inherit from the base analyzer protocol/class.
+3. Register the analyzer in `get_default_registry()` (`backend/intelligence/engine/analyzers/__init__.py`).
 
-### Example Analyzer
+---
 
-```python
-from analysis.interfaces import Analyzer
-from analysis.models import AnalysisResult, Finding, Severity
+## 2. Modular Analysis Stages (`backend/intelligence/stages/`)
 
-class MyCustomAnalyzer(Analyzer):
-    @property
-    def name(self) -> str:
-        return "my_custom_analyzer"
+Stages run after initial RIM graph construction to compute higher-level metrics or metadata:
+- `RepositoryMetadataStage` (`backend/intelligence/stages/metadata_stage.py`): Extracts frameworks, entrypoints, and architectural layers.
+- `MetricsStage` (`backend/intelligence/stages/metrics_stage.py`): Computes lines of code, symbol counts, and complexity metrics.
 
-    def analyze(self, repository) -> AnalysisResult:
-        findings = []
-        
-        # Only read from the RIM `repository` object!
-        for file in repository.files:
-            if getattr(file, "lines", 0) > 1000:
-                findings.append(
-                    Finding(
-                        title="Large File",
-                        description=f"File {file.path} is too large.",
-                        severity=Severity.WARNING,
-                        file_path=file.path
-                    )
-                )
+### Adding a New Analysis Stage
+1. Create a stage class implementing the `AnalysisStage` protocol (`run(model: RepositoryModel) -> None`).
+2. Add the stage to `AnalysisPipeline` in `backend/intelligence/pipeline.py` or `AnalysisWorker` in `backend/services/worker.py`.
 
-        return AnalysisResult(
-            analyzer_name=self.name,
-            findings=findings
-        )
-```
+---
+
+## 3. Capability Detectors (`backend/intelligence/capabilities/detectors/`)
+
+Layer 6 capability detectors match multi-fact patterns across routes, handlers, services, and models to classify architectural capabilities.
+
+### Adding a New Capability Detector
+1. Create a detector class in `backend/intelligence/capabilities/detectors/` (e.g. `WebSocketDetector`, `PaymentDetector`).
+2. Implement detection rules scanning RIM entities and relationships.
+3. Register the detector in `CapabilityBuilderEngine` (`backend/intelligence/capabilities/engine.py`).
+4. Add automated positive and negative test cases in `backend/tests/test_capabilities.py`.

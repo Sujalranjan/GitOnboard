@@ -2,48 +2,24 @@
 trigger: always_on
 ---
 
-# General Engineering Rules
+# General AI Engineering Rules
 
-These rules apply to every task.
+These rules apply to every task executed by AI agents in this repository.
 
 ## Philosophy
+- Build only the requested feature or fix.
+- Keep implementations simple, readable, and maintainable.
+- Avoid overengineering, speculative architecture, and premature optimization.
+- Every modification must leave the repository in a working, testable state.
+- Treat active executable code and automated tests as the primary source of truth.
 
-- Build only the requested feature.
-- Keep the implementation simple and maintainable.
-- Avoid overengineering.
-- Avoid premature optimization.
-- Do not implement future features.
-- Every phase should leave the project in a working state.
+## Scope & Code Changes
+- Modify ONLY files directly related to the current task.
+- Do NOT refactor unrelated code or fix tangential formatting issues.
+- Do NOT rename files or reorganize folder structures unless explicitly instructed.
+- Do NOT introduce duplicate implementations of existing functionality (e.g., `parser_v2.py`, `graph_new.py`).
 
-## Code Changes
-
-- Modify only files related to the current task.
-- Do not refactor unrelated code.
-- Do not rename files unless requested.
-- Do not reorganize the project structure.
-
-## Simplicity
-
-Prefer:
-
-- explicit code
-- straightforward logic
-- readable implementations
-
-Avoid:
-
-- clever solutions
-- unnecessary abstractions
-- speculative architecture
-
-## YAGNI
-
-Every abstraction must solve an existing problem.
-
-Do not introduce abstractions for anticipated future requirements.
-
-## Existing Code
-
-Treat the existing implementation as the source of truth.
-
-Never create a second implementation of an existing feature.
+## Investigation Before Action
+- Search the codebase (`grep_search`, `view_file`) to identify existing patterns, helpers, and models before creating new ones.
+- If existing functionality satisfies the requirement, reuse it.
+- If requirements are ambiguous, inspect active tests and database models or ask for clarification rather than guessing.

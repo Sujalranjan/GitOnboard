@@ -1,62 +1,85 @@
 # Repository Intelligence Platform
 
-Repository Intelligence Platform is a FastAPI + React MVP for importing GitHub repositories and exploring their structure, dependencies, call relationships, semantic search, and generated summaries.
+Repository Intelligence Platform is an advanced code analysis and intelligence platform. It ingests GitHub repositories, builds deterministic abstract syntax trees (CST/AST) and in-memory knowledge graphs (Repository Intelligence Model), detects multi-fact architectural capabilities, persists relational facts into a canonical PostgreSQL Fact Store, and provides semantic search, execution flow tracing, and interactive Next.js visualization.
 
-## Current Progress
+---
 
-- FastAPI backend is wired up with repository import, listing, deletion, scan, parse, dependency graph, and call graph endpoints.
-- React frontend has the main dashboard, import flow, and repository detail views.
-- Repository detail view exposes file explorer, dependency graph, architecture, call graph, search, semantic search, symbols, and summary tabs.
-- Repository metadata, task status, and analysis artifacts are now stored in **PostgreSQL**.
-- Imported source code is cloned into `data/repos/`.
-- Background tasks (like indexing and LLM summaries) are managed via an in-memory queue, and real-time updates are pushed to the frontend using **Server-Sent Events (SSE)**.
-- Local Ollama-backed summary generation is connected through `backend/llm_service.py` to provide deterministic, context-rich summaries.
+## Component Status
+
+```text
+ACTIVE (Implemented & Tested)
+├── Tree-sitter Multi-Language CST/AST Engine (Python, JS, TS, Java, C, C++, Go, Ruby)
+├── Repository Intelligence Model (RIM) in-memory knowledge graph
+├── Layer 4 Relational Fact Store (PostgreSQL with 8 canonical tables)
+├── Layer 6 Deterministic Capability Detection Engine (Auth, CRUD, Background, File Upload)
+├── Feature Discovery & Execution Flow Reconstruction
+├── ChromaDB Vector Index for Semantic Code Search
+├── FastAPI Asynchronous Queue Worker & SSE Task Streaming
+├── PostgreSQL Database + pgAdmin 4 Containerized Visualization
+└── Next.js 16 App Router UI (React 19, Tailwind CSS 4, ReactFlow graph canvas)
+
+PLANNED (Future Pipeline Stages)
+├── Autonomous AI Implementation Engine (Worktrees & Patch Generation)
+├── Independent Verification Engine (Isolated Test Execution & Linting)
+├── Self-Repair Loop (Automated Test Diagnostics & Fix Iteration)
+└── Pull Request Generation & Git Export
+
+LEGACY (Archived Historical Material)
+└── archive/legacy/ (Deprecated prototypes — read-only)
+```
+
+---
 
 ## Tech Stack
 
-- Python 3.10+
-- FastAPI (with SSE for real-time updates)
-- PostgreSQL & SQLAlchemy
-- ChromaDB
-- React 19
-- Vite
-- React Router
-- Tailwind CSS
+| Layer | Technology |
+|---|---|
+| **Backend Framework** | FastAPI (Python 3.12+) with SSE streaming (`sse-starlette`) |
+| **Package Management** | `uv` (`pyproject.toml`, `uv.lock`) |
+| **Relational Database** | PostgreSQL 15 (SQLAlchemy 2.0 ORM with `psycopg`) |
+| **Database UI** | pgAdmin 4 (port `5050`) |
+| **Parsing & AST** | Tree-sitter multi-language grammar providers |
+| **Vector Store** | ChromaDB (`chromadb`) with persistent volume cache |
+| **LLM Integration** | Local Ollama (`http://localhost:11434`, `qwen2.5-coder:7b`) |
+| **Frontend Framework** | Next.js 16 (App Router) + React 19 + TypeScript |
+| **Styling & Graphs** | Tailwind CSS 4, ReactFlow, Dagre, Lucide React, Framer Motion |
 
-## Project Structure
+---
 
-- `backend/`: FastAPI app, database models, background task queue, config, logging, and LLM integration.
-- `frontend/`: React UI for browsing repositories and generated analysis.
-- `data/`: Extracted repositories.
-- `docs/`: Supporting documentation, including the architecture snapshot.
+## Quick Start (Local Development)
 
-## Run Locally
+### 1. Prerequisites
+- Docker & Docker Compose
+- Node.js 18+ & npm
+- Python 3.10+ with `uv`
+- Ollama running locally (optional for AI summaries)
 
-The backend and database are fully containerized using Docker Compose.
-
-**Backend & Database:**
-
+### 2. Backend & Database (Docker Compose)
 ```bash
 docker compose up --build -d
 ```
+- FastAPI API: `http://localhost:8000` (Docs: `http://localhost:8000/docs`)
+- PostgreSQL: `localhost:5432` (`repository_intelligence`)
+- pgAdmin 4: `http://localhost:5050` (`admin@example.com` / `adminpassword`)
 
-**Frontend:**
-
+### 3. Frontend (Next.js 16)
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+- Frontend UI: `http://localhost:3000`
 
-## Documentation
+---
 
-- [Project Setup](setup.md)
-- [Architecture and Progress](architecture.md)
+## Documentation Index
 
-## Contributing
-
-If you plan to contribute to this repository, please review [CONTRIBUTING.md](CONTRIBUTING.md) for details on setting up Git hooks to prevent stale pull requests. You should also configure Git to rebase on pull:
-
-```bash
-git config pull.rebase true
-```
+- [Architecture & Pipeline](ARCHITECTURE.md)
+- [Development & Environment Guide](DEVELOPMENT.md)
+- [API Contract Specification](API.md)
+- [Database Schema & Data Model](DATA_MODEL.md)
+- [Testing & Integrity Guide](TESTING.md)
+- [Architectural Decisions (ADRs)](DECISIONS.md)
+- [AI Agent Master Guide](AGENTS.md)
+- [Contribution Guidelines](CONTRIBUTING.md)
+- [Domain Contracts](docs/contracts/)

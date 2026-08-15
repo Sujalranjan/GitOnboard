@@ -2,32 +2,17 @@
 trigger: always_on
 ---
 
-# Never Do These Things
+# Prohibited Actions (Things You Must Never Do)
 
-Never place backend code outside backend/.
+Every AI agent is strictly forbidden from doing the following:
 
-Never place frontend code outside frontend/.
-
-Never place tests outside tests/.
-
-Never place documentation outside docs/ (except README.md).
-
-Never use pip. Always use uv.
-
-Never create duplicate implementations.
-
-Never create placeholder code.
-
-Never create parser_v2.py, graph_new.py, auth_old.py or similar files.
-
-Never rewrite unrelated code.
-
-Never perform large refactors while implementing a feature.
-
-Never introduce new architectural patterns without a clear need.
-
-Never create unnecessary files, folders, or abstractions.
-
-Never leave the project in a partially implemented or broken state.
-
-Always keep the application runnable after completing a task.
+1. **NEVER place backend code outside `backend/`** or frontend code outside `frontend/`.
+2. **NEVER connect the frontend directly to the database** or filesystem. Frontend must consume FastAPI endpoints.
+3. **NEVER invent new API endpoints or database columns** without verifying against the existing schemas and contracts.
+4. **NEVER create duplicate implementations** or versioned files (`parser_v2.py`, `graph_new.py`, `model_old.py`).
+5. **NEVER use `pip install` or create `requirements.txt`** — always use `uv`.
+6. **NEVER import code from `archive/legacy/`** into active runtime modules.
+7. **NEVER resurrect or recreate `Remaining Plan.md`** or obsolete aspirational roadmaps.
+8. **NEVER leave placeholder code** (`pass`, `# TODO: implement later`) in committed features.
+9. **NEVER perform large, unrequested refactors** while working on a specific task.
+10. **NEVER leave the application in a broken or non-runnable state**.

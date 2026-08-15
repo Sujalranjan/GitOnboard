@@ -1,21 +1,37 @@
-# Contributing
+# Contributing & Engineering Governance
 
-## Git Hooks
+This guide outlines standards, development workflows, and git hooks for contributors to the Repository Intelligence Platform.
 
-To prevent pushing stale code that will fail the CI `Prevent Stale PRs` workflow, you should enable the local Git hooks provided in this repository.
+---
 
-Run the following command once in your local repository checkout:
+## 1. Git Hooks & Preventing Stale PRs
+
+To prevent pushing stale branches that fail CI, enable the repository git hooks:
 
 ```bash
 git config core.hooksPath .githooks
+git config pull.rebase true
 ```
 
-### What this does:
-When you attempt to `git push`, the `pre-push` hook will automatically run. It fetches the latest changes from `origin` (and `upstream` if configured) and checks if your current branch is missing any commits from the target branch. If your branch is behind, it will block the push and instruct you to pull or rebase your branch, preventing a stale PR from being opened or updated.
+The `pre-push` hook automatically fetches from origin and verifies that your local branch contains the latest upstream commits before pushing.
 
-## Architecture Guidelines
+---
 
-If you are adding new backend features, please keep the following in mind:
-- **Background Tasks**: Long-running operations should be offloaded to `BackgroundTasks` or the `AnalysisWorker` queue.
-- **Real-Time Updates**: If your background task has a user-facing loading state, track its status in the `TaskStatus` database model and use `task_manager.notify(...)` to instantly push the update via SSE to the frontend.
-- **Database**: All persistent state should live in the PostgreSQL database using SQLAlchemy models, not in local JSON files.
+## 2. Core Engineering Principles
+
+1. **Follow the AI Master Guide**: Review [AGENTS.md](AGENTS.md) and [.agents/rules/](.agents/rules/) before making architectural changes.
+2. **Deterministic First**: Always prefer Tree-sitter AST analysis, symbol graphs, and rule-based detection over non-deterministic LLM prompting.
+3. **Layer 4 Fact Store Persistence**: All structural facts must be persisted to PostgreSQL Fact Store tables (`files`, `symbols`, `relationships`, `routes`, `database_objects`, `capabilities`, `capability_members`, `evidence`).
+4. **Real-Time Task Updates**: Long-running background operations must publish progress through `task_manager.notify(...)` to push real-time status to the frontend via SSE.
+5. **No Duplicate Implementations**: Never introduce parallel versions (`_v2`, `_new`, `_old`) of any module. Modify existing code in place.
+6. **Cross-Database Compatibility**: Ensure all SQLAlchemy models use `JSONType = JSON().with_variant(JSONB, "postgresql")` to keep SQLite unit tests operational.
+
+---
+
+## 3. Pull Request Checklist
+
+Before submitting a PR:
+- [ ] All automated tests pass: `pytest backend/tests/ tests/`
+- [ ] Code is formatted and linted (`tool.ruff` in pyproject.toml / `npm run lint` in frontend).
+- [ ] No temporary files, debug `print()` statements, or dead imports are included.
+- [ ] Relevant documentation in `docs/contracts/` or `API.md` is updated if contracts changed.

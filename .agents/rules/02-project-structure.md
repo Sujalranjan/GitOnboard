@@ -2,57 +2,27 @@
 trigger: always_on
 ---
 
-# Repository Structure
+# Project Structure & Ownership
 
-The repository structure is fixed.
+The repository structure is strictly organized by responsibility:
 
-project-root/
+```text
+/
+├── backend/          # FastAPI application, intelligence engine, models, database, and workers
+├── frontend/         # Next.js 16 App Router UI, React 19 components, ReactFlow graph canvas
+├── tests/            # End-to-end integration and API contract test suites
+├── docs/             # Technical documentation and domain contracts (docs/contracts/*)
+├── reports/          # Static analysis, wiring audits, and architecture health reports
+├── data/             # Local cloned repositories (data/repos/) and cache data
+├── archive/legacy/   # Deprecated, orphaned code (READ-ONLY / NOT ACTIVE)
+├── .agents/          # AI instruction guide and behavioral rules
+└── pyproject.toml    # Python project configuration and dependency definitions (uv)
+```
 
-backend/
-frontend/
-tests/
-docs/
-scripts/
-data/
-
-pyproject.toml
-uv.lock
-README.md
-.gitignore
-.env.example
-
-## Rules
-
-Never create source code in the root directory.
-
-Never create documentation in the root directory.
-
-Never create tests in the root directory.
-
-Only configuration files belong in the root.
-
-## Backend
-
-All backend code belongs inside backend/.
-
-## Frontend
-
-All frontend code belongs inside frontend/.
-
-## Documentation
-
-All documentation belongs inside docs/.
-
-README.md is the only markdown file allowed in the project root.
-
-## Tests
-
-All tests belong inside tests/.
-
-Never place tests beside implementation files.
-
-## Scripts
-
-Automation scripts belong inside scripts/.
-
-Never create new top-level folders without approval.
+## Directory Rules
+- **Backend Code**: All backend services, routers, models, and intelligence modules belong inside `backend/`.
+- **Frontend Code**: All UI presentation, Next.js routes, components, and client hooks belong inside `frontend/`.
+- **Tests**: Automated tests belong inside `tests/` or `backend/tests/`. Never place tests beside runtime implementation files.
+- **Root Documentation**: Canonical engineering documentation files (`README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`, `AGENTS.md`, `DEVELOPMENT.md`, `API.md`, `DATA_MODEL.md`, `TESTING.md`, `DECISIONS.md`) reside in the root directory.
+- **Domain Contracts**: Deep architectural contracts and pipeline stage specifications belong in `docs/contracts/`.
+- **No Unapproved Directories**: Never create new top-level directories without explicit instruction.

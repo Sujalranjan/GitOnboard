@@ -2,42 +2,27 @@
 trigger: always_on
 ---
 
-# Before Coding
+# AI Development Workflow
 
-Always:
+AI agents must follow a structured procedure for every code modification.
 
-1. Restate the goal.
+## 1. Pre-Modification Inspection
+- Review relevant domain rules and contracts (`frontend/AGENTS.md`, `backend/AGENTS.md`, `docs/contracts/*`).
+- Locate existing functions and types using search tools.
+- Verify active database models and schemas before proposing changes.
 
-2. List every file to be created or modified.
+## 2. Scoped Modification
+- Apply minimal, localized changes.
+- Ensure all imports are resolved and no circular dependencies are introduced.
+- Preserve backward compatibility with existing API routes.
 
-3. Explain why each file is needed.
-
-4. Explain the implementation approach.
-
-5. Confirm no unrelated files will change.
-
-# During Coding
-
-Keep changes localized.
-
-Do not modify unrelated files.
-
-Do not reorganize the project.
-
-Do not introduce unnecessary abstractions.
-
-# After Coding
-
-Summarize:
-
-Files created
-
-Files modified
-
-Implemented functionality
-
-Limitations
-
-How to verify the feature
-
-Recommend the next phase without implementing it.
+## 3. Validation & Reporting
+- Execute relevant test suites:
+  - Backend/Fact Store: `pytest backend/tests/ -v`
+  - Integration/API: `pytest tests/ -v`
+- Inspect `git diff` to ensure no unintended modifications or leftover temporary files remain.
+- Report results clearly:
+  - Files modified/created.
+  - Implemented functionality.
+  - Test verification results.
+  - Known limitations or follow-up recommendations.

@@ -1,65 +1,116 @@
-# Architecture and Progress
+# System Architecture & Technical Specifications
 
-## Purpose
+This document describes the **active implementation architecture** of the Repository Intelligence Platform.
 
-Repository Intelligence Platform is a repository analysis MVP. It imports a GitHub repository, stores it locally, scans source files, and presents structural and semantic views through a web UI.
+---
 
-## High-Level Architecture
+## 1. High-Level Architecture
 
 ```mermaid
-flowchart LR
-  U[User] --> F[React Frontend]
-  F -- REST API --> A[FastAPI Backend]
-  A -- SSE stream --> F
-  A <--> P[(PostgreSQL DB)]
-  A --> R[(data/repos/<repo>)]
-  A --> O[Local Ollama LLM]
-  A --> C[(Chroma / semantic index)]
-  R --> S[Scan / Parse / Graph Builders]
+flowchart TD
+    User([User / Browser])
+    
+    subgraph Frontend ["Frontend (Next.js 16 App Router)"]
+        UI[Dashboard / Repo Workspace]
+        RF[ReactFlow Graph Canvas]
+        SSE_Client[useTaskStatus SSE Hook]
+    end
+    
+    subgraph Backend ["Backend (FastAPI)"]
+        API[FastAPI Routers]
+        Queue[InMemoryQueue]
+        Worker[AnalysisWorker]
+        TM[TaskManager Pub/Sub]
+        LLM[Ollama Service]
+    end
+    
+    subgraph Intelligence ["Intelligence Engine (backend/intelligence/)"]
+        Scanner[RepositoryScanner]
+        TreeSitter[Tree-sitter Multi-Language Parser]
+        RIM[Repository Intelligence Model Graph]
+        CapEngine[Layer 6 Capability Detection]
+        FeatEngine[Feature Reconstruction Engine]
+    end
+    
+    subgraph Persistence ["Persistence Layer"]
+        PG[(PostgreSQL Database)]
+        FactStore[(Layer 4 Fact Store Tables)]
+        Chroma[(ChromaDB Vector Store)]
+    end
+    
+    User <--> UI
+    UI -- REST API --> API
+    SSE_Client <-- SSE Stream (`/api/repos/{repo}/tasks/stream`) -- TM
+    
+    API --> Queue
+    Queue --> Worker
+    Worker --> Scanner --> TreeSitter --> RIM --> CapEngine --> FeatEngine
+    Worker -- Persists Facts --> FactStore
+    Worker -- Emits Progress --> TM
+    Worker -- Embeds Chunks --> Chroma
+    
+    API -- Read Queries --> FactStore
+    API -- Summaries --> LLM
+    FactStore --> PG
 ```
 
-## Implemented Components
+---
 
-### Backend
+## 2. Ingestion & Analysis Pipeline Flow
 
-- `backend/main.py` hosts the FastAPI application and background worker queue.
-- Repository import validates GitHub URLs, clones repos into `data/repos/`, and records metadata in PostgreSQL.
-- Repository listing, artifact storage, and task tracking are backed by PostgreSQL and SQLAlchemy models.
-- Repository metadata is extracted deterministically in a modular pipeline (`RepositoryMetadataStage`) that captures frameworks, entrypoints, and architectural layers.
-- Python parsing extracts imports, functions, classes, and docstrings from individual files.
-- Dependency and call-graph endpoints derive relationships from the parsed Python source.
-- `backend/llm_service.py` sends deterministic repository metadata to a local Ollama instance for high-quality summary generation.
-- Real-time updates for long-running analysis tasks are pushed to the frontend instantly using an in-memory pub/sub `TaskManager` and Server-Sent Events (SSE).
+When a repository is imported via `POST /api/import` or reanalyzed via `POST /api/repos/{repo_name}/reanalyze`:
 
-### Frontend
+1. **Pre-flight & Validation**:
+   - `backend/services/github.py` validates repository existence, size, and rate limits via GitHub API.
+   - Analysis records (`Analysis`, `AnalysisJob`) are created in PostgreSQL with status `Queued`.
+2. **Download Phase**:
+   - `AnalysisWorker` (`backend/services/worker.py`) downloads the repository archive as a zipball and extracts it into `/tmp/repo-analysis/job_{id}_{repo}/`.
+3. **Scanning & Language Detection**:
+   - `RepositoryScanner` and `LanguageDetector` scan the file tree, mapping extensions and detecting dominant languages and frameworks.
+4. **Tree-sitter Parsing & Symbol Extraction**:
+   - Multi-language AST providers parse files into Concrete Syntax Trees (CST/AST), extracting classes, functions, methods, parameters, decorators, imports, routes, and database tables (`backend/intelligence/engine/`).
+5. **Repository Intelligence Model (RIM) Graph Construction**:
+   - Entities and Relationships (`CONTAINS`, `CALLS`, `IMPORTS`, `INHERITS`, `USES`, `EXPOSES`, `DECLARES`, `DEPENDS_ON`) are assembled into an in-memory directed graph (`backend/intelligence/rim/`).
+6. **Layer 6 Capability Detection Engine**:
+   - Multi-fact AST rule detectors (`AuthenticationDetector`, `CRUDDetector`, `BackgroundTaskDetector`, `FileUploadDetector`) match patterns across routes, handlers, and models to classify system capabilities.
+7. **Feature Reconstruction Engine**:
+   - Traces execution flows from entrypoint routes through services down to database tables, clustering related symbols into functional features (`backend/intelligence/features/`).
+8. **Layer 4 Fact Store Relational Persistence**:
+   - `save_rim_to_fact_store()` (`backend/intelligence/store/fact_store.py`) persists all entities, symbols, relationships, routes, database objects, capabilities, and evidence into PostgreSQL using analysis-scoped primary keys (`{analysis_id}:{entity_id}`).
+9. **Artifact Storage & Completion**:
+   - Serialized `core_model` (compressed JSON blob), `metrics`, and `enriched_metadata` are saved to `analysis_artifacts`.
+   - `AnalysisJob` and `Analysis` statuses are marked `Completed`.
 
-- `frontend/src/App.jsx` provides the top-level router and layout.
-- `Dashboard` lists imported repositories and supports deletion.
-- `ImportRepository` handles importing a new GitHub repository.
-- `RepositoryDetails` hosts the analysis workspace for a selected repository.
-- The repository detail screen includes file explorer, dependency graph, architecture, call graph, search, semantic search, symbol explorer, and summary tabs.
-- `useTaskStatus` React hook connects to the backend's SSE stream to provide zero-latency loading states without repetitive polling.
+---
 
-### Storage and State
+## 3. Component Classification (Active vs Planned vs Legacy)
 
-- PostgreSQL tracks `User`, `Repository`, `AnalysisJob`, `AnalysisArtifact`, and `TaskStatus`.
-- `data/repos/` stores cloned repository source files.
-- ChromaDB is used for the local semantic index.
+### Active Components
+- **Multi-language Tree-sitter Parser**: `backend/intelligence/engine/`
+- **RIM Graph Engine**: `backend/intelligence/rim/`
+- **Layer 4 Fact Store**: `backend/intelligence/store/fact_store.py`, `backend/models/fact_store.py`
+- **Layer 6 Capability Detection Engine**: `backend/intelligence/capabilities/`
+- **Feature Reconstruction & Tracing**: `backend/intelligence/features/`, `backend/routers/repo/trace.py`
+- **ChromaDB Semantic Vector Index**: `backend/routers/repo/semantic.py`
+- **FastAPI Core & Routers**: `backend/routers/`
+- **Worker Queue & TaskManager (SSE)**: `backend/services/worker.py`, `backend/task_manager.py`
+- **Next.js 16 App Router UI**: `frontend/app/`, `frontend/components/`
 
-## Current Progress
+### Planned Components (Future Phases)
+- **Autonomous AI Implementation Engine**: Target architecture in `docs/contracts/implementation-contract.md`
+- **Independent Verification Engine**: Target architecture in `docs/contracts/verification.md`
+- **Self-Repair Loop**: Target architecture in `docs/contracts/repair.md`
+- **Automated Pull Request Generation**: Target architecture in `docs/contracts/agent.md`
 
-- Core import and browse workflow is robust and DB-backed.
-- Basic Python source analysis works end to end.
-- UI navigation for repository exploration is wired up.
-- LLM-backed summary generation is connected to a local Ollama service, using strict deterministic metadata to avoid hallucinations.
-- The project has a solid, non-blocking real-time background task architecture.
+### Legacy / Archived Components
+- **`archive/legacy/`**: Verified dead and orphaned code moved out of runtime execution paths. Read-only historical reference.
 
-## Known Gaps / Next Work
+---
 
-- Broaden analysis beyond Python-specific parsing where needed.
-- Add automated tests for backend endpoints and the main UI flows.
-- Document any semantic indexing or visualization pipeline details as those features stabilize.
+## 4. Team Ownership Boundaries
 
-## Status Snapshot
-
-This document reflects the implementation state as of July 2026.
+| Role | Directory Ownership | Responsibilities |
+|---|---|---|
+| **Frontend Teammate** | `frontend/` | Next.js 16 App Router, React 19 components, ReactFlow graph canvas, responsive layouts, client-side state, API client consumption. |
+| **Backend / API Teammate** | `backend/` (core app) | FastAPI routers (`auth.py`, `health.py`, `repo/core.py`, `repo/tasks.py`), database configuration, SQLAlchemy models (`user.py`, `repository.py`), queue workers, SSE streaming. |
+| **Intelligence / AI Teammate (You)** | `backend/intelligence/`, `backend/models/fact_store.py`, `backend/llm_service.py`, `backend/routers/repo/` (intelligence endpoints) | Tree-sitter AST parsing, RIM graph model, Layer 4 Fact Store, Layer 6 capability detection, feature tracing, ChromaDB vector indexing, Ollama LLM integration. |
