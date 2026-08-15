@@ -12,7 +12,7 @@ from backend.routers.repo.services.models import get_or_build_model
 
 logger = logging.getLogger(__name__)
 
-health_router = APIRouter()
+health_router = APIRouter(tags=["health"])
 
 @health_router.get("/{repo_name}/health/findings")
 def get_health_findings(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

@@ -11,9 +11,9 @@ from backend.intelligence.graphs.graph_query_service import GraphQueryService
 
 logger = logging.getLogger(__name__)
 
-intelligence_router = APIRouter()
+intelligence_router = APIRouter(tags=["intelligence"])
 
-@intelligence_router.post("/{repo_name}/index")
+@intelligence_router.post("/{repo_name}/index", include_in_schema=False)
 def index_repo(repo_name: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     current_status = get_task_status(repo_name, "index", current_user, db)
     if current_status == "processing":
@@ -38,7 +38,7 @@ def index_repo(repo_name: str, background_tasks: BackgroundTasks, db: Session = 
     background_tasks.add_task(background_index)
     return {"status": "processing"}
 
-@intelligence_router.post("/{repo_name}/symbols/index")
+@intelligence_router.post("/{repo_name}/symbols/index", include_in_schema=False)
 def index_symbols(repo_name: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     current_status = get_task_status(repo_name, "symbols_index", current_user, db)
     if current_status == "processing":
@@ -131,7 +131,7 @@ def search_symbols(repo_name: str, q: str, db: Session = Depends(get_db), curren
                 results.append({"id": e.id, "type": "Function", "name": e.name, "file_path": e.metadata.get("file_id", e.location.repository_path), "line_number": e.location.start_line})
     return {"results": results}
 
-@intelligence_router.get("/{repo_name}/context")
+@intelligence_router.get("/{repo_name}/context", include_in_schema=False)
 def build_context_pack(repo_name: str, q: str = "", db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         query_layer = get_or_build_model(repo_name, db, current_user)

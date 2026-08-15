@@ -114,6 +114,6 @@ app.include_router(repo_router, prefix="/api/repos")
 
 app.include_router(implementation_router)
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 def read_root():
     return {"message": "Welcome to Repository Intelligence Platform API"}

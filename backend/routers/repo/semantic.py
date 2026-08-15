@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent
 
-semantic_router = APIRouter()
+semantic_router = APIRouter(tags=["semantic"])
 
 @semantic_router.get("/{repo_name}/semantic-status")
 def semantic_status_repo(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -27,7 +27,7 @@ def semantic_status_repo(repo_name: str, db: Session = Depends(get_db), current_
     state_file = target_dir / "semantic_index_state.json"
     return {"has_index": state_file.exists()}
 
-@semantic_router.post("/{repo_name}/semantic-index")
+@semantic_router.post("/{repo_name}/semantic-index", include_in_schema=False)
 def semantic_index_repo(repo_name: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     current_status = get_task_status(repo_name, "semantic_index", current_user, db)
     if current_status == "processing":

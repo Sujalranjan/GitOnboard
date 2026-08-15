@@ -10,7 +10,7 @@ from backend.intelligence.graphs.graph_query_service import GraphQueryService
 
 logger = logging.getLogger(__name__)
 
-graph_router = APIRouter()
+graph_router = APIRouter(tags=["graph"])
 
 @graph_router.get("/{repo_name}/graph/search")
 def graph_search(repo_name: str, q: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

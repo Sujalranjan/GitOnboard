@@ -13,8 +13,8 @@ from backend.routers.repo.services.models import get_or_build_model
 
 logger = logging.getLogger(__name__)
 
-import_router = APIRouter()
-core_router = APIRouter()
+import_router = APIRouter(tags=["repositories"])
+core_router = APIRouter(tags=["repositories"])
 
 @import_router.post("")
 async def import_repo(req: ImportRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

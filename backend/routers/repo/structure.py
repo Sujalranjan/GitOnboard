@@ -13,9 +13,9 @@ from backend.routers.repo.services.models import get_or_build_model
 
 logger = logging.getLogger(__name__)
 
-structure_router = APIRouter()
+structure_router = APIRouter(tags=["structure"])
 
-@structure_router.get("/{repo_name}/scan")
+@structure_router.get("/{repo_name}/scan", include_in_schema=False)
 def scan_repo(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         repo, analysis = get_latest_analysis(repo_name, db, current_user)
@@ -150,7 +150,7 @@ def scan_repo(repo_name: str, db: Session = Depends(get_db), current_user: User 
         "files": files_metadata
     }
 
-@structure_router.get("/{repo_name}/parse")
+@structure_router.get("/{repo_name}/parse", include_in_schema=False)
 async def parse_repo_file(repo_name: str, file_path: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     repo, analysis = get_latest_analysis(repo_name, db, current_user)
     

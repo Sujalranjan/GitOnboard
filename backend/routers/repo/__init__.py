@@ -10,7 +10,7 @@ from .trace import trace_router
 from .intelligence import intelligence_router
 
 repo_router = APIRouter()
-repo_router.add_api_route("", list_repos, methods=["GET"])
+repo_router.add_api_route("", list_repos, methods=["GET"], tags=["repositories"])
 
 repo_router.include_router(core_router)
 repo_router.include_router(tasks_router)

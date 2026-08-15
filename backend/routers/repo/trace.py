@@ -13,9 +13,9 @@ from backend.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
-trace_router = APIRouter()
+trace_router = APIRouter(tags=["trace"])
 
-@trace_router.api_route("/{repo_name}/trace", methods=["GET", "POST"])
+@trace_router.post("/{repo_name}/trace")
 def trace_feature(
     repo_name: str,
     q: Optional[str] = None,

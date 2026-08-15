@@ -9,7 +9,7 @@ from backend.dependencies.auth import get_current_user
 from backend.task_manager import task_manager
 from sse_starlette.sse import EventSourceResponse
 
-tasks_router = APIRouter()
+tasks_router = APIRouter(tags=["tasks"])
 
 @tasks_router.get("/{repo_name}/tasks")
 def get_tasks(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
