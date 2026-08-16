@@ -157,8 +157,31 @@ async def parse_repo_file(repo_name: str, file_path: str, db: Session = Depends(
     parts = repo.url.rstrip("/").split("/")
     owner = parts[-2]
     
-    # Dynamically fetch raw file content from GitHub
-    source_code = await fetch_file_content(owner, repo_name, repo.default_branch, file_path, current_user.github_access_token)
+    from backend.models.fact_store import FactFile
+    from backend.storage import get_storage
+
+    clean_path = file_path.replace("\\", "/").lstrip("./").lstrip("/")
+    source_code = ""
+
+    # Priority 1: Fetch from Azure Blob Storage via Fact Store reference
+    fact_file = (
+        db.query(FactFile)
+        .filter(FactFile.analysis_id == analysis.id, FactFile.path == clean_path)
+        .first()
+    )
+    if fact_file and fact_file.blob_name:
+        try:
+            storage = get_storage()
+            source_code = storage.get_object_text(fact_file.blob_name)
+        except Exception as err:
+            logger.warning(f"Failed to fetch blob {fact_file.blob_name}: {err}")
+
+    # Priority 2: Fallback to GitHub API if not available in Blob Storage
+    if not source_code:
+        try:
+            source_code = await fetch_file_content(owner, repo_name, repo.default_branch, file_path, current_user.github_access_token)
+        except Exception as gh_err:
+            logger.warning(f"Failed to fetch file from GitHub: {gh_err}")
     
     try:
         query_layer = get_or_build_model(repo_name, db, current_user)
@@ -357,3 +380,48 @@ def get_architecture(repo_name: str, node_id: str = "root", db: Session = Depend
             nodes.append({"id": m.id, "name": m.name, "type": "function", "parent": node_id, "has_children": False, "path": m.metadata.get("file_id")})
             
     return {"nodes": nodes}
+
+
+@structure_router.get("/{repo_name}/file")
+async def get_raw_file(
+    repo_name: str,
+    path: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    repo, analysis = get_latest_analysis(repo_name, db, current_user)
+    from backend.models.fact_store import FactFile
+    from backend.storage import get_storage
+
+    clean_path = path.replace("\\", "/").lstrip("./").lstrip("/")
+    fact_file = (
+        db.query(FactFile)
+        .filter(FactFile.analysis_id == analysis.id, FactFile.path == clean_path)
+        .first()
+    )
+
+    if fact_file and fact_file.blob_name:
+        try:
+            storage = get_storage()
+            content = storage.get_object_text(fact_file.blob_name)
+            return {
+                "path": clean_path,
+                "content": content,
+                "size": fact_file.size,
+                "language": fact_file.language,
+                "content_type": fact_file.content_type,
+            }
+        except Exception as e:
+            logger.warning(f"Error reading blob {fact_file.blob_name}: {e}")
+
+    # Fallback to GitHub API
+    parts = repo.url.rstrip("/").split("/")
+    owner = parts[-2]
+    content = await fetch_file_content(owner, repo_name, repo.default_branch, clean_path, current_user.github_access_token)
+    return {
+        "path": clean_path,
+        "content": content,
+        "size": len(content) if content else 0,
+        "language": None,
+        "content_type": "text/plain",
+    }

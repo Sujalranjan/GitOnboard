@@ -13,13 +13,13 @@ from backend.routers.repo.services.tasks import get_task_status, set_task_status
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).parent.parent.parent.parent
+CHROMA_BASE_DIR = Path("/tmp/chroma")
 
 semantic_router = APIRouter(tags=["semantic"])
 
 @semantic_router.get("/{repo_name}/semantic-status")
 def semantic_status_repo(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    repos_dir = BASE_DIR / "data/repos"
+    repos_dir = CHROMA_BASE_DIR
     target_dir = repos_dir / f"{current_user.id}_{repo_name}"
     if not target_dir.exists() or not target_dir.is_dir():
         raise HTTPException(status_code=404, detail="Repository not found")
@@ -41,7 +41,7 @@ def semantic_index_repo(repo_name: str, background_tasks: BackgroundTasks, db: S
         try:
             import chromadb
             query_layer = get_or_build_model(repo_name, bg_db, current_user)
-            target_dir = BASE_DIR / "data/repos" / f"{current_user.id}_{repo_name}"
+            target_dir = CHROMA_BASE_DIR / f"{current_user.id}_{repo_name}"
             chroma_dir = target_dir / "chroma"
             chroma_dir.mkdir(parents=True, exist_ok=True)
             state_file = target_dir / "semantic_index_state.json"
@@ -165,7 +165,7 @@ def semantic_index_repo(repo_name: str, background_tasks: BackgroundTasks, db: S
     return {"status": "processing"}
 
 def get_chroma_collection(repo_name: str, current_user: User, db: Session):
-    repos_dir = BASE_DIR / "data/repos"
+    repos_dir = CHROMA_BASE_DIR
     target_dir = repos_dir / f"{current_user.id}_{repo_name}"
     chroma_dir = target_dir / "chroma"
     

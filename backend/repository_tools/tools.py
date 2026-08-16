@@ -81,36 +81,68 @@ class RepositoryToolLayer:
         end_line: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Safely reads a slice of a file from the repository snapshot.
-        Enforces path containment, binary rejection, and line clamping.
+        Safely reads a slice of a file.
+        Priority:
+          1. Active temporary worktree (if repo_root is provided and exists)
+          2. Azure Blob Storage (via FactFile.blob_name)
         """
-        if not self.repo_root:
-            raise RepositorySecurityError(f"No repository snapshot found on disk for '{self.repo_name}'")
+        clean_path = path.replace("\\", "/").lstrip("./").lstrip("/")
 
-        target_file = validate_repo_path(self.repo_root, path, allow_binary=False)
+        # 1. Active Worktree (if present)
+        if self.repo_root and self.repo_root.exists():
+            target_file = validate_repo_path(self.repo_root, path, allow_binary=False)
+            if target_file.exists():
+                try:
+                    with open(target_file, "r", encoding="utf-8", errors="replace") as f:
+                        lines = f.readlines()
+                    total_lines = len(lines)
+                    s, e = clamp_line_range(total_lines, start_line, end_line)
+                    selected_lines = lines[s - 1 : e]
+                    numbered_content = "".join(f"{s + idx:4d} | {line}" for idx, line in enumerate(selected_lines))
+                    rel_path = str(target_file.relative_to(self.repo_root)).replace("\\", "/")
+                    return {
+                        "path": rel_path,
+                        "start_line": s,
+                        "end_line": e,
+                        "total_lines": total_lines,
+                        "content": numbered_content,
+                        "raw_text": "".join(selected_lines),
+                    }
+                except Exception as e:
+                    logger.debug(f"Could not read from worktree {path}: {e}")
 
-        try:
-            with open(target_file, "r", encoding="utf-8", errors="replace") as f:
-                lines = f.readlines()
-        except Exception as e:
-            raise RepositorySecurityError(f"Failed to read file {path}: {e}")
+        # 2. Azure Blob Storage (persistent repository snapshots)
+        if self.db is not None and self.analysis_id is not None:
+            fact_file = (
+                self.db.query(FactFile)
+                .filter(
+                    FactFile.analysis_id == self.analysis_id,
+                    FactFile.path == clean_path,
+                )
+                .first()
+            )
+            if fact_file and fact_file.blob_name:
+                try:
+                    from backend.storage import get_storage
+                    storage = get_storage()
+                    raw_text = storage.get_object_text(fact_file.blob_name)
+                    lines = raw_text.splitlines(keepends=True)
+                    total_lines = len(lines)
+                    s, e = clamp_line_range(total_lines, start_line, end_line)
+                    selected_lines = lines[s - 1 : e]
+                    numbered_content = "".join(f"{s + idx:4d} | {line}" for idx, line in enumerate(selected_lines))
+                    return {
+                        "path": clean_path,
+                        "start_line": s,
+                        "end_line": e,
+                        "total_lines": total_lines,
+                        "content": numbered_content,
+                        "raw_text": "".join(selected_lines),
+                    }
+                except Exception as err:
+                    logger.warning(f"Error reading blob {fact_file.blob_name}: {err}")
 
-        total_lines = len(lines)
-        s, e = clamp_line_range(total_lines, start_line, end_line)
-
-        selected_lines = lines[s - 1 : e]
-        # Format with 1-based line numbers
-        numbered_content = "".join(f"{s + idx:4d} | {line}" for idx, line in enumerate(selected_lines))
-
-        rel_path = str(target_file.relative_to(self.repo_root)).replace("\\", "/")
-        return {
-            "path": rel_path,
-            "start_line": s,
-            "end_line": e,
-            "total_lines": total_lines,
-            "content": numbered_content,
-            "raw_text": "".join(selected_lines),
-        }
+        raise RepositorySecurityError(f"File not found in active worktree or Blob Storage: '{path}'")
 
     # ──────────────────────────────────────────────────────────────────────────
     # 2. find_files
@@ -174,41 +206,76 @@ class RepositoryToolLayer:
         max_matches: int = 25,
     ) -> List[Dict[str, Any]]:
         """
-        Performs lexical regex/substring search over source files in the repository snapshot.
+        Performs lexical regex/substring search over source files in the repository.
+        Searches active worktree if present, or queries Blob Storage via FactStore metadata.
         """
-        if not self.repo_root or not self.repo_root.exists():
-            return []
-
         results: List[Dict[str, Any]] = []
         try:
             pattern = re.compile(query, re.IGNORECASE)
         except re.error:
             pattern = re.compile(re.escape(query), re.IGNORECASE)
 
-        for root, dirs, files in os.walk(self.repo_root):
-            dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", ".venv", "__pycache__", "dist", "build"}]
-            for fname in files:
-                full_path = Path(root) / fname
-                rel_path = str(full_path.relative_to(self.repo_root)).replace("\\", "/")
+        # 1. Active worktree search if available
+        if self.repo_root and self.repo_root.exists():
+            for root, dirs, files in os.walk(self.repo_root):
+                dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", ".venv", "__pycache__", "dist", "build"}]
+                for fname in files:
+                    full_path = Path(root) / fname
+                    rel_path = str(full_path.relative_to(self.repo_root)).replace("\\", "/")
 
-                if file_pattern and not fnmatch.fnmatch(rel_path, file_pattern) and not fnmatch.fnmatch(fname, file_pattern):
+                    if file_pattern and not fnmatch.fnmatch(rel_path, file_pattern) and not fnmatch.fnmatch(fname, file_pattern):
+                        continue
+
+                    if is_binary_file(full_path):
+                        continue
+
+                    try:
+                        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                            for line_idx, line in enumerate(f, start=1):
+                                if pattern.search(line):
+                                    results.append({
+                                        "file": rel_path,
+                                        "line": line_idx,
+                                        "snippet": line.strip()[:200],
+                                        "match_type": "lexical",
+                                    })
+                                    if len(results) >= max_matches:
+                                        return results
+                    except Exception:
+                        continue
+            if results:
+                return results
+
+        # 2. Azure Blob Storage search via Fact Store manifest
+        if self.db is not None and self.analysis_id is not None:
+            files = (
+                self.db.query(FactFile)
+                .filter(
+                    FactFile.analysis_id == self.analysis_id,
+                    FactFile.is_binary == False,
+                )
+                .all()
+            )
+            from backend.storage import get_storage
+            storage = get_storage()
+            for f_rec in files:
+                if file_pattern and not fnmatch.fnmatch(f_rec.path, file_pattern) and not fnmatch.fnmatch(os.path.basename(f_rec.path), file_pattern):
                     continue
-
-                if is_binary_file(full_path):
+                if not f_rec.blob_name:
                     continue
 
                 try:
-                    with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
-                        for line_idx, line in enumerate(f, start=1):
-                            if pattern.search(line):
-                                results.append({
-                                    "file": rel_path,
-                                    "line": line_idx,
-                                    "snippet": line.strip()[:200],
-                                    "match_type": "lexical",
-                                })
-                                if len(results) >= max_matches:
-                                    return results
+                    text = storage.get_object_text(f_rec.blob_name)
+                    for line_idx, line in enumerate(text.splitlines(), start=1):
+                        if pattern.search(line):
+                            results.append({
+                                "file": f_rec.path,
+                                "line": line_idx,
+                                "snippet": line.strip()[:200],
+                                "match_type": "lexical",
+                            })
+                            if len(results) >= max_matches:
+                                return results
                 except Exception:
                     continue
 
