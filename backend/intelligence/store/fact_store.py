@@ -56,12 +56,52 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
             if entity.type == EntityType.FILE and entity.id not in seen_file_ids:
                 seen_file_ids.add(entity.id)
                 db_id = f"{analysis_id}:{entity.id}"
+                f_path = entity.location.repository_path or entity.name
+                p_lower = f_path.lower()
+                
+                # Classification signals
+                is_agent = (
+                    p_lower.endswith("agents.md") or 
+                    p_lower.endswith("claude.md") or 
+                    p_lower.endswith("agent.md") or 
+                    p_lower.endswith("skill.md") or 
+                    "copilot-instructions.md" in p_lower or
+                    ".cursor/" in p_lower or 
+                    ".agents/" in p_lower
+                )
+                is_doc = (
+                    p_lower.endswith((".md", ".rst", ".mmd", ".markdown")) or
+                    p_lower.startswith("docs/") or "/docs/" in p_lower or
+                    p_lower.startswith("doc/") or "/doc/" in p_lower
+                )
+                is_test = (
+                    p_lower.startswith(("tests/", "test/", "__tests__/", "spec/")) or
+                    "/tests/" in p_lower or "/test/" in p_lower or
+                    "/__tests__/" in p_lower or "/spec/" in p_lower or
+                    p_lower.split("/")[-1].startswith("test_") or
+                    p_lower.endswith(("_test.py", "_test.js", ".test.ts", ".test.js", ".spec.ts", ".spec.js"))
+                )
+                is_gen = (
+                    "dist/" in p_lower or "build/" in p_lower or
+                    "generated/" in p_lower or "out/" in p_lower
+                )
+                is_bin = (
+                    p_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".ico", ".wasm", ".pyc", ".so", ".dll", ".exe", ".zip", ".tar", ".gz", ".bin", ".db", ".sqlite")) or
+                    entity.metadata.get("is_binary", False)
+                )
+
                 file_rec = FactFile(
                     id=db_id,
                     analysis_id=analysis_id,
-                    path=entity.location.repository_path or entity.name,
+                    path=f_path,
                     language=entity.metadata.get("language"),
+                    size=entity.metadata.get("size", entity.metadata.get("file_size", 0)),
                     content_hash=entity.metadata.get("content_hash"),
+                    is_binary=is_bin,
+                    is_generated=is_gen,
+                    is_test=is_test,
+                    is_documentation=is_doc,
+                    is_agent_instruction=is_agent,
                 )
                 file_records.append(file_rec)
                 if entity.location.repository_path:

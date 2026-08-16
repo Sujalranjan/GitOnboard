@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON, Boolean
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime, timezone
@@ -13,7 +13,13 @@ class FactFile(Base):
     analysis_id = Column(Integer, ForeignKey("analyses.id", ondelete="CASCADE"), nullable=False, index=True)
     path = Column(String, nullable=False, index=True)
     language = Column(String, nullable=True)
+    size = Column(Integer, nullable=True, default=0)
     content_hash = Column(String, nullable=True)
+    is_binary = Column(Boolean, nullable=False, default=False)
+    is_generated = Column(Boolean, nullable=False, default=False)
+    is_test = Column(Boolean, nullable=False, default=False)
+    is_documentation = Column(Boolean, nullable=False, default=False)
+    is_agent_instruction = Column(Boolean, nullable=False, default=False)
     last_modified = Column(DateTime(timezone=True), nullable=True)
 
     analysis = relationship("Analysis", backref=backref("files", cascade="all, delete-orphan", passive_deletes=True))
