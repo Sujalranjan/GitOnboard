@@ -43,7 +43,9 @@ def build_default_service() -> "LLMService":
         logger.info("LLMService: NVIDIA provider registered.")
 
     ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-    providers.append(OllamaProvider(base_url=ollama_url))
+    ollama_model = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b")
+    ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "300.0"))
+    providers.append(OllamaProvider(base_url=ollama_url, model=ollama_model, timeout=ollama_timeout))
     logger.info(f"LLMService: Ollama provider registered ({ollama_url}).")
 
     return LLMService(providers=providers)

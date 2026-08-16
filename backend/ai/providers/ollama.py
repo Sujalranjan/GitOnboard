@@ -2,6 +2,8 @@
 from __future__ import annotations
 import json
 import logging
+import os
+import time
 from typing import Any, Dict, Type, TypeVar
 
 import httpx
@@ -12,7 +14,7 @@ from ..schemas import LLMRequest, LLMResponse, TokenUsage, NonRetriableError, Re
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
-DEFAULT_MODEL = "qwen2.5-coder:7b"
+DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b")
 
 
 class OllamaProvider:
@@ -37,14 +39,20 @@ class OllamaProvider:
         }
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        model_name = request.model or self.default_model
+        logger.info(f"OllamaProvider: Sending request to {self.base_url}/api/chat (model: {model_name})...")
+        t0 = time.time()
+        timeout_config = httpx.Timeout(timeout=self.timeout, connect=10.0, read=self.timeout)
+        
+        async with httpx.AsyncClient(timeout=timeout_config) as client:
             try:
                 resp = await client.post(
                     f"{self.base_url}/api/chat",
                     json=self._build_body(request),
                 )
             except (httpx.TimeoutException, httpx.ConnectError) as e:
-                raise RetriableError(f"Ollama connection failed: {e}")
+                logger.error(f"OllamaProvider: Network error after {time.time() - t0:.2f}s: {e}")
+                raise RetriableError(f"Ollama connection/timeout failed: {e}")
 
         if resp.status_code == 400:
             raise NonRetriableError(f"Ollama bad request: {resp.text}", resp.status_code)
@@ -55,6 +63,9 @@ class OllamaProvider:
 
         data = resp.json()
         content = data.get("message", {}).get("content", "")
+        elapsed = time.time() - t0
+        logger.info(f"OllamaProvider: Response received successfully in {elapsed:.2f}s")
+        
         return LLMResponse(
             content=content,
             model=data.get("model", self.default_model),

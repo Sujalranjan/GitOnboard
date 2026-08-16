@@ -61,14 +61,16 @@ class FeatureReconstructionEngine:
                     ))
                     
                     # If this entity is part of a pattern, add the pattern
-                    for pattern in model.patterns.values():
-                        if src in pattern.participants:
-                            members.append(FeatureMembership(
-                                item_id=pattern.id,
-                                item_type="pattern",
-                                confidence=0.7,
-                                evidence=[{"source": f"Pattern containing entity {src}"}]
-                            ))
+                    patterns = getattr(model, "patterns", {})
+                    if patterns:
+                        for pattern in patterns.values():
+                            if src in getattr(pattern, "participants", []):
+                                members.append(FeatureMembership(
+                                    item_id=pattern.id,
+                                    item_type="pattern",
+                                    confidence=0.7,
+                                    evidence=[{"source": f"Pattern containing entity {src}"}]
+                                ))
                             
             feature = Feature(
                 id=f"feat:{uuid.uuid4().hex[:8]}",
