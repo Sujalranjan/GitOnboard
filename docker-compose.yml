@@ -26,6 +26,16 @@ services:
       postgres:
         condition: service_healthy
 
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data --skipApiVersionCheck
+    ports:
+      - "10100:10000"
+      - "10101:10001"
+      - "10102:10002"
+    volumes:
+      - azurite_data:/data
+
   backend:
     build:
       context: .
@@ -35,10 +45,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      # Mount the data folder to preserve JSON files
-      - ./data:/app/data
       # Mount source code for local development
       - ./backend:/app/backend
+      # Mount logs directory so error and commit logs are easily accessible
+      - ./logs:/app/logs
       # Mount ChromaDB embedding model cache to preserve ONNX downloads
       - chroma_cache:/root/.cache/chroma
     env_file:
@@ -47,11 +57,17 @@ services:
       - DATABASE_URL=postgresql+psycopg://myuser:mypassword@postgres:5432/repository_intelligence
       - LOCAL_DATABASE_URL=postgresql+psycopg://myuser:mypassword@postgres:5432/repository_intelligence
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      - AZURE_STORAGE_ENDPOINT=http://azurite:10000/devstoreaccount1
+      - AZURE_STORAGE_CONTAINER=gitonboard-repos
       # Other variables will be loaded from .env if present
     depends_on:
       postgres:
         condition: service_healthy
+      azurite:
+        condition: service_started
 
 volumes:
   postgres_data:
   chroma_cache:
+  azurite_data:

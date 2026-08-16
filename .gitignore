@@ -60,3 +60,8 @@ Thumbs.db
 # Project Specific
 data/*
 !data/.gitkeep
+
+# Application Logs
+logs/*.log
+logs/*.jsonl
+!logs/.gitkeep

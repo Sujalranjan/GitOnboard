@@ -44,6 +44,8 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy the application code (backend directory and others as needed)
 # Assumes build context is repo root
 COPY backend ./backend
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
 
 # Set PYTHONPATH so the app can find modules
 ENV PYTHONPATH="/app:$PYTHONPATH"
