@@ -37,24 +37,42 @@ OLLAMA_MODEL=qwen2.5-coder:7b
 
 ## 3. Starting the Services
 
-### Option A: Docker Compose (Full Stack Backend + Database + pgAdmin)
+### Option A: Docker Compose (Full Stack Backend + Database + Azurite + pgAdmin)
 ```bash
 docker compose up --build -d
 ```
 - **FastAPI Backend**: `http://localhost:8000`
 - **Swagger API Docs**: `http://localhost:8000/docs`
 - **PostgreSQL Database**: `localhost:5432` (`repository_intelligence`)
+- **Azurite Blob Storage**: `localhost:10100` (Blob), `10101` (Queue), `10102` (Table)
 - **pgAdmin 4 Web UI**: `http://localhost:5050` (`admin@example.com` / `adminpassword`)
 
-### Option B: Local Backend with Dockerized Database
-Start only the database and pgAdmin in Docker:
+### Option B: Local Backend with Dockerized Services
+Start the database, pgAdmin, and Azurite in Docker:
 ```bash
-docker compose up postgres pgadmin -d
+docker compose up postgres pgadmin azurite -d
 ```
 Install backend dependencies and run the FastAPI server:
 ```bash
 uv sync
 uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+---
+
+## 3.1 Verifying & Testing Storage (Azurite)
+
+See [docs/STORAGE_ARCHITECTURE_AND_AZURITE.md](docs/STORAGE_ARCHITECTURE_AND_AZURITE.md) for full testing workflows with Azure CLI, PowerShell, and Python.
+
+**Quick Verification Command**:
+```bash
+uv run python -c "
+from backend.storage import get_storage
+storage = get_storage()
+storage.ensure_container_exists()
+storage.put_object('test.txt', 'hello from azurite')
+print('Storage verified:', storage.get_object_text('test.txt'))
+"
 ```
 
 ---
