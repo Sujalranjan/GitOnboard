@@ -9,14 +9,11 @@ import { ThemeToggle } from '../ThemeToggle';
 
 export function Header() {
   const pathname = usePathname();
-  const [user, setUser] = useState(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  if (pathname === '/workspace') {
-    return null;
-  }
-  const [query, setQuery] = useState(searchParams.get('search') || '');
+  const [user, setUser] = useState(null);
+  const [query, setQuery] = useState(searchParams ? (searchParams.get('search') || '') : '');
   const [debounceTimeout, setDebounceTimeout] = useState(null);
 
   useEffect(() => {
@@ -25,6 +22,10 @@ export function Header() {
       .then(data => setUser(data))
       .catch(() => setUser(null));
   }, []);
+
+  if (pathname === '/workspace') {
+    return null;
+  }
 
   const handleSearchChange = (e) => {
     const val = e.target.value;
