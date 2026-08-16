@@ -227,45 +227,48 @@ def get_summary(repo_name: str, db: Session = Depends(get_db), current_user: Use
     try:
         repo, analysis = get_latest_analysis(repo_name, db, current_user)
     except HTTPException:
-        return {"summary": None, "outdated": False}
+        return {"summary": None, "outdated": False, "status": "not_found"}
     
+    current_status = get_task_status(repo_name, "summary", current_user, db) or "idle"
     summary_art = db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == analysis.id, AnalysisArtifact.type == "summary").first()
     
     if not summary_art:
-        return {"summary": None, "outdated": False}
+        return {"summary": None, "outdated": False, "status": current_status}
         
-    return {"summary": summary_art.data, "outdated": False}
+    return {"summary": summary_art.data, "outdated": False, "status": "completed"}
 
 @core_router.post("/{repo_name}/summary/generate")
 def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    current_status = get_task_status(repo_name, "summary", current_user, db)
-    if current_status == "processing":
-        return {"status": "processing"}
-    
     set_task_status(repo_name, "summary", "processing", current_user, db)
     
     def background_generate_summary():
+        import time
+        start_time = time.time()
         # Get a new DB session for the background thread
+        import asyncio
         from backend.database import SessionLocal
+        from backend.summary import SummaryPipeline
+        from backend.repository_tools import resolve_repo_root
+
         bg_db = SessionLocal()
         try:
-            from backend.llm_service import llm_service
             query_layer = get_or_build_model(repo_name, bg_db, current_user)
-            
             repo, analysis = get_latest_analysis(repo_name, bg_db, current_user)
-            em_art = bg_db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == analysis.id, AnalysisArtifact.type == "enriched_metadata").first()
+            
+            em_art = bg_db.query(AnalysisArtifact).filter(
+                AnalysisArtifact.analysis_id == analysis.id,
+                AnalysisArtifact.type == "enriched_metadata"
+            ).first()
+            
+            metrics_art = bg_db.query(AnalysisArtifact).filter(
+                AnalysisArtifact.analysis_id == analysis.id,
+                AnalysisArtifact.type == "metrics"
+            ).first()
+            metrics = metrics_art.data if metrics_art else {}
             
             if em_art and em_art.data:
                 metadata = em_art.data
             else:
-                # Fallback: build basic metadata from existing artifacts
-                # This handles repos analyzed before RepositoryMetadataStage was added
-                metrics_art = bg_db.query(AnalysisArtifact).filter(
-                    AnalysisArtifact.analysis_id == analysis.id,
-                    AnalysisArtifact.type == "metrics"
-                ).first()
-                metrics = metrics_art.data if metrics_art else {}
-                
                 metadata = {
                     "schema_version": 1,
                     "note": "Basic metadata only. Re-analyze the repository to generate enriched metadata.",
@@ -287,17 +290,36 @@ def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Sess
                     "readme_summary": None
                 }
             
-            summary_md = llm_service.generate_summary(metadata)
+            repo_root = resolve_repo_root(repo_name, user_id=current_user.id, db=bg_db)
+            
+            pipeline = SummaryPipeline()
+            result = asyncio.run(
+                pipeline.run(
+                    repo_name=repo_name,
+                    metadata=metadata,
+                    metrics=metrics,
+                    repo_root=repo_root,
+                    db=bg_db,
+                    analysis_id=analysis.id,
+                    user_id=current_user.id,
+                    enable_progressive_grounding=True,
+                )
+            )
             
             # Save or update summary artifact
-            summary_art = bg_db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == analysis.id, AnalysisArtifact.type == "summary").first()
+            summary_art = bg_db.query(AnalysisArtifact).filter(
+                AnalysisArtifact.analysis_id == analysis.id,
+                AnalysisArtifact.type == "summary"
+            ).first()
             if summary_art:
-                summary_art.data = summary_md
+                summary_art.data = result.summary_markdown
             else:
-                summary_art = AnalysisArtifact(analysis_id=analysis.id, type="summary", data=summary_md)
+                summary_art = AnalysisArtifact(analysis_id=analysis.id, type="summary", data=result.summary_markdown)
                 bg_db.add(summary_art)
             bg_db.commit()
             
+            elapsed = time.time() - start_time
+            logger.info(f"Summary generated successfully for {repo_name} in {elapsed:.2f}s")
             set_task_status(repo_name, "summary", "completed", current_user, bg_db)
         except Exception as e:
             bg_db.rollback()
