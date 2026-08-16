@@ -1,20 +1,20 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from fastapi import Depends
 from backend.database import get_db
 
 router = APIRouter(tags=["health"])
 
 @router.get("/health")
-def health_check(db: Session = Depends(get_db)):
+def health_check(response: Response, db: Session = Depends(get_db)):
     """
-    Health check endpoint for Docker and Azure readiness probes.
-    Also verifies database connectivity.
+    Health check endpoint for Docker, Azure readiness probes, and frontend cold start.
+    Verifies that the API server is active and the PostgreSQL database is reachable.
     """
     try:
-        # Simple query to verify DB connection
+        # Verify active database connectivity
         db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
