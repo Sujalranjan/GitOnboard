@@ -25,6 +25,7 @@ dependencies = [
     "PyJWT",
     "sse-starlette",
     "requests",
+    "azure-storage-blob>=12.19.0",
 ]
 
 [tool.ruff]

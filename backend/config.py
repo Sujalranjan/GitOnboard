@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     local_frontend_url: str = "http://localhost:3000"
     prod_frontend_url: str = ""
 
+    # Azure Blob Storage / Azurite
+    azure_storage_connection_string: str = ""
+    azure_storage_account_name: str = "devstoreaccount1"
+    azure_storage_account_key: str = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    azure_storage_container: str = "gitonboard-repos"
+    azure_storage_endpoint: str = "http://azurite:10000/devstoreaccount1"
+
     class Config:
         env_file = ".env"
         extra = "ignore"
