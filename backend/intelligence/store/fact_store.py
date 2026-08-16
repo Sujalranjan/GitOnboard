@@ -102,6 +102,9 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                     is_test=is_test,
                     is_documentation=is_doc,
                     is_agent_instruction=is_agent,
+                    blob_name=entity.metadata.get("blob_name"),
+                    snapshot_id=entity.metadata.get("snapshot_id"),
+                    content_type=entity.metadata.get("content_type"),
                 )
                 file_records.append(file_rec)
                 if entity.location.repository_path:
@@ -313,7 +316,15 @@ def load_rim_from_fact_store(db: Session, analysis_id: int) -> RepositoryModel:
             type=EntityType.FILE,
             name=f.path.split("/")[-1],
             location=SourceLocation(repository_path=f.path, start_line=1, end_line=1, language=f.language or "Python"),
-            metadata={"language": f.language, "content_hash": f.content_hash},
+            metadata={
+                "language": f.language,
+                "content_hash": f.content_hash,
+                "blob_name": f.blob_name,
+                "snapshot_id": f.snapshot_id,
+                "content_type": f.content_type,
+                "size": f.size,
+                "is_binary": f.is_binary,
+            },
         )
 
     # Reconstruct Symbol Entities

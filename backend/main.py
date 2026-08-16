@@ -36,6 +36,25 @@ def cleanup_tmp_dirs():
             except Exception:
                 pass
 
+def ensure_db_schema_up_to_date(bind_engine):
+    from sqlalchemy import text
+    try:
+        with bind_engine.connect() as conn:
+            conn.execute(text("""
+                ALTER TABLE files ADD COLUMN IF NOT EXISTS size INTEGER DEFAULT 0;
+                ALTER TABLE files ADD COLUMN IF NOT EXISTS blob_name VARCHAR;
+                ALTER TABLE files ADD COLUMN IF NOT EXISTS snapshot_id VARCHAR;
+                ALTER TABLE files ADD COLUMN IF NOT EXISTS content_type VARCHAR;
+                ALTER TABLE files ADD COLUMN IF NOT EXISTS is_binary BOOLEAN DEFAULT false;
+                ALTER TABLE files ADD COLUMN IF NOT EXISTS is_generated BOOLEAN DEFAULT false;
+                ALTER TABLE files ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT false;
+                ALTER TABLE files ADD COLUMN IF NOT EXISTS is_documentation BOOLEAN DEFAULT false;
+                ALTER TABLE files ADD COLUMN IF NOT EXISTS is_agent_instruction BOOLEAN DEFAULT false;
+            """))
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"Note on schema auto-migration: {e}")
+
 def drop_legacy_fk_constraints(bind_engine):
     try:
         from sqlalchemy import text
@@ -56,6 +75,7 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up application...")
     Base.metadata.create_all(bind=engine)
+    ensure_db_schema_up_to_date(engine)
     drop_legacy_fk_constraints(engine)
     
     # Wire the running event loop into TaskManager so background

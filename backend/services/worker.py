@@ -62,6 +62,7 @@ class AnalysisWorker(WorkerInterface):
             base_tmp.mkdir(parents=True, exist_ok=True)
             target_dir = base_tmp / f"job_{job_id}_{repo_name}"
 
+            start_time = datetime.now(timezone.utc)
             try:
                 # 1. Download
                 try:
@@ -87,11 +88,80 @@ class AnalysisWorker(WorkerInterface):
                     # Run Static Analysis Pipeline
                     engine = AnalysisEngine(str(target_dir), get_default_registry())
                     model = engine.run(repo_name, commit_info=commit_info)
-                    
+
+                    # Upload all repository files to Azure Blob Storage / Azurite
+                    from backend.storage import get_storage, build_blob_key
+                    from backend.intelligence.rim.enums import EntityType
+                    from backend.intelligence.rim.entity import Entity
+                    from backend.intelligence.rim.location import SourceLocation
+                    from backend.intelligence.rim.identity import generate_entity_id
+                    import mimetypes
+                    import os
+
+                    storage = get_storage()
+                    storage.ensure_container_exists()
+
+                    snapshot_id = (commit_info.get("hash") if commit_info else None) or f"snap_{analysis.id}"
+                    repo_id = repo.id
+
+                    # Map existing file entities by relative path
+                    file_entities_by_path = {}
+                    for e in list(model.entities.values()):
+                        if e.type == EntityType.FILE:
+                            p = (e.location.repository_path or "").replace("\\", "/").lstrip("./")
+                            if p:
+                                file_entities_by_path[p] = e
+
+                    ignored_dirs = {".git", "node_modules", ".venv", "venv", "__pycache__", ".idea", ".vscode"}
+
+                    for root, dirs, files in os.walk(target_dir):
+                        dirs[:] = [d for d in dirs if d not in ignored_dirs]
+                        for f in files:
+                            if f.startswith("."):
+                                continue
+                            full_p = Path(root) / f
+                            if not full_p.is_file():
+                                continue
+                            rel_p = str(full_p.relative_to(target_dir)).replace("\\", "/").lstrip("./")
+                            try:
+                                blob_key = build_blob_key(repo_id, snapshot_id, rel_p)
+                                content_type, _ = mimetypes.guess_type(str(full_p))
+                                content_type = content_type or "text/plain"
+                                file_size = full_p.stat().st_size
+
+                                with open(full_p, "rb") as fh:
+                                    storage.put_object(blob_key, fh, content_type=content_type)
+
+                                f_ent = file_entities_by_path.get(rel_p)
+                                if not f_ent:
+                                    f_id = generate_entity_id(EntityType.FILE, rel_p, rel_p)
+                                    f_ent = Entity(
+                                        id=f_id,
+                                        type=EntityType.FILE,
+                                        name=full_p.name,
+                                        qualified_name=rel_p,
+                                        location=SourceLocation(
+                                            repository_path=rel_p,
+                                            start_line=1,
+                                            end_line=1,
+                                            language=""
+                                        ),
+                                        metadata={}
+                                    )
+                                    model.entities[f_id] = f_ent
+                                    file_entities_by_path[rel_p] = f_ent
+
+                                f_ent.metadata["blob_name"] = blob_key
+                                f_ent.metadata["snapshot_id"] = snapshot_id
+                                f_ent.metadata["content_type"] = content_type
+                                f_ent.metadata["size"] = file_size
+                            except Exception as up_err:
+                                logger.warning(f"Failed to upload blob for {rel_p}: {up_err}")
+
                     # Run Capability Engine
                     capability_engine = CapabilityBuilderEngine()
                     model = capability_engine.run(model)
-                    
+
                     # Run Feature Reconstruction Engine
                     feature_engine = FeatureReconstructionEngine()
                     model = feature_engine.run(model)
@@ -212,6 +282,15 @@ class AnalysisWorker(WorkerInterface):
                 db.commit()
                 logger.info(f"Job {job_id} completed successfully.")
 
+                # Record commit & analysis summary in dedicated log file
+                try:
+                    from backend.logger import log_commit_analysis
+                    duration = (job.completed_at - start_time).total_seconds() if 'start_time' in locals() else 0.0
+                    total_f = len(rim_model.entities) if rim_model else 0
+                    log_commit_analysis(repo_name, commit_info, analysis.id, "Completed", file_count=total_f, duration_seconds=duration)
+                except Exception as log_err:
+                    logger.debug(f"Commit logging error: {log_err}")
+
             except Exception as e:
                 import traceback
                 logger.error(f"Job {job_id} failed: {traceback.format_exc()}")
@@ -220,6 +299,13 @@ class AnalysisWorker(WorkerInterface):
                 job.completed_at = datetime.now(timezone.utc)
                 analysis.status = "Failed"
                 db.commit()
+
+                try:
+                    from backend.logger import log_commit_analysis
+                    duration = (job.completed_at - start_time).total_seconds() if 'start_time' in locals() else 0.0
+                    log_commit_analysis(repo_name, commit_info if 'commit_info' in locals() else None, analysis.id if 'analysis' in locals() else 0, "Failed", duration_seconds=duration)
+                except Exception:
+                    pass
             finally:
                 if target_dir.exists():
                     shutil.rmtree(target_dir, ignore_errors=True)

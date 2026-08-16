@@ -21,6 +21,9 @@ class FactFile(Base):
     is_documentation = Column(Boolean, nullable=False, default=False)
     is_agent_instruction = Column(Boolean, nullable=False, default=False)
     last_modified = Column(DateTime(timezone=True), nullable=True)
+    blob_name = Column(String, nullable=True, index=True)
+    snapshot_id = Column(String, nullable=True, index=True)
+    content_type = Column(String, nullable=True)
 
     analysis = relationship("Analysis", backref=backref("files", cascade="all, delete-orphan", passive_deletes=True))
     symbols = relationship("FactSymbol", back_populates="file", cascade="all, delete-orphan")
