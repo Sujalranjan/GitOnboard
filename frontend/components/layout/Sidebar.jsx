@@ -14,6 +14,7 @@ import {
 
 const navItems = [
   { id: 'overview', label: 'Dashboard', icon: LayoutDashboard, path: '' },
+  { id: 'workspace', label: 'AI Workspace IDE', icon: Sparkles, directPath: '/workspace' },
   { id: 'trace', label: 'Feature Tracing', icon: GitMerge, path: '/trace' },
   { id: 'explorer', label: 'File Explorer', icon: FolderTree, path: '/explorer' },
   { id: 'architecture', label: 'Architecture', icon: Network, path: '/architecture' },
@@ -29,10 +30,12 @@ export function Sidebar({ repoName }) {
       <div className="flex-grow py-6 overflow-y-auto overflow-x-hidden">
         <nav className="space-y-1 px-3">
           {navItems.map((item) => {
-            const itemPath = `/repository/${repoName}${item.path}`;
-            const isActive = item.path === ''
-              ? pathname === `/repository/${repoName}`
-              : pathname.startsWith(itemPath);
+            const itemPath = item.directPath ? item.directPath : `/repository/${repoName}${item.path}`;
+            const isActive = item.directPath
+              ? pathname === item.directPath
+              : item.path === ''
+                ? pathname === `/repository/${repoName}`
+                : pathname.startsWith(itemPath);
 
             return (
               <Link 

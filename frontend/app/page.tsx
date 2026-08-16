@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/common/Button';
 import { Modal } from '@/components/common/Modal';
-import { LogIn } from 'lucide-react';
+import { LogIn, Sparkles } from 'lucide-react';
 
 export default function LandingPage() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -27,6 +28,14 @@ export default function LandingPage() {
           <Button variant="primary" size="lg" onClick={() => setIsLoginModalOpen(true)}>
             Get Started
           </Button>
+
+          <Link
+            href="/workspace"
+            className="px-6 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-base shadow-md flex items-center gap-2 transition-all hover:scale-105"
+          >
+            <Sparkles className="w-5 h-5 text-purple-200" />
+            Launch AI Workspace
+          </Link>
         </div>
       </div>
 

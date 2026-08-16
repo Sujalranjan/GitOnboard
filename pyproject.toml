@@ -1,7 +1,7 @@
 [project]
-name = "repository-intelligence-platform"
+name = "gitonboard"
 version = "0.1.0"
-description = "Repository Intelligence Platform - MVP"
+description = "GitOnBoard: A Repository-Aware Multi-Agent Verification and Automated Repair Framework for AI-Generated Code"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

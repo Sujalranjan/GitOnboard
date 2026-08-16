@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Search, Bell, User, LogOut } from 'lucide-react';
+import { Search, Bell, User, LogOut, Sparkles } from 'lucide-react';
 import { Button } from '../common/Button';
 import { ThemeToggle } from '../ThemeToggle';
 
@@ -59,12 +59,22 @@ export function Header() {
 
   return (
     <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between px-4 sm:px-6 z-10 flex-shrink-0 transition-colors">
-      <div className="flex items-center">
+      <div className="flex items-center gap-4">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
             <div className="w-4 h-4 bg-white dark:bg-slate-900 transform rotate-45"></div>
           </div>
           <span className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Git<span className="text-blue-600 dark:text-blue-400">Onboard</span></span>
+        </Link>
+
+        {/* Direct Link to AI Workspace */}
+        <Link 
+          href="/workspace"
+          className="flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all"
+          title="Open AI Workspace IDE"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+          <span>AI Workspace</span>
         </Link>
       </div>
       
