@@ -1,0 +1,18 @@
+{
+  "id": "task_02_crud_todo_validation",
+  "category": "CRUD Operations",
+  "title": "Todo Item Creation with Payload Validation",
+  "requirement": "Add GET and POST endpoint handlers for managing user todos with strict payload validation.",
+  "contract": [
+    "GET /api/todos handler returning list",
+    "POST /api/todos handler parsing body",
+    "Payload validation requiring non-empty text",
+    "Unique todo ID assignment",
+    "HTTP 201 Created on success, HTTP 400 Bad Request on invalid payload"
+  ],
+  "expected_impact": [
+    "frontend/src/pages/api/todos.ts",
+    "frontend/src/components/TodoItem.tsx"
+  ],
+  "seeded_failure_mode": "Semantic Implementation Error (missing validation check)"
+}

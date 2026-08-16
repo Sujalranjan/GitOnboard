@@ -68,50 +68,17 @@ export function TerminalPanel({ isOpen, onClose }: TerminalPanelProps) {
   };
 
   const renderColorizedLog = (logLine: string) => {
-    if (!logLine) return <span>&nbsp;</span>;
+    // Convert rudimentary ANSI escape strings to HTML styled spans
+    let formatted = logLine
+      .replace(/\x1b\[32m/g, '<span style="color: #22C55E;">')
+      .replace(/\x1b\[35m/g, '<span style="color: #A855F7; font-weight: bold;">')
+      .replace(/\x1b\[36m/g, '<span style="color: #06B6D4;">')
+      .replace(/\x1b\[33m/g, '<span style="color: #F59E0B;">')
+      .replace(/\x1b\[31m/g, '<span style="color: #EF4444;">')
+      .replace(/\x1b\[34m/g, '<span style="color: #3B82F6;">')
+      .replace(/\x1b\[0m/g, "</span>");
 
-    // Split log line by ANSI code delimiters
-    const ansiRegex = /(\x1b\[\d+m)/g;
-    const parts = logLine.split(ansiRegex);
-
-    let currentColorClass = "text-[#E6EDF3]";
-
-    return (
-      <>
-        {parts.map((part, i) => {
-          if (part === "\x1b[32m") {
-            currentColorClass = "text-emerald-400";
-            return null;
-          } else if (part === "\x1b[35m") {
-            currentColorClass = "text-purple-400 font-bold";
-            return null;
-          } else if (part === "\x1b[36m") {
-            currentColorClass = "text-cyan-400";
-            return null;
-          } else if (part === "\x1b[33m") {
-            currentColorClass = "text-amber-400";
-            return null;
-          } else if (part === "\x1b[31m") {
-            currentColorClass = "text-red-400";
-            return null;
-          } else if (part === "\x1b[34m") {
-            currentColorClass = "text-blue-400";
-            return null;
-          } else if (part === "\x1b[0m") {
-            currentColorClass = "text-[#E6EDF3]";
-            return null;
-          }
-
-          if (!part) return null;
-
-          return (
-            <span key={i} className={currentColorClass}>
-              {part}
-            </span>
-          );
-        })}
-      </>
-    );
+    return <span dangerouslySetInnerHTML={{ __html: formatted }} />;
   };
 
   return (

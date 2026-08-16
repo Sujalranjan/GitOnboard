@@ -219,57 +219,40 @@ export function CodeEditorPanel({
     ],
   };
 
-  // Clean token-based syntax highlighter for React
+  // Deterministic syntax highlighter helper rendering pure React elements (prevents SSR hydration error)
   const formatLine = (line: string) => {
     if (!line) return <span>&nbsp;</span>;
 
-    // Highlight comments
     if (line.trim().startsWith("//") || line.trim().startsWith("/*")) {
       return <span className="text-[#8B949E] italic">{line}</span>;
     }
 
-    const tokenRegex = /(\b(?:import|export|default|function|return|const|let|var|if|async|await|type|interface|from|class|extends)\b|'[^\']*'|"[^\"]*"|`[^\`]*`|\b(?:useState|useEffect|fetch|console|res|req|JSON|String|Number|Boolean)\b|\b(?:Home|TodoItem|Head|Todo|NextApiRequest|NextApiResponse)\b|<\/?[a-zA-Z0-9]+\b|\/?>|\b\d+\b)/g;
+    const tokenRegex = /(\b(?:import|export|default|function|return|const|let|var|if|async|await|type|interface|from)\b|\b(?:useState|useEffect|fetch|console|res|req|JSON|String|Number|Boolean)\b|\b(?:Home|TodoItem|Head|Todo|NextApiRequest|NextApiResponse)\b|'[^']*'|"[^"]*"|`[^`]*`|<\/?[a-zA-Z0-9]+(?:\s+[^>]*)?\/?>)/g;
+    const parts = line.split(tokenRegex);
 
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = tokenRegex.exec(line)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(line.substring(lastIndex, match.index));
-      }
-
-      const token = match[0];
-      let className = "text-[#E6EDF3]";
-
-      if (/^(import|export|default|function|return|const|let|var|if|async|await|type|interface|from|class|extends)$/.test(token)) {
-        className = "text-orange-400 font-medium";
-      } else if (/^(useState|useEffect|fetch|console|res|req|JSON|String|Number|Boolean)$/.test(token)) {
-        className = "text-purple-400";
-      } else if (/^(Home|TodoItem|Head|Todo|NextApiRequest|NextApiResponse)$/.test(token)) {
-        className = "text-blue-400 font-semibold";
-      } else if (/^('[^']*'|"[^"]*"|`[^`]*`)$/.test(token)) {
-        className = "text-emerald-400";
-      } else if (/^(<\/?[a-zA-Z0-9]+\b|\/?>)$/.test(token)) {
-        className = "text-rose-400";
-      } else if (/^\d+$/.test(token)) {
-        className = "text-amber-400";
-      }
-
-      parts.push(
-        <span key={`${match.index}-${token}`} className={className}>
-          {token}
-        </span>
-      );
-
-      lastIndex = tokenRegex.lastIndex;
-    }
-
-    if (lastIndex < line.length) {
-      parts.push(line.substring(lastIndex));
-    }
-
-    return <>{parts}</>;
+    return (
+      <span>
+        {parts.map((part, idx) => {
+          if (!part) return null;
+          if (/^(import|export|default|function|return|const|let|var|if|async|await|type|interface|from)$/.test(part)) {
+            return <span key={idx} className="text-amber-500 font-medium">{part}</span>;
+          }
+          if (/^(useState|useEffect|fetch|console|res|req|JSON|String|Number|Boolean)$/.test(part)) {
+            return <span key={idx} className="text-purple-400 font-medium">{part}</span>;
+          }
+          if (/^(Home|TodoItem|Head|Todo|NextApiRequest|NextApiResponse)$/.test(part)) {
+            return <span key={idx} className="text-[#61AFEF] font-semibold">{part}</span>;
+          }
+          if (/^('[^']*'|"[^"]*"|`[^`]*`)$/.test(part)) {
+            return <span key={idx} className="text-[#98C379]">{part}</span>;
+          }
+          if (/^<\/?[a-zA-Z0-9]+/.test(part)) {
+            return <span key={idx} className="text-rose-400">{part}</span>;
+          }
+          return <span key={idx}>{part}</span>;
+        })}
+      </span>
+    );
   };
 
   const breadcrumbs = activeFile.split("/");

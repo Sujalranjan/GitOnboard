@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import {
   Sparkles,
   ChevronDown,
@@ -10,6 +11,7 @@ import {
   Bell,
   Check,
   GitBranch,
+  Home,
 } from "lucide-react";
 
 export function HeaderGlobal() {
@@ -25,14 +27,14 @@ export function HeaderGlobal() {
     <header className="h-12 bg-[#14181E] border-b border-[#2F343A] flex items-center justify-between px-3 text-[#E6EDF3] select-none z-20 flex-shrink-0">
       {/* Left Section: Logo & Selectors */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 pr-2 border-r border-[#2F343A]">
+        <Link href="/" className="flex items-center gap-2 pr-2 border-r border-[#2F343A] hover:opacity-90 transition-opacity">
           <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center shadow-sm shadow-purple-500/20">
             <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
           </div>
           <span className="font-semibold text-sm tracking-wide text-white flex items-center gap-1.5">
             AI Workspace
           </span>
-        </div>
+        </Link>
 
         {/* Project Selector Dropdown */}
         <div className="relative">
