@@ -2,15 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Search, Bell, User, LogOut } from 'lucide-react';
 import { Button } from '../common/Button';
 import { ThemeToggle } from '../ThemeToggle';
 
 export function Header() {
+  const pathname = usePathname();
   const [user, setUser] = useState(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  if (pathname === '/workspace') {
+    return null;
+  }
   const [query, setQuery] = useState(searchParams.get('search') || '');
   const [debounceTimeout, setDebounceTimeout] = useState(null);
 
