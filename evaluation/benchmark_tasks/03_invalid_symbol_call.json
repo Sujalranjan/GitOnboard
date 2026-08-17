@@ -1,0 +1,19 @@
+{
+  "task_id": "TASK-003",
+  "category": "SYMBOL_REFERENCE_ERROR",
+  "title": "Invalid Symbol Call",
+  "repository_target": "default",
+  "base_commit": "main",
+  "prompt": "Update analytics dashboard metrics by computing user totals using calculate_user_total_v2 helper.",
+  "expected_contract": {
+    "required_endpoints": ["GET /api/analytics"],
+    "expected_components": ["src/pages/api/analytics.ts"],
+    "invariants": ["Functions referenced must exist in indexed AST symbol database"],
+    "required_tests": ["Unit test verifying analytics calculation"]
+  },
+  "known_pitfall_check": {
+    "type": "AST_SYMBOL_CHECK",
+    "phantom_symbol": "calculate_user_total_v2"
+  },
+  "seeded_failure_mode": "Symbol Hallucination: Calls un-exported service method calculate_user_total_v2."
+}

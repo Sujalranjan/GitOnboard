@@ -1,22 +1,20 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Editor, { DiffEditor, OnMount, loader } from "@monaco-editor/react";
 import {
   FileCode,
-  FileJson,
-  FileText,
-  File,
   X,
-  Plus,
   ChevronRight,
-  Sparkles,
-  Columns,
   Code2,
   FileDiff,
   AlertTriangle,
+  Save,
+  RefreshCw,
+  Check,
 } from "lucide-react";
 import { RunState } from "@/types/workspace";
+import { getFileContent, saveFileContent } from "@/services/repositoryApi";
 
 interface CodeEditorPanelProps {
   activeFile: string;
@@ -28,111 +26,6 @@ interface CodeEditorPanelProps {
   onSetEditorMode?: (mode: "source" | "diff") => void;
 }
 
-const SAMPLE_SOURCE_CODE: Record<string, string> = {
-  "src/pages/api/index.tsx": `import React from 'react';
-import Head from 'next/head';
-
-export default function Home() {
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <Head>
-        <title>GitOnBoard Verification Platform</title>
-      </Head>
-      <h1 className="text-3xl font-bold text-[#E6EDF3]">
-        GitOnBoard — Repository Intelligence & Verification
-      </h1>
-      <p className="mt-2 text-slate-400">
-        Adversarial multi-vector verification mesh for AI-generated code.
-      </p>
-    </div>
-  );
-}`,
-
-  "src/components/TodoItem.tsx": `import React from 'react';
-
-interface TodoItemProps {
-  id: number;
-  text: string;
-  completed: boolean;
-  onToggle: (id: number) => void;
-}
-
-export function TodoItem({ id, text, completed, onToggle }: TodoItemProps) {
-  return (
-    <div className="flex items-center gap-2 p-2 border border-slate-800 rounded">
-      <input
-        type="checkbox"
-        checked={completed}
-        onChange={() => onToggle(id)}
-        className="rounded text-purple-600 focus:ring-purple-500"
-      />
-      <span className={completed ? 'line-through text-slate-500' : 'text-slate-200'}>
-        {text}
-      </span>
-    </div>
-  );
-}`,
-
-  "src/pages/api/todos.ts": `import type { NextApiRequest, NextApiResponse } from 'next';
-
-interface Todo {
-  id: number;
-  text: string;
-  completed: boolean;
-}
-
-let todosList: Todo[] = [
-  { id: 1, text: 'Initialize AI Workspace', completed: true },
-];
-
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === 'GET') {
-    return res.status(200).json(todosList);
-  }
-  if (req.method === 'POST') {
-    const { text } = req.body;
-    const newTodo: Todo = { id: Date.now(), text, completed: false };
-    todosList.push(newTodo);
-    return res.status(201).json(newTodo);
-  }
-  return res.status(405).end();
-}`,
-};
-
-const SAMPLE_PATCHED_CODE = `import type { NextApiRequest, NextApiResponse } from 'next';
-import { z } from 'zod';
-
-const createTodoSchema = z.object({
-  text: z.string().min(1, 'Task description required'),
-});
-
-interface Todo {
-  id: number;
-  text: string;
-  completed: boolean;
-}
-
-let todosList: Todo[] = [
-  { id: 1, text: 'Initialize AI Workspace', completed: true },
-];
-
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === 'GET') {
-    return res.status(200).json(todosList);
-  }
-  if (req.method === 'POST') {
-    const validation = createTodoSchema.safeParse(req.body);
-    if (!validation.success) {
-      return res.status(400).json({ error: 'Validation failed', details: validation.error.format() });
-    }
-    const { text } = req.body;
-    const newTodo: Todo = { id: Date.now(), text, completed: false };
-    todosList.push(newTodo);
-    return res.status(201).json(newTodo);
-  }
-  return res.status(405).end();
-}`;
-
 export function CodeEditorPanel({
   activeFile,
   onSelectFile,
@@ -142,6 +35,8 @@ export function CodeEditorPanel({
   editorMode: externalEditorMode,
   onSetEditorMode,
 }: CodeEditorPanelProps) {
+  const repoName = runState?.repoId || "my-project";
+
   const [internalEditorMode, setInternalEditorMode] = useState<"source" | "diff">("source");
   const editorMode = externalEditorMode || internalEditorMode;
 
@@ -150,28 +45,85 @@ export function CodeEditorPanel({
     if (onSetEditorMode) onSetEditorMode(mode);
   };
 
+  const [fileContent, setFileContent] = useState<string>("");
+  const [loadingFile, setLoadingFile] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+
+  const editorRef = useRef<any>(null);
+
+  // Auto-detect language for Monaco
+  const getLanguage = (path: string) => {
+    const lower = path.toLowerCase();
+    if (lower.endsWith(".tsx") || lower.endsWith(".ts")) return "typescript";
+    if (lower.endsWith(".jsx") || lower.endsWith(".js")) return "javascript";
+    if (lower.endsWith(".py")) return "python";
+    if (lower.endsWith(".json")) return "json";
+    if (lower.endsWith(".css")) return "css";
+    if (lower.endsWith(".html")) return "html";
+    if (lower.endsWith(".md")) return "markdown";
+    if (lower.endsWith(".toml") || lower.endsWith(".yaml") || lower.endsWith(".yml")) return "yaml";
+    return "plaintext";
+  };
+
   const getFileBasename = (path: string) => {
     const parts = path.split("/");
     return parts[parts.length - 1];
   };
 
-  const getLanguage = (path: string) => {
-    if (path.endsWith(".tsx") || path.endsWith(".ts")) return "typescript";
-    if (path.endsWith(".jsx") || path.endsWith(".js")) return "javascript";
-    if (path.endsWith(".json")) return "json";
-    if (path.endsWith(".md")) return "markdown";
-    return "typescript";
-  };
+  // Dynamically fetch file content from Azurite Blob Storage on activeFile change
+  useEffect(() => {
+    if (!activeFile) return;
 
-  // Base code vs Patched code for DiffEditor
-  const baseCode = SAMPLE_SOURCE_CODE[activeFile] || `// ${activeFile}\nexport default function Module() {\n  return null;\n}`;
-  const patchedCode =
-    activeFile === "src/pages/api/todos.ts"
-      ? SAMPLE_PATCHED_CODE
-      : runState?.rawDiff || baseCode;
+    let isMounted = true;
+    setLoadingFile(true);
+    setSaveSuccess(false);
+
+    getFileContent(repoName, activeFile)
+      .then((res) => {
+        if (isMounted) {
+          setFileContent(res.content || "");
+          setLoadingFile(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setFileContent(`// Error loading file content for ${activeFile}`);
+          setLoadingFile(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [repoName, activeFile]);
+
+  // Handle Save Action (Ctrl+S or Save Button)
+  const handleSave = async () => {
+    if (!activeFile || isSaving) return;
+
+    const currentCode = editorRef.current ? editorRef.current.getValue() : fileContent;
+    setIsSaving(true);
+
+    const success = await saveFileContent(repoName, activeFile, currentCode);
+    setIsSaving(false);
+
+    if (success) {
+      setFileContent(currentCode);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2500);
+    }
+  };
 
   // Set Monaco markers for defects
   const handleEditorDidMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor;
+
+    // Save shortcut listener
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      handleSave();
+    });
+
     const defects = runState?.report?.defects || [];
     if (!defects.length) return;
 
@@ -180,7 +132,7 @@ export function CodeEditorPanel({
       .map((d) => ({
         startLineNumber: d.line_number || 1,
         startColumn: 1,
-        endLineNumber: d.line_number || 2,
+        endLineNumber: (d.line_number || 1) + 1,
         endColumn: 100,
         message: `[${d.category}] ${d.description}`,
         severity:
@@ -197,12 +149,14 @@ export function CodeEditorPanel({
     }
   };
 
+  const patchedCode = runState?.rawDiff || fileContent;
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#0A0D10] text-[#E6EDF3] border-b border-[#2F343A]">
-      {/* Top Editor Control Bar with Tabs */}
+      {/* Top Control Bar */}
       <div className="h-9 bg-[#14181E] border-b border-[#2F343A] flex items-center justify-between px-2 select-none flex-shrink-0">
         {/* Open Tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none max-w-[70%]">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none max-w-[65%]">
           {openTabs.map((tabPath) => {
             const isActive = tabPath === activeFile;
             const basename = getFileBasename(tabPath);
@@ -232,57 +186,88 @@ export function CodeEditorPanel({
           })}
         </div>
 
-        {/* Mode Switcher: [ Source Code ] vs [ Agent Diff ] */}
-        <div className="flex items-center gap-1 bg-[#0A0D10] border border-[#2F343A] p-0.5 rounded-lg text-xs font-mono">
+        {/* Right Actions: Save Button & Mode Switcher */}
+        <div className="flex items-center gap-2">
+          {/* Save Button */}
           <button
-            onClick={() => setEditorMode("source")}
-            className={`px-2 py-0.5 rounded flex items-center gap-1 transition-all ${
-              editorMode === "source"
-                ? "bg-purple-600/30 text-purple-300 font-semibold border border-purple-500/40 shadow-sm"
-                : "text-[#8B949E] hover:text-[#E6EDF3]"
+            onClick={handleSave}
+            disabled={isSaving}
+            className={`px-2 py-0.5 rounded text-xs font-semibold flex items-center gap-1 transition-all ${
+              saveSuccess
+                ? "bg-emerald-950 text-emerald-300 border border-emerald-500/40"
+                : "bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 border border-purple-500/40"
             }`}
+            title="Save File (Ctrl+S)"
           >
-            <Code2 className="w-3.5 h-3.5" />
-            <span>Source Code</span>
+            {isSaving ? (
+              <RefreshCw className="w-3 h-3 animate-spin text-purple-300" />
+            ) : saveSuccess ? (
+              <Check className="w-3 h-3 text-emerald-400" />
+            ) : (
+              <Save className="w-3 h-3" />
+            )}
+            <span>{saveSuccess ? "Saved" : "Save"}</span>
           </button>
 
-          <button
-            onClick={() => setEditorMode("diff")}
-            className={`px-2 py-0.5 rounded flex items-center gap-1 transition-all ${
-              editorMode === "diff"
-                ? "bg-purple-600/30 text-purple-300 font-semibold border border-purple-500/40 shadow-sm"
-                : "text-[#8B949E] hover:text-[#E6EDF3]"
-            }`}
-          >
-            <FileDiff className="w-3.5 h-3.5" />
-            <span>Agent Diff</span>
-          </button>
+          {/* Mode Switcher: [ Source Code ] vs [ Agent Diff ] */}
+          <div className="flex items-center gap-1 bg-[#0A0D10] border border-[#2F343A] p-0.5 rounded-lg text-xs font-mono">
+            <button
+              onClick={() => setEditorMode("source")}
+              className={`px-2 py-0.5 rounded flex items-center gap-1 transition-all ${
+                editorMode === "source"
+                  ? "bg-purple-600/30 text-purple-300 font-semibold border border-purple-500/40 shadow-sm"
+                  : "text-[#8B949E] hover:text-[#E6EDF3]"
+              }`}
+            >
+              <Code2 className="w-3.5 h-3.5" />
+              <span>Source Code</span>
+            </button>
+
+            <button
+              onClick={() => setEditorMode("diff")}
+              className={`px-2 py-0.5 rounded flex items-center gap-1 transition-all ${
+                editorMode === "diff"
+                  ? "bg-purple-600/30 text-purple-300 font-semibold border border-purple-500/40 shadow-sm"
+                  : "text-[#8B949E] hover:text-[#E6EDF3]"
+              }`}
+            >
+              <FileDiff className="w-3.5 h-3.5" />
+              <span>Agent Diff</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Breadcrumb Path Bar */}
       <div className="h-6 bg-[#0A0D10] border-b border-[#2F343A]/60 px-3 flex items-center gap-1 text-[11px] text-[#8B949E] font-mono select-none flex-shrink-0">
-        <span>{activeFile.split("/")[0]}</span>
+        <span>{repoName}</span>
         <ChevronRight className="w-3 h-3 text-[#2F343A]" />
-        <span>{activeFile.split("/").slice(1, -1).join("/")}</span>
+        <span>{activeFile.split("/").slice(0, -1).join("/") || "."}</span>
         <ChevronRight className="w-3 h-3 text-[#2F343A]" />
         <span className="text-purple-400 font-semibold">{getFileBasename(activeFile)}</span>
 
         {runState?.report?.defects && runState.report.defects.length > 0 && (
           <div className="ml-auto flex items-center gap-1 text-rose-400 bg-rose-950/40 px-2 py-0.5 rounded border border-rose-500/30">
             <AlertTriangle className="w-3 h-3" />
-            <span>{runState.report.defects.length} verification defect(s) flagged</span>
+            <span>{runState.report.defects.length} defect(s) flagged</span>
           </div>
         )}
       </div>
 
-      {/* Monaco Editor / Diff Editor Container */}
+      {/* Monaco Editor / Loading Skeleton */}
       <div className="flex-1 min-h-0 relative bg-[#0A0D10]">
-        {editorMode === "diff" ? (
+        {loadingFile ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-[#0A0D10] text-[#8B949E] text-xs font-mono">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-purple-400" />
+              <span>Streaming blob payload from Azurite Storage...</span>
+            </div>
+          </div>
+        ) : editorMode === "diff" ? (
           <DiffEditor
             height="100%"
             language={getLanguage(activeFile)}
-            original={baseCode}
+            original={fileContent}
             modified={patchedCode}
             theme="vs-dark"
             options={{
@@ -299,7 +284,7 @@ export function CodeEditorPanel({
           <Editor
             height="100%"
             language={getLanguage(activeFile)}
-            value={baseCode}
+            value={fileContent}
             theme="vs-dark"
             onMount={handleEditorDidMount}
             options={{

@@ -50,9 +50,14 @@ export function AIAgentPanel({
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [promptInput, setPromptInput] = useState("");
 
-  const models = ["GPT-4o", "Claude 3.5 Sonnet", "Gemini 1.5 Pro", "Local Ollama"];
+  const supportedModels = [
+    { name: "GPT-4o", provider: "OpenAI" },
+    { name: "Claude 3.5 Sonnet", provider: "Anthropic" },
+    { name: "Gemini 1.5 Pro", provider: "Google" },
+    { name: "Local Ollama (Llama 3.2)", provider: "Ollama" },
+  ];
 
-  const [messages, setMessages] = useState<
+  const [chatMessages, setChatMessages] = useState<
     Array<{
       id: string;
       sender: "user" | "agent";
@@ -63,23 +68,7 @@ export function AIAgentPanel({
       };
       quickActions?: string[];
     }>
-  >([
-    {
-      id: "1",
-      sender: "user",
-      text: "Add a new API route for managing user todos with GET and POST handlers.",
-    },
-    {
-      id: "2",
-      sender: "agent",
-      text: "I've synthesized the Implementation Contract and created `src/pages/api/todos.ts`. Running multi-vector verification...",
-      codeBlock: {
-        fileName: "src/pages/api/todos.ts",
-        code: `import type { NextApiRequest, NextApiResponse } from 'next';\n\ninterface Todo {\n  id: number;\n  text: string;\n  completed: boolean;\n}\n\nlet todosList: Todo[] = [\n  { id: 1, text: 'Initialize AI Workspace', completed: true },\n];\n\nexport default function handler(req: NextApiRequest, res: NextApiResponse) {\n  if (req.method === 'GET') {\n    return res.status(200).json(todosList);\n  }\n  if (req.method === 'POST') {\n    const { text } = req.body;\n    const newTodo: Todo = { id: Date.now(), text, completed: false };\n    todosList.push(newTodo);\n    return res.status(201).json(newTodo);\n  }\n  return res.status(405).end();\n}`,
-      },
-      quickActions: ["Trigger Repair Iteration", "View Contract Matrix"],
-    },
-  ]);
+  >([]);
 
   if (!isOpen) return null;
 
@@ -87,7 +76,7 @@ export function AIAgentPanel({
     const query = textToSend || promptInput;
     if (!query.trim()) return;
 
-    if (query.includes("Repair") || query.includes("Trigger Repair")) {
+    if (query.includes("Repair") || query.includes("Auto-Repair")) {
       if (onTriggerRepair) onTriggerRepair();
     } else if (query.includes("Matrix")) {
       setActiveSubTab("matrix");
@@ -96,7 +85,7 @@ export function AIAgentPanel({
     }
 
     const userMsgId = Date.now().toString();
-    setMessages((prev) => [...prev, { id: userMsgId, sender: "user", text: query }]);
+    setChatMessages((prev) => [...prev, { id: userMsgId, sender: "user", text: query }]);
     if (!textToSend) setPromptInput("");
   };
 
@@ -105,14 +94,14 @@ export function AIAgentPanel({
   const defects = report?.defects || [];
   const iteration = runState?.iteration || 0;
 
-  // Triangulated evidence matrix counts
-  const staticDefects = defects.filter((d) => (d.category || "").includes("STATIC"));
-  const dynamicDefects = defects.filter((d) => (d.category || "").includes("DYNAMIC") || (d.category || "").includes("TEST"));
+  // Evidence matrix defect categories
+  const staticDefects = defects.filter((d) => (d.category || "").includes("STATIC") || (d.category || "").includes("SYMBOL") || (d.category || "").includes("IMPORT"));
+  const dynamicDefects = defects.filter((d) => (d.category || "").includes("DYNAMIC") || (d.category || "").includes("TEST") || (d.category || "").includes("BUILD"));
   const contractDefects = defects.filter((d) => (d.category || "").includes("CONTRACT"));
 
   return (
     <div className="w-80 bg-[#14181E] border-l border-[#2F343A] flex flex-col h-full select-none flex-shrink-0 text-[#E6EDF3]">
-      {/* Top Bar Header */}
+      {/* Top Header */}
       <div className="h-12 px-3 border-b border-[#2F343A] flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="relative flex items-center justify-center">
@@ -135,14 +124,14 @@ export function AIAgentPanel({
               }`}
             />
           </div>
-          <span className="font-bold text-xs tracking-wider text-white">VERIFICATION CONTROLLER</span>
+          <span className="font-bold text-xs tracking-wider text-white">AI VERIFICATION AGENT</span>
         </div>
 
         <div className="flex items-center gap-1">
           <button className="p-1.5 text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors" title="Save Changes">
             <Save className="w-3.5 h-3.5" />
           </button>
-          <button className="p-1.5 text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors" title="Commit Git">
+          <button className="p-1.5 text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors" title="Commit Changes">
             <GitCommit className="w-3.5 h-3.5" />
           </button>
           <button onClick={onClose} className="p-1.5 text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors" title="Close Panel">
@@ -195,22 +184,22 @@ export function AIAgentPanel({
         </button>
       </div>
 
-      {/* Loading Bar */}
+      {/* Real-time Status Loader */}
       {runState?.isLoading && (
         <div className="bg-purple-950/60 border-b border-purple-500/40 p-2 flex items-center gap-2 text-xs text-purple-200 animate-pulse">
           <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-400 flex-shrink-0" />
-          <span>{runState.statusMessage || "Running verification mesh..."}</span>
+          <span>{runState.statusMessage || "Dispatching requirement..."}</span>
         </div>
       )}
 
-      {/* Main Content Body */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-4 text-xs bg-[#14181E]">
+      {/* Main Sub-Panel Body */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-4 text-xs bg-[#14181E] scrollbar-thin">
         {/* SUB-PANEL 1: Contract Checklist */}
         {activeSubTab === "context" && (
           <div className="space-y-3">
             <div className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider flex items-center gap-1.5 border-b border-[#2F343A] pb-1.5">
               <ListChecks className="w-4 h-4 text-purple-400" />
-              <span>Contract Verification Checklist</span>
+              <span>Contract Checklist</span>
             </div>
 
             {contract ? (
@@ -235,8 +224,8 @@ export function AIAgentPanel({
                   </div>
                   {contract.expected_components.map((comp, idx) => (
                     <div key={idx} className="flex items-center justify-between text-[11px] font-mono">
-                      <span>{comp}</span>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="truncate">{comp}</span>
+                      <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 ml-1" />
                     </div>
                   ))}
                 </div>
@@ -263,7 +252,7 @@ export function AIAgentPanel({
               </div>
             ) : (
               <div className="text-[#8B949E] text-xs italic">
-                Submit a task prompt to synthesize an Implementation Contract.
+                No active contract. Enter a prompt below to synthesize an Implementation Contract.
               </div>
             )}
           </div>
@@ -282,7 +271,7 @@ export function AIAgentPanel({
 
             {/* Matrix Cards */}
             <div className="grid grid-cols-1 gap-2">
-              {/* 1. Static Check Card */}
+              {/* 1. Static AST Check Card */}
               <div
                 className={`p-2.5 rounded-lg border flex items-center justify-between ${
                   report?.static_passed
@@ -297,7 +286,7 @@ export function AIAgentPanel({
                     ) : (
                       <ShieldAlert className="w-4 h-4 text-rose-400" />
                     )}
-                    <span>Static AST & Symbol Vector</span>
+                    <span>Static AST Check Card</span>
                   </div>
                   <div className="text-[10px] opacity-80 mt-0.5 font-mono">
                     Phantom Symbols: {staticDefects.length} detected
@@ -327,10 +316,10 @@ export function AIAgentPanel({
                     ) : (
                       <ShieldAlert className="w-4 h-4 text-rose-400" />
                     )}
-                    <span>Dynamic Test Execution Vector</span>
+                    <span>Dynamic Tests Card</span>
                   </div>
                   <div className="text-[10px] opacity-80 mt-0.5 font-mono">
-                    Test Failures: {dynamicDefects.length} detected
+                    Test Executions: {report?.dynamic_passed ? "All passed" : `${dynamicDefects.length} failed`}
                   </div>
                 </div>
                 <span
@@ -357,10 +346,10 @@ export function AIAgentPanel({
                     ) : (
                       <ShieldAlert className="w-4 h-4 text-rose-400" />
                     )}
-                    <span>Implementation Contract Vector</span>
+                    <span>Contract Verification Card</span>
                   </div>
                   <div className="text-[10px] opacity-80 mt-0.5 font-mono">
-                    Invariant Violations: {contractDefects.length} detected
+                    Semantic Violations: {contractDefects.length} detected
                   </div>
                 </div>
                 <span
@@ -373,16 +362,15 @@ export function AIAgentPanel({
               </div>
             </div>
 
-            {/* SUB-PANEL 3: Adversarial Repair Timeline */}
+            {/* Adversarial Repair Timeline */}
             <div className="pt-2 space-y-2">
               <div className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5 text-amber-400" />
                 <span>Adversarial Repair Timeline</span>
               </div>
 
-              {/* Iteration Badges Timeline */}
               <div className="bg-[#0A0D10] border border-[#2F343A] p-2.5 rounded-lg space-y-2">
-                <div className="flex items-center gap-2 text-[11px] font-mono">
+                <div className="flex items-center gap-1.5 text-[11px] font-mono flex-wrap">
                   <span className={`px-2 py-0.5 rounded font-bold ${defects.length > 0 ? "bg-rose-950 text-rose-300" : "bg-emerald-950 text-emerald-300"}`}>
                     Iteration {iteration || 1} ({defects.length > 0 ? `Failed: ${defects.length} defects` : "Passed"})
                   </span>
@@ -397,7 +385,7 @@ export function AIAgentPanel({
                   )}
                 </div>
 
-                {/* Auto-Repair Diff Button */}
+                {/* Auto-Repair Button */}
                 {defects.length > 0 && onTriggerRepair && (
                   <button
                     onClick={onTriggerRepair}
@@ -411,49 +399,42 @@ export function AIAgentPanel({
               </div>
             </div>
 
-            {/* Chat Conversation History if activeSubTab === "chat" */}
+            {/* Live Conversation Thread if activeSubTab === "chat" */}
             {activeSubTab === "chat" && (
               <div className="space-y-3 pt-2">
-                {messages.map((msg) => (
-                  <div key={msg.id} className="space-y-2">
-                    {msg.sender === "user" ? (
-                      <div className="flex items-start gap-2 justify-end">
-                        <div className="bg-purple-600/25 border border-purple-500/40 text-[#E6EDF3] p-2.5 rounded-xl text-xs max-w-[85%] leading-relaxed">
-                          {msg.text}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-2">
-                        <div className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center flex-shrink-0 text-[10px]">
-                          <Sparkles className="w-3 h-3" />
-                        </div>
-                        <div className="flex-1 bg-[#0A0D10] border border-[#2F343A] p-2.5 rounded-xl text-xs leading-relaxed">
-                          {msg.text}
-                          {msg.quickActions && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {msg.quickActions.map((act, i) => (
-                                <button
-                                  key={i}
-                                  onClick={() => handleSendMessage(act)}
-                                  className="bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded text-[10px]"
-                                >
-                                  {act}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                {chatMessages.length === 0 ? (
+                  <div className="p-3 bg-[#0A0D10] border border-[#2F343A] rounded-lg text-slate-400 text-xs italic">
+                    No prompt dispatched yet. Type your requirement below to dispatch to FastAPI planning & verification backend.
                   </div>
-                ))}
+                ) : (
+                  chatMessages.map((msg) => (
+                    <div key={msg.id} className="space-y-2">
+                      {msg.sender === "user" ? (
+                        <div className="flex items-start gap-2 justify-end">
+                          <div className="bg-purple-600/25 border border-purple-500/40 text-[#E6EDF3] p-2.5 rounded-xl text-xs max-w-[85%] leading-relaxed">
+                            {msg.text}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2">
+                          <div className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center flex-shrink-0 text-[10px]">
+                            <Sparkles className="w-3 h-3" />
+                          </div>
+                          <div className="flex-1 bg-[#0A0D10] border border-[#2F343A] p-2.5 rounded-xl text-xs leading-relaxed">
+                            {msg.text}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* User Input Prompt Bar */}
+      {/* User Input & Model Selector */}
       <div className="p-3 bg-[#0A0D10] border-t border-[#2F343A] space-y-2 flex-shrink-0">
         <textarea
           rows={2}
@@ -465,30 +446,51 @@ export function AIAgentPanel({
               handleSendMessage();
             }
           }}
-          placeholder="Type feature requirement or repair prompt..."
+          placeholder="Enter feature requirement (e.g. Add authentication middleware)..."
           className="w-full bg-[#14181E] border border-[#2F343A] rounded-lg p-2 text-xs text-[#E6EDF3] placeholder-[#8B949E] focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 resize-none font-sans"
         />
 
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 text-[#8B949E]">
-            <button className="p-1 hover:text-[#E6EDF3] rounded" title="Attach file">
-              <Paperclip className="w-3.5 h-3.5" />
+          {/* Model Selector Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+              className="flex items-center gap-1.5 bg-[#14181E] hover:bg-[#1E222A] text-[11px] text-[#8B949E] hover:text-[#E6EDF3] px-2.5 py-1 rounded border border-[#2F343A] font-medium transition-colors"
+            >
+              <span>{selectedModel}</span>
+              <ChevronDown className="w-3 h-3" />
             </button>
-            <button className="p-1 hover:text-[#E6EDF3] rounded" title="Copy">
-              <ClipboardCopy className="w-3.5 h-3.5" />
-            </button>
+
+            {isModelDropdownOpen && (
+              <div className="absolute left-0 bottom-full mb-1 w-48 bg-[#14181E] border border-[#2F343A] rounded shadow-xl py-1 z-50 text-xs">
+                <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#8B949E] border-b border-[#2F343A]">
+                  Supported LLM Provider
+                </div>
+                {supportedModels.map((m) => (
+                  <button
+                    key={m.name}
+                    onClick={() => {
+                      setSelectedModel(m.name);
+                      setIsModelDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-1.5 hover:bg-[#1E222A] text-[#E6EDF3] flex items-center justify-between text-[11px]"
+                  >
+                    <span>{m.name}</span>
+                    <span className="text-[9px] text-[#8B949E] uppercase">{m.provider}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleSendMessage()}
-              disabled={runState?.isLoading}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-3 py-1 rounded-lg text-xs font-semibold shadow-md transition-all disabled:opacity-50 flex items-center gap-1"
-            >
-              <span>Send</span>
-              <Send className="w-3 h-3" />
-            </button>
-          </div>
+          <button
+            onClick={() => handleSendMessage()}
+            disabled={runState?.isLoading}
+            className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-3 py-1 rounded-lg text-xs font-semibold shadow-md transition-all disabled:opacity-50 flex items-center gap-1"
+          >
+            <span>Dispatch</span>
+            <Send className="w-3 h-3" />
+          </button>
         </div>
       </div>
     </div>

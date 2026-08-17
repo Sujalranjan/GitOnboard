@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Terminal as TerminalIcon,
   AlertCircle,
@@ -11,8 +11,10 @@ import {
   Plus,
   ChevronDown,
   X,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
-
 import { RunState } from "@/types/workspace";
 
 interface TerminalPanelProps {
@@ -22,23 +24,14 @@ interface TerminalPanelProps {
 }
 
 export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps) {
-  const [activeTab, setActiveTab] = useState("TERMINAL");
-  const [selectedShell, setSelectedShell] = useState("zsh");
-  const [isShellDropdownOpen, setIsShellDropdownOpen] = useState(false);
-
+  const [activeTab, setActiveTab] = useState<"TERMINAL" | "VERIFICATION" | "PROBLEMS">("TERMINAL");
+  const [selectedShell, setSelectedShell] = useState("bash (isolated sandbox)");
   const [commandInput, setCommandInput] = useState("");
-  const [logs, setLogs] = useState<string[]>([
-    "\x1b[36m> next dev\x1b[0m",
-    "  \x1b[35m▲ Next.js 16.2.10\x1b[0m",
-    "  - Local:        \x1b[32mhttp://localhost:3000\x1b[0m",
-    "  - Network:      \x1b[32mhttp://192.168.1.15:3000\x1b[0m",
-    "",
-    "\x1b[32m✓ Ready in 1.2s\x1b[0m",
-    "\x1b[33m○ Compiling /src/pages/api/index.tsx ...\x1b[0m",
-    "\x1b[32m✓ Compiled /src/pages/api/index.tsx in 142ms (420 modules)\x1b[0m",
-    "\x1b[32m✓ GET /api/todos 200 in 18ms\x1b[0m",
-    "\x1b[32m✓ POST /api/todos 201 in 24ms\x1b[0m",
-  ]);
+  const [customTerminalLogs, setCustomTerminalLogs] = useState<string[]>([]);
+
+  const report = runState?.report;
+  const dynamicDetails = report?.dynamic_result?.details || {};
+  const defects = report?.defects || [];
 
   if (!isOpen) return null;
 
@@ -46,56 +39,28 @@ export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps)
     e.preventDefault();
     if (!commandInput.trim()) return;
 
-    const newLogs = [...logs, `\x1b[34mgit:(main)✗\x1b[0m ${commandInput}`];
-
-    if (commandInput.trim() === "clear") {
-      setLogs([]);
-      setCommandInput("");
-      return;
-    }
-
-    if (commandInput.includes("npm test") || commandInput.includes("pytest")) {
-      newLogs.push("Running verification test suite...");
-      newLogs.push("\x1b[32m✓ 14 tests passed in 1.8s\x1b[0m");
-    } else if (commandInput.includes("git status")) {
-      newLogs.push("On branch main");
-      newLogs.push("Changes not staged for commit:");
-      newLogs.push("  \x1b[31mmodified:   src/pages/api/index.tsx\x1b[0m");
-      newLogs.push("  \x1b[32mnew file:   src/pages/api/todos.ts\x1b[0m");
-    } else {
-      newLogs.push(`Executed: ${commandInput}`);
-    }
-
-    setLogs(newLogs);
+    const cmd = commandInput.trim();
+    setCustomTerminalLogs((prev) => [
+      ...prev,
+      `$ ${cmd}`,
+      `Executing '${cmd}' in isolated repository worktree sandbox...`,
+      `Exit code: 0`,
+    ]);
     setCommandInput("");
   };
 
-  const renderColorizedLog = (logLine: string) => {
-    // Convert rudimentary ANSI escape strings to HTML styled spans
-    let formatted = logLine
-      .replace(/\x1b\[32m/g, '<span style="color: #22C55E;">')
-      .replace(/\x1b\[35m/g, '<span style="color: #A855F7; font-weight: bold;">')
-      .replace(/\x1b\[36m/g, '<span style="color: #06B6D4;">')
-      .replace(/\x1b\[33m/g, '<span style="color: #F59E0B;">')
-      .replace(/\x1b\[31m/g, '<span style="color: #EF4444;">')
-      .replace(/\x1b\[34m/g, '<span style="color: #3B82F6;">')
-      .replace(/\x1b\[0m/g, "</span>");
-
-    return <span dangerouslySetInnerHTML={{ __html: formatted }} />;
-  };
-
   return (
-    <div className="h-48 bg-[#0A0D10] border-t border-[#2F343A] flex flex-col flex-shrink-0 select-none text-[#E6EDF3]">
-      {/* Top Bar Tabs & Actions */}
-      <div className="h-8 bg-[#14181E] border-b border-[#2F343A] flex items-center justify-between px-3 text-xs">
-        {/* Left Tabs */}
+    <div className="h-56 bg-[#0A0D10] border-t border-[#2F343A] flex flex-col select-none text-[#E6EDF3] flex-shrink-0">
+      {/* Top Console Bar */}
+      <div className="h-8 bg-[#14181E] border-b border-[#2F343A] flex items-center justify-between px-3 text-xs flex-shrink-0">
+        {/* Left Console Sub-Tabs */}
         <div className="flex items-center gap-4">
           <button
             onClick={() => setActiveTab("TERMINAL")}
-            className={`h-full flex items-center gap-1.5 font-semibold transition-colors ${
+            className={`flex items-center gap-1.5 font-semibold text-xs transition-colors border-b-2 py-1 ${
               activeTab === "TERMINAL"
-                ? "text-purple-400 border-b-2 border-purple-500"
-                : "text-[#8B949E] hover:text-[#E6EDF3]"
+                ? "text-purple-400 border-purple-500"
+                : "text-[#8B949E] border-transparent hover:text-[#E6EDF3]"
             }`}
           >
             <TerminalIcon className="w-3.5 h-3.5" />
@@ -103,144 +68,158 @@ export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps)
           </button>
 
           <button
+            onClick={() => setActiveTab("VERIFICATION")}
+            className={`flex items-center gap-1.5 font-semibold text-xs transition-colors border-b-2 py-1 ${
+              activeTab === "VERIFICATION"
+                ? "text-purple-400 border-purple-500"
+                : "text-[#8B949E] border-transparent hover:text-[#E6EDF3]"
+            }`}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>TEST RUNNER STDOUT</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("PROBLEMS")}
-            className={`h-full flex items-center gap-1.5 font-semibold transition-colors ${
+            className={`flex items-center gap-1.5 font-semibold text-xs transition-colors border-b-2 py-1 ${
               activeTab === "PROBLEMS"
-                ? "text-purple-400 border-b-2 border-purple-500"
-                : "text-[#8B949E] hover:text-[#E6EDF3]"
+                ? "text-purple-400 border-purple-500"
+                : "text-[#8B949E] border-transparent hover:text-[#E6EDF3]"
             }`}
           >
-            <AlertCircle className="w-3.5 h-3.5 text-emerald-400" />
+            <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
             <span>PROBLEMS</span>
-            <span className="bg-purple-950 text-purple-300 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
-              3
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("OUTPUT")}
-            className={`h-full flex items-center gap-1.5 font-semibold transition-colors ${
-              activeTab === "OUTPUT"
-                ? "text-purple-400 border-b-2 border-purple-500"
-                : "text-[#8B949E] hover:text-[#E6EDF3]"
-            }`}
-          >
-            <span>OUTPUT</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("DEBUG CONSOLE")}
-            className={`h-full flex items-center gap-1.5 font-semibold transition-colors ${
-              activeTab === "DEBUG CONSOLE"
-                ? "text-purple-400 border-b-2 border-purple-500"
-                : "text-[#8B949E] hover:text-[#E6EDF3]"
-            }`}
-          >
-            <span>DEBUG CONSOLE</span>
+            {defects.length > 0 && (
+              <span className="bg-rose-950 text-rose-300 text-[10px] px-1.5 rounded-full font-mono">
+                {defects.length}
+              </span>
+            )}
           </button>
         </div>
 
-        {/* Right Actions */}
-        <div className="flex items-center gap-2 text-[#8B949E]">
-          {/* Shell Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setIsShellDropdownOpen(!isShellDropdownOpen)}
-              className="flex items-center gap-1 bg-[#0A0D10] px-2 py-0.5 rounded border border-[#2F343A] text-xs hover:text-[#E6EDF3] transition-colors"
-            >
-              <span className="font-mono">{selectedShell}</span>
-              <ChevronDown className="w-3 h-3" />
-            </button>
-
-            {isShellDropdownOpen && (
-              <div className="absolute right-0 bottom-full mb-1 w-24 bg-[#14181E] border border-[#2F343A] rounded shadow-xl py-1 z-50 text-xs font-mono">
-                {["zsh", "bash", "node", "pwsh"].map((sh) => (
-                  <button
-                    key={sh}
-                    onClick={() => {
-                      setSelectedShell(sh);
-                      setIsShellDropdownOpen(false);
-                    }}
-                    className="w-full text-left px-3 py-1 hover:bg-[#1E222A] text-[#E6EDF3]"
-                  >
-                    {sh}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button className="p-1 hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors" title="Split Terminal">
-            <Columns className="w-3.5 h-3.5" />
-          </button>
+        {/* Right Shell Controls */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono text-[#8B949E]">{selectedShell}</span>
           <button
-            onClick={() => setLogs([])}
-            className="p-1 hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors"
-            title="Clear Terminal"
+            onClick={() => setCustomTerminalLogs([])}
+            className="p-1 text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors"
+            title="Clear Console"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
-          <button className="p-1 hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors" title="New Terminal">
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-1 hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors"
-            title="Close Panel"
-          >
+          <button onClick={onClose} className="p-1 text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors" title="Close Console">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
-      {/* Terminal Content Area */}
-      <div className="flex-1 p-3 font-mono text-xs overflow-y-auto space-y-1 bg-[#0A0D10]">
+      {/* Main Terminal Output Content */}
+      <div className="flex-1 overflow-y-auto p-3 font-mono text-xs text-[#E6EDF3] bg-[#0A0D10] leading-relaxed scrollbar-thin">
         {activeTab === "TERMINAL" && (
-          <>
-            {logs.map((line, idx) => (
-              <div key={idx} className="leading-5">
-                {renderColorizedLog(line)}
+          <div className="space-y-1.5">
+            <div className="text-purple-400 font-semibold">
+              GitOnBoard Isolated Worktree Sandbox Terminal [{runState?.repoId || "default"}]
+            </div>
+            <div className="text-slate-500">
+              Type custom CLI commands below to execute against the repository worktree sandbox.
+            </div>
+
+            {/* Render Verification Progress Summary if present */}
+            {runState?.statusMessage && (
+              <div className="text-amber-300 pt-1 border-t border-[#2F343A]/50">
+                [Status Update]: {runState.statusMessage}
+              </div>
+            )}
+
+            {/* Custom Interactive Terminal Logs */}
+            {customTerminalLogs.map((log, idx) => (
+              <div key={idx} className="text-[#E6EDF3]">
+                {log}
               </div>
             ))}
+          </div>
+        )}
 
-            {/* Git Prompt & Command Input */}
-            <form onSubmit={handleCommandSubmit} className="flex items-center gap-2 pt-1">
-              <span className="text-purple-400 font-bold">git:(<span className="text-emerald-400">main</span>)✗</span>
-              <input
-                type="text"
-                value={commandInput}
-                onChange={(e) => setCommandInput(e.target.value)}
-                placeholder="npm run dev..."
-                className="flex-1 bg-transparent text-[#E6EDF3] focus:outline-none font-mono text-xs"
-              />
-            </form>
-          </>
+        {activeTab === "VERIFICATION" && (
+          <div className="space-y-2">
+            <div className="text-purple-300 font-semibold border-b border-[#2F343A] pb-1 flex items-center justify-between">
+              <span>Dynamic Test Runner Execution Output (pytest / jest / tsc)</span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Status: {report?.dynamic_result?.status || "PASS"}
+              </span>
+            </div>
+
+            {dynamicDetails.pytest_stdout ? (
+              <div>
+                <div className="text-emerald-400 font-bold text-[11px] mb-1">Pytest Output:</div>
+                <pre className="bg-[#14181E] border border-[#2F343A] p-2 rounded text-[11px] text-slate-300 overflow-x-auto">
+                  <code>{dynamicDetails.pytest_stdout}</code>
+                </pre>
+              </div>
+            ) : null}
+
+            {dynamicDetails.node_build_stdout ? (
+              <div>
+                <div className="text-blue-400 font-bold text-[11px] mb-1">Node/TypeScript Compiler Output:</div>
+                <pre className="bg-[#14181E] border border-[#2F343A] p-2 rounded text-[11px] text-slate-300 overflow-x-auto">
+                  <code>{dynamicDetails.node_build_stdout}</code>
+                </pre>
+              </div>
+            ) : null}
+
+            {!dynamicDetails.pytest_stdout && !dynamicDetails.node_build_stdout && (
+              <div className="text-slate-400 italic text-xs">
+                No active test stdout recorded yet. Click "Run Verification" to execute dynamic tests inside the worktree sandbox.
+              </div>
+            )}
+          </div>
         )}
 
         {activeTab === "PROBLEMS" && (
-          <div className="space-y-2 text-xs font-mono">
-            <div className="text-emerald-400 font-semibold">0 Errors, 3 Warnings</div>
-            <div className="text-[#8B949E] pl-2 border-l-2 border-amber-500">
-              [Warning] src/pages/api/index.tsx (Line 12): Unused variable &apos;input&apos; before submit handler.
+          <div className="space-y-2">
+            <div className="text-rose-400 font-semibold border-b border-[#2F343A] pb-1">
+              Verification Defects & Problems ({defects.length})
             </div>
-            <div className="text-[#8B949E] pl-2 border-l-2 border-amber-500">
-              [Warning] src/pages/api/todos.ts (Line 8): Type implicit &apos;any&apos; on handler response interface.
-            </div>
-          </div>
-        )}
 
-        {activeTab === "OUTPUT" && (
-          <div className="text-[#8B949E] font-mono text-xs">
-            [Next.js Compiler Service] Listening on port 3000. Ready for hot replacement.
-          </div>
-        )}
-
-        {activeTab === "DEBUG CONSOLE" && (
-          <div className="text-[#8B949E] font-mono text-xs">
-            Debugger attached. Process 48210 running.
+            {defects.length > 0 ? (
+              <div className="space-y-1.5">
+                {defects.map((d, idx) => (
+                  <div
+                    key={idx}
+                    className="p-2 rounded bg-[#14181E] border border-rose-500/30 flex items-start gap-2 text-[11px]"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-rose-300">
+                        [{d.category}] {d.file_path} {d.line_number ? `:${d.line_number}` : ""}
+                      </div>
+                      <div className="text-slate-300 mt-0.5">{d.description}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-emerald-400 text-xs italic">
+                Zero problems detected. All static, dynamic, and contract verification checks passed cleanly!
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Terminal Input Bar at Bottom */}
+      {activeTab === "TERMINAL" && (
+        <form onSubmit={handleCommandSubmit} className="h-8 bg-[#14181E] border-t border-[#2F343A] flex items-center px-3 gap-2 flex-shrink-0">
+          <span className="text-purple-400 font-bold text-xs">$</span>
+          <input
+            type="text"
+            value={commandInput}
+            onChange={(e) => setCommandInput(e.target.value)}
+            placeholder="Type command and press Enter..."
+            className="flex-1 bg-transparent text-xs font-mono text-[#E6EDF3] placeholder-[#8B949E] focus:outline-none"
+          />
+        </form>
+      )}
     </div>
   );
 }

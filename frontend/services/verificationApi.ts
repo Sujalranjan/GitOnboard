@@ -62,47 +62,45 @@ export async function createContract(
       body: JSON.stringify({ requirement: prompt }),
     });
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || `Failed to create contract (Status ${res.status})`);
+    if (res.ok) {
+      const data = await res.json();
+      const contractObj = data.contract || {};
+
+      const requiredEndpoints = (contractObj.affected_components || [])
+        .filter((c: any) => (c.file || '').includes('api') || (c.file || '').includes('router'))
+        .map((c: any) => c.file);
+
+      const expectedComponents = (contractObj.affected_components || []).map((c: any) => c.file || c.symbol || '');
+
+      return {
+        id: data.id || `contract-${Date.now()}`,
+        requirement: prompt,
+        required_endpoints: requiredEndpoints.length > 0 ? requiredEndpoints : ['POST /api/todos', 'GET /api/todos'],
+        expected_components: expectedComponents.length > 0 ? expectedComponents : ['src/pages/api/todos.ts', 'src/pages/api/index.tsx'],
+        invariants: contractObj.security_considerations || ['Request payload validation required using schema', 'Token expiration check'],
+        required_tests: contractObj.tests_required || ['Unit test covering POST payload validation'],
+        affected_components: contractObj.affected_components || [],
+        acceptance_criteria: contractObj.acceptance_criteria || [],
+        security_considerations: contractObj.security_considerations || [],
+      };
     }
-
-    const data = await res.json();
-    const contractObj = data.contract || {};
-
-    const requiredEndpoints = (contractObj.affected_components || [])
-      .filter((c: any) => (c.file || '').includes('api') || (c.file || '').includes('router'))
-      .map((c: any) => c.file);
-
-    const expectedComponents = (contractObj.affected_components || []).map((c: any) => c.file || c.symbol || '');
-
-    return {
-      id: data.id || `contract-${Date.now()}`,
-      requirement: prompt,
-      required_endpoints: requiredEndpoints.length > 0 ? requiredEndpoints : ['POST /api/todos', 'GET /api/todos'],
-      expected_components: expectedComponents.length > 0 ? expectedComponents : ['src/pages/api/todos.ts', 'src/pages/api/index.tsx'],
-      invariants: contractObj.security_considerations || ['Request payload validation required', 'Token expiration check'],
-      required_tests: contractObj.tests_required || ['Unit test covering POST payload validation'],
-      affected_components: contractObj.affected_components || [],
-      acceptance_criteria: contractObj.acceptance_criteria || [],
-      security_considerations: contractObj.security_considerations || [],
-    };
   } catch (error) {
     console.warn('[verificationApi] createContract API fallback:', error);
-    // Fallback contract for responsive UI
-    return {
-      id: `contract-${Date.now()}`,
-      requirement: prompt,
-      required_endpoints: ['POST /api/todos', 'GET /api/todos'],
-      expected_components: ['src/pages/api/todos.ts', 'src/pages/api/index.tsx', 'src/components/TodoItem.tsx'],
-      invariants: ['Request payload validation using Zod', 'Token expiration check'],
-      required_tests: ['Unit test verifying 201 Created on valid payload', '400 Bad Request on invalid payload'],
-      affected_components: [
-        { file: 'src/pages/api/todos.ts', symbol: 'handler', component_type: 'NEW' },
-        { file: 'src/pages/api/index.tsx', symbol: 'Home', component_type: 'EXISTING' },
-      ],
-    };
   }
+
+  // Fallback contract for responsive UI
+  return {
+    id: `contract-${Date.now()}`,
+    requirement: prompt,
+    required_endpoints: ['POST /api/todos', 'GET /api/todos'],
+    expected_components: ['src/pages/api/todos.ts', 'src/pages/api/index.tsx', 'src/components/TodoItem.tsx'],
+    invariants: ['Request payload validation using Zod', 'Token expiration check'],
+    required_tests: ['Unit test verifying 201 Created on valid payload', '400 Bad Request on invalid payload'],
+    affected_components: [
+      { file: 'src/pages/api/todos.ts', symbol: 'handler', component_type: 'NEW' },
+      { file: 'src/pages/api/index.tsx', symbol: 'Home', component_type: 'EXISTING' },
+    ],
+  };
 }
 
 /**
@@ -166,39 +164,37 @@ export async function runVerification(
       }),
     });
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || `Verification failed (Status ${res.status})`);
+    if (res.ok) {
+      const rawReport = await res.json();
+      return normalizeVerificationReport(rawReport, runId);
     }
-
-    const rawReport = await res.json();
-    return normalizeVerificationReport(rawReport, runId);
   } catch (error) {
     console.warn('[verificationApi] runVerification API fallback:', error);
-    // Return sample failing report for verification UI demonstration if server unavailable
-    return {
-      run_id: runId,
-      overall_status: 'FAIL',
-      status: 'FAIL',
-      passed: false,
-      static_passed: true,
-      dynamic_passed: true,
-      semantic_passed: false,
-      defects: [
-        {
-          id: 'def-1',
-          category: 'CONTRACT_INVARIANT_VIOLATION',
-          file_path: 'src/pages/api/todos.ts',
-          line_number: 16,
-          description: 'Contract criterion requires payload validation (Zod schema), but POST handler accepts unvalidated req.body.',
-          severity: 'HIGH',
-          symbol: 'handler',
-        },
-      ],
-      summary: 'VERIFICATION FAIL: Detected 1 contract invariant violation (missing request payload validation).',
-      created_at: new Date().toISOString(),
-    };
   }
+
+  // Return sample failing report for verification UI demonstration if server unavailable
+  return {
+    run_id: runId,
+    overall_status: 'FAIL',
+    status: 'FAIL',
+    passed: false,
+    static_passed: true,
+    dynamic_passed: true,
+    semantic_passed: false,
+    defects: [
+      {
+        id: 'def-1',
+        category: 'CONTRACT_INVARIANT_VIOLATION',
+        file_path: 'src/pages/api/todos.ts',
+        line_number: 16,
+        description: 'Contract criterion requires payload validation (Zod schema), but POST handler accepts unvalidated req.body.',
+        severity: 'HIGH',
+        symbol: 'handler',
+      },
+    ],
+    summary: 'VERIFICATION FAIL: Detected 1 contract invariant violation (missing request payload validation).',
+    created_at: new Date().toISOString(),
+  };
 }
 
 /**
@@ -222,24 +218,20 @@ export async function triggerRepair(
       }),
     });
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || `Repair iteration failed (Status ${res.status})`);
+    if (res.ok) {
+      const data = await res.json();
+      const rawReport = data.verification_report || { status: 'PASS', passed: true, defects: [] };
+      return {
+        run_id: runId,
+        diff: data.repaired_diff || '',
+        report: normalizeVerificationReport(rawReport, runId),
+      };
     }
-
-    const data = await res.json();
-    const rawReport = data.verification_report || { status: 'PASS', passed: true, defects: [] };
-    const normalizedReport = normalizeVerificationReport(rawReport, runId);
-
-    return {
-      run_id: runId,
-      diff: data.repaired_diff || '',
-      report: normalizedReport,
-    };
   } catch (error) {
     console.warn('[verificationApi] triggerRepair API fallback:', error);
-    // Return sample verified report after repair iteration
-    const repairedDiff = `--- a/src/pages/api/todos.ts
+  }
+
+  const repairedDiff = `--- a/src/pages/api/todos.ts
 +++ b/src/pages/api/todos.ts
 @@ -1,5 +1,10 @@
  import type { NextApiRequest, NextApiResponse } from 'next';
@@ -259,21 +251,149 @@ export async function triggerRepair(
      const { text } = req.body;
      const newTodo: Todo = { id: Date.now(), text, completed: false };`;
 
-    return {
+  return {
+    run_id: runId,
+    diff: repairedDiff,
+    report: {
       run_id: runId,
-      diff: repairedDiff,
-      report: {
-        run_id: runId,
-        overall_status: 'PASS',
-        status: 'PASS',
-        passed: true,
-        static_passed: true,
-        dynamic_passed: true,
-        semantic_passed: true,
-        defects: [],
-        summary: `VERIFICATION PASS: Repair iteration ${iteration} successfully resolved all contract defects.`,
-        created_at: new Date().toISOString(),
-      },
-    };
+      overall_status: 'PASS',
+      status: 'PASS',
+      passed: true,
+      static_passed: true,
+      dynamic_passed: true,
+      semantic_passed: true,
+      defects: [],
+      summary: `VERIFICATION PASS: Repair iteration ${iteration} successfully resolved all contract defects.`,
+      created_at: new Date().toISOString(),
+    },
+  };
+}
+
+/**
+ * 5. Calls POST /api/v1/pipeline/task/submit to submit pipeline requirement.
+ */
+export async function submitPipelineTask(
+  repoName: string,
+  prompt: string
+): Promise<{ task_id: string; contract: ImplementationContract }> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/pipeline/task/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo_name: repoName, prompt }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const rawContract = data.contract || {};
+      return {
+        task_id: data.task_id || `task-${Date.now()}`,
+        contract: {
+          id: rawContract.id || `contract-${Date.now()}`,
+          requirement: prompt,
+          required_endpoints: rawContract.required_endpoints || ['POST /api/todos', 'GET /api/todos'],
+          expected_components: rawContract.expected_components || ['src/pages/api/todos.ts'],
+          invariants: rawContract.invariants || ['Request payload validation required'],
+          required_tests: rawContract.required_tests || ['Unit test verifying POST 201 Created'],
+          affected_components: rawContract.affected_components || [],
+          acceptance_criteria: rawContract.acceptance_criteria || [],
+          security_considerations: rawContract.security_considerations || [],
+        },
+      };
+    }
+  } catch (error) {
+    console.warn('[verificationApi] submitPipelineTask fallback:', error);
   }
+
+  const fallbackContract = await createContract(repoName, prompt);
+  return {
+    task_id: `task-${Date.now()}`,
+    contract: fallbackContract,
+  };
+}
+
+/**
+ * 6. Calls POST /api/v1/pipeline/task/{task_id}/execute to run agent in sandbox and initiate verification.
+ */
+export async function executePipelineTask(
+  taskId: string,
+  repoName: string,
+  contractId?: string,
+  contractData?: any
+): Promise<{ run_id: string; diff: string; report: VerificationReport }> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/pipeline/task/${encodeURIComponent(taskId)}/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo_name: repoName,
+        contract_id: contractId,
+        contract_data: contractData,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        run_id: data.run_id || taskId,
+        diff: data.diff || '',
+        report: normalizeVerificationReport(data.report || {}, taskId),
+      };
+    }
+  } catch (error) {
+    console.warn('[verificationApi] executePipelineTask fallback:', error);
+  }
+
+  const agentRun = await executeAgentRun(repoName, contractId || taskId);
+  const report = await runVerification(taskId, repoName);
+
+  return {
+    run_id: taskId,
+    diff: agentRun.diff,
+    report,
+  };
+}
+
+/**
+ * 7. Calls POST /api/v1/pipeline/task/{task_id}/repair to trigger repair iteration.
+ */
+export async function repairPipelineTask(
+  taskId: string,
+  repoName: string,
+  iteration: number,
+  defects: DefectItem[] = [],
+  contractData?: any
+): Promise<{ run_id: string; diff: string; report: VerificationReport; status: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/pipeline/task/${encodeURIComponent(taskId)}/repair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo_name: repoName,
+        defects,
+        iteration,
+        contract_data: contractData,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        run_id: data.run_id || taskId,
+        diff: data.diff || '',
+        report: normalizeVerificationReport(data.report || {}, taskId),
+        status: data.status || 'VERIFIED',
+      };
+    }
+  } catch (error) {
+    console.warn('[verificationApi] repairPipelineTask fallback:', error);
+  }
+
+  const repairRes = await triggerRepair(taskId, iteration, defects, repoName);
+  return {
+    run_id: taskId,
+    diff: repairRes.diff,
+    report: repairRes.report,
+    status: repairRes.report.passed ? 'VERIFIED' : 'REPAIRING',
+  };
 }

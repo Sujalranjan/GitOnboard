@@ -9,7 +9,11 @@ import { TerminalPanel } from "./TerminalPanel";
 import { AIAgentPanel } from "./AIAgentPanel";
 import { useVerificationWorkspace } from "@/hooks/useVerificationWorkspace";
 
-export function WorkspaceLayout() {
+interface WorkspaceLayoutProps {
+  initialRepoName?: string;
+}
+
+export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayoutProps) {
   const [activeNavTab, setActiveNavTab] = useState("editor");
   const [isFileExplorerOpen, setIsFileExplorerOpen] = useState(true);
   const [isTerminalOpen, setIsTerminalOpen] = useState(true);
@@ -27,7 +31,7 @@ export function WorkspaceLayout() {
     handleCloseTab,
     handleStartTaskPrompt,
     handleTriggerRepair,
-  } = useVerificationWorkspace();
+  } = useVerificationWorkspace(initialRepoName);
 
   return (
     <div className="h-screen w-screen bg-[#0A0D10] text-[#E6EDF3] flex flex-col overflow-hidden font-sans select-none antialiased">

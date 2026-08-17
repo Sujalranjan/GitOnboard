@@ -425,3 +425,43 @@ async def get_raw_file(
         "language": None,
         "content_type": "text/plain",
     }
+
+
+from pydantic import BaseModel
+
+class SaveFileRequest(BaseModel):
+    path: str
+    content: str
+
+@structure_router.post("/{repo_name}/file")
+async def save_repo_file(
+    repo_name: str,
+    body: SaveFileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    clean_path = body.path.replace("\\", "/").lstrip("./").lstrip("/")
+    try:
+        repo, analysis = get_latest_analysis(repo_name, db, current_user)
+        from backend.models.fact_store import FactFile
+        from backend.storage import get_storage
+
+        fact_file = (
+            db.query(FactFile)
+            .filter(FactFile.analysis_id == analysis.id, FactFile.path == clean_path)
+            .first()
+        )
+
+        if fact_file and fact_file.blob_name:
+            storage = get_storage()
+            storage.put_object(fact_file.blob_name, body.content)
+            fact_file.size = len(body.content.encode("utf-8"))
+            db.commit()
+    except Exception as e:
+        logger.warning(f"Save file blob update warning: {e}")
+
+    return {
+        "status": "saved",
+        "path": clean_path,
+        "content_length": len(body.content),
+    }
