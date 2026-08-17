@@ -44,7 +44,7 @@ def generate_deterministic_fallback(
         for u in deployable_units:
             ep_str = ", ".join(f"{e}" for e in u.entrypoints) if u.entrypoints else "None specified"
             unit_lines.append(
-                f"- **{u.name}** ({u.unit_type.value})\n"
+                f"- **{u.name}** ({(u.unit_type.value if hasattr(u.unit_type, 'value') else u.unit_type)})\n"
                 f"  - Root Path: {u.root_path}\n"
                 f"  - Entrypoints: {ep_str}"
             )
