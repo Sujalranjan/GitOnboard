@@ -16,22 +16,40 @@ This document contains verifiable commands and instructions for setting up, runn
 
 ## 2. Setting Up Environment Variables
 
-Copy the example environment configuration:
+Copy the structured template to `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Key configuration parameters in `.env`:
-```ini
-DATABASE_URL=postgresql+psycopg://myuser:mypassword@localhost:5432/repository_intelligence
-LOCAL_DATABASE_URL=postgresql+psycopg://myuser:mypassword@localhost:5432/repository_intelligence
-FRONTEND_URL=http://localhost:3000
-ENVIRONMENT=development
-JWT_SECRET=your_jwt_secret_key
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5-coder:7b
-```
+### Environment Variable Reference
+
+| Section | Parameter | Description | Default / Example |
+| :--- | :--- | :--- | :--- |
+| **App & Deployment** | `DEPLOYMENT_TYPE` | Deployment target (`LOCAL` or `PROD`) | `LOCAL` |
+| | `ENVIRONMENT` | Environment tag (`development`, `staging`, `production`) | `development` |
+| | `APP_NAME` | Display name of the application | `Repository Intelligence Platform` |
+| **Database** | `LOCAL_DATABASE_URL` | PostgreSQL connection string for host execution | `postgresql+psycopg://myuser:mypassword@localhost:5432/repository_intelligence` |
+| | `DATABASE_URL` | PostgreSQL connection string for Docker container | `postgresql+psycopg://myuser:mypassword@postgres:5432/repository_intelligence` |
+| | `PROD_DATABASE_URL` | Production PostgreSQL connection string | (Optional for PROD) |
+| **Frontend** | `LOCAL_FRONTEND_URL` | Local Next.js frontend URL for CORS & redirects | `http://localhost:3000` |
+| | `PROD_FRONTEND_URL` | Production frontend URL | (Optional for PROD) |
+| **Security & Auth** | `JWT_SECRET` | Secret key used to sign session JWTs | `change_me_to_a_secure_random_secret_in_production` |
+| | `JWT_ALGORITHM` | Cryptographic algorithm for JWT | `HS256` |
+| | `JWT_EXPIRE_MINUTES` | Session token lifetime in minutes | `1440` (24h) |
+| **GitHub OAuth** | `GITHUB_CLIENT_ID` | OAuth application Client ID | (From GitHub Developer Settings) |
+| | `GITHUB_CLIENT_SECRET` | OAuth application Client Secret | (From GitHub Developer Settings) |
+| **Blob Storage** | `AZURE_STORAGE_ACCOUNT_NAME` | Azurite/Azure storage account | `devstoreaccount1` |
+| | `AZURE_STORAGE_ACCOUNT_KEY` | Azurite/Azure access key | Azurite standard development key |
+| | `AZURE_STORAGE_CONTAINER` | Target Blob container name | `gitonboard-repos` |
+| | `AZURE_STORAGE_ENDPOINT` | Storage emulator endpoint URL | `http://localhost:10100/devstoreaccount1` (host) / `http://azurite:10000/devstoreaccount1` (Docker) |
+| **AI / LLM Providers** | `OPENROUTER_API_KEY` | OpenRouter API Key (Primary cloud provider) | (Optional) |
+| | `NVIDIA_API_KEY` | NVIDIA NIM API Key (Secondary cloud provider) | (Optional) |
+| | `GEMINI_API_KEY` | Google Gemini API Key | (Optional) |
+| | `OLLAMA_BASE_URL` | Ollama service endpoint (Fallback provider) | `http://localhost:11434` (host) / `http://host.docker.internal:11434` (Docker) |
+| | `OLLAMA_MODEL` | Default Ollama model tag | `qwen2.5-coder:7b` |
+| | `OLLAMA_TIMEOUT` | Ollama HTTP request timeout in seconds | `300.0` |
+| **Summary Pipeline** | `SUMMARY_VERBOSE_AUDIT` | Save full 01-11 telemetry files in evaluation/runs/ | `false` (set `true` for debugging) |
 
 ---
 
