@@ -7,6 +7,7 @@ import { FileExplorerPanel } from "./FileExplorerPanel";
 import { CodeEditorPanel } from "./CodeEditorPanel";
 import { TerminalPanel } from "./TerminalPanel";
 import { AIAgentPanel } from "./AIAgentPanel";
+import { useVerificationWorkspace } from "@/hooks/useVerificationWorkspace";
 
 export function WorkspaceLayout() {
   const [activeNavTab, setActiveNavTab] = useState("editor");
@@ -14,31 +15,27 @@ export function WorkspaceLayout() {
   const [isTerminalOpen, setIsTerminalOpen] = useState(true);
   const [isAIAgentOpen, setIsAIAgentOpen] = useState(true);
 
-  const [activeFile, setActiveFile] = useState("src/pages/api/index.tsx");
-  const [openTabs, setOpenTabs] = useState([
-    "src/pages/api/index.tsx",
-    "src/components/TodoItem.tsx",
-  ]);
-
-  const handleSelectFile = (filePath: string) => {
-    setActiveFile(filePath);
-    if (!openTabs.includes(filePath)) {
-      setOpenTabs([...openTabs, filePath]);
-    }
-  };
-
-  const handleCloseTab = (filePath: string) => {
-    const newTabs = openTabs.filter((t) => t !== filePath);
-    setOpenTabs(newTabs);
-    if (activeFile === filePath && newTabs.length > 0) {
-      setActiveFile(newTabs[newTabs.length - 1]);
-    }
-  };
+  // Consume custom verification workspace hook
+  const {
+    runState,
+    activeFile,
+    openTabs,
+    editorMode,
+    setEditorMode,
+    logs,
+    handleSelectFile,
+    handleCloseTab,
+    handleStartTaskPrompt,
+    handleTriggerRepair,
+  } = useVerificationWorkspace();
 
   return (
     <div className="h-screen w-screen bg-[#0A0D10] text-[#E6EDF3] flex flex-col overflow-hidden font-sans select-none antialiased">
       {/* Top Global Header Bar Across Columns 2, 3, 4 */}
-      <HeaderGlobal />
+      <HeaderGlobal
+        runState={runState}
+        onRunVerification={() => handleStartTaskPrompt(runState.taskPrompt)}
+      />
 
       {/* Main 4-Column Layout */}
       <div className="flex-1 flex overflow-hidden w-full h-[calc(100vh-48px)]">
@@ -56,6 +53,7 @@ export function WorkspaceLayout() {
           onSelectFile={handleSelectFile}
           isOpen={isFileExplorerOpen}
           onClose={() => setIsFileExplorerOpen(false)}
+          runState={runState}
         />
 
         {/* Column 3 (Middle): Primary Workspace Area (Code Editor + Terminal) */}
@@ -66,12 +64,16 @@ export function WorkspaceLayout() {
             onSelectFile={handleSelectFile}
             openTabs={openTabs}
             onCloseTab={handleCloseTab}
+            runState={runState}
+            editorMode={editorMode}
+            onSetEditorMode={setEditorMode}
           />
 
           {/* Bottom Half: Horizontally Split Terminal Panel */}
           <TerminalPanel
             isOpen={isTerminalOpen}
             onClose={() => setIsTerminalOpen(false)}
+            runState={runState}
           />
         </div>
 
@@ -80,6 +82,9 @@ export function WorkspaceLayout() {
           isOpen={isAIAgentOpen}
           onClose={() => setIsAIAgentOpen(false)}
           onSelectFile={handleSelectFile}
+          runState={runState}
+          onStartTaskPrompt={handleStartTaskPrompt}
+          onTriggerRepair={handleTriggerRepair}
         />
       </div>
     </div>

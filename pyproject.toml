@@ -26,6 +26,7 @@ dependencies = [
     "sse-starlette",
     "requests",
     "azure-storage-blob>=12.19.0",
+    "pytest-asyncio>=1.4.0",
 ]
 
 [tool.ruff]

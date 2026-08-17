@@ -5,6 +5,10 @@ class Settings(BaseSettings):
     environment: str = "development"
     deployment_type: str = "LOCAL"
 
+    # Storage & Sandbox Config
+    storage_path: str = "data"
+    worktrees_dir: str = "data/worktrees"
+
     # Database
     local_database_url: str = "postgresql+psycopg://myuser:mypassword@localhost:5432/repository_intelligence"
     prod_database_url: str = ""

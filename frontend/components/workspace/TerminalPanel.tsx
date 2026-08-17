@@ -13,12 +13,15 @@ import {
   X,
 } from "lucide-react";
 
+import { RunState } from "@/types/workspace";
+
 interface TerminalPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  runState?: RunState;
 }
 
-export function TerminalPanel({ isOpen, onClose }: TerminalPanelProps) {
+export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps) {
   const [activeTab, setActiveTab] = useState("TERMINAL");
   const [selectedShell, setSelectedShell] = useState("zsh");
   const [isShellDropdownOpen, setIsShellDropdownOpen] = useState(false);
