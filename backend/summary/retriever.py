@@ -110,7 +110,7 @@ class TaskSpecificRetriever:
         ][:15]
         arch_chunks = [c for c in doc_chunks if c.domain == "architecture"][:3]
         unit_dicts = [
-            {"name": u.name, "type": u.unit_type.value, "path": u.root_path, "entrypoints": u.entrypoints}
+            {"name": u.name, "type": (u.unit_type.value if hasattr(u.unit_type, 'value') else u.unit_type), "path": u.root_path, "entrypoints": u.entrypoints}
             for u in deployable_units
         ]
 
@@ -130,7 +130,7 @@ class TaskSpecificRetriever:
 
         # 5. Claims & Discrepancies Pack
         claim_dicts = [
-            {"subject": c.subject, "status": c.status.value, "reasoning": c.verification_reasoning, "evidence_ids": c.supporting_evidence_ids}
+            {"subject": c.subject, "status": c.status.value, "reasoning": c.verification_reasoning, "evidence_ids": (c.supporting_evidence_ids or c.evidence_ids)}
             for c in verified_claims
         ]
 

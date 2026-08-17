@@ -49,6 +49,7 @@ class SummaryPipeline:
         analysis_id: Optional[int] = None,
         user_id: Optional[int] = None,
         enable_progressive_grounding: bool = False,
+        verbose_audit: Optional[bool] = None,
     ) -> SummaryGenerationResult:
         metrics = metrics or {}
         discovered_docs = []
