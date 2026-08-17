@@ -15,11 +15,14 @@ import {
   GitBranch,
 } from "lucide-react";
 
+import { RunState } from "@/types/workspace";
+
 interface FileExplorerPanelProps {
   activeFile: string;
   onSelectFile: (filePath: string) => void;
   isOpen: boolean;
   onClose: () => void;
+  runState?: RunState;
 }
 
 export function FileExplorerPanel({

@@ -11,12 +11,19 @@ import {
   Bell,
   Check,
   GitBranch,
-  Home,
+  Play,
+  RefreshCw,
 } from "lucide-react";
+import { RunState } from "@/types/workspace";
 
-export function HeaderGlobal() {
-  const [selectedProject, setSelectedProject] = useState("my-project");
-  const [selectedBranch, setSelectedBranch] = useState("main");
+interface HeaderGlobalProps {
+  runState?: RunState;
+  onRunVerification?: () => void;
+}
+
+export function HeaderGlobal({ runState, onRunVerification }: HeaderGlobalProps) {
+  const [selectedProject, setSelectedProject] = useState(runState?.repoId || "my-project");
+  const [selectedBranch, setSelectedBranch] = useState(runState?.branch || "main");
   const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
   const [isBranchDropdownOpen, setIsBranchDropdownOpen] = useState(false);
 
@@ -124,8 +131,22 @@ export function HeaderGlobal() {
         </div>
       </div>
 
-      {/* Right Section: Invite, Settings, Notifications, Profile */}
+      {/* Right Section: Run Verification, Invite, Settings, Notifications, Profile */}
       <div className="flex items-center gap-2">
+        {/* Prominent Run Verification Button */}
+        <button
+          onClick={onRunVerification}
+          disabled={runState?.isLoading}
+          className="flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-3 py-1 rounded text-xs shadow-md shadow-purple-600/30 transition-all disabled:opacity-50"
+        >
+          {runState?.isLoading ? (
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-200" />
+          ) : (
+            <Play className="w-3.5 h-3.5 fill-current" />
+          )}
+          <span>Run Verification</span>
+        </button>
+
         <button className="flex items-center gap-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 px-2.5 py-1 rounded text-xs font-medium transition-colors">
           <UserPlus className="w-3.5 h-3.5" />
           <span>Invite</span>

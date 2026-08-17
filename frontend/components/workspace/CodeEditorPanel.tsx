@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
+import Editor, { DiffEditor, OnMount, loader } from "@monaco-editor/react";
 import {
   FileCode,
   FileJson,
@@ -10,328 +11,309 @@ import {
   Plus,
   ChevronRight,
   Sparkles,
+  Columns,
+  Code2,
+  FileDiff,
+  AlertTriangle,
 } from "lucide-react";
+import { RunState } from "@/types/workspace";
 
 interface CodeEditorPanelProps {
   activeFile: string;
   onSelectFile: (filePath: string) => void;
   openTabs: string[];
   onCloseTab: (filePath: string) => void;
+  runState?: RunState;
+  editorMode?: "source" | "diff";
+  onSetEditorMode?: (mode: "source" | "diff") => void;
 }
+
+const SAMPLE_SOURCE_CODE: Record<string, string> = {
+  "src/pages/api/index.tsx": `import React from 'react';
+import Head from 'next/head';
+
+export default function Home() {
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <Head>
+        <title>GitOnBoard Verification Platform</title>
+      </Head>
+      <h1 className="text-3xl font-bold text-[#E6EDF3]">
+        GitOnBoard — Repository Intelligence & Verification
+      </h1>
+      <p className="mt-2 text-slate-400">
+        Adversarial multi-vector verification mesh for AI-generated code.
+      </p>
+    </div>
+  );
+}`,
+
+  "src/components/TodoItem.tsx": `import React from 'react';
+
+interface TodoItemProps {
+  id: number;
+  text: string;
+  completed: boolean;
+  onToggle: (id: number) => void;
+}
+
+export function TodoItem({ id, text, completed, onToggle }: TodoItemProps) {
+  return (
+    <div className="flex items-center gap-2 p-2 border border-slate-800 rounded">
+      <input
+        type="checkbox"
+        checked={completed}
+        onChange={() => onToggle(id)}
+        className="rounded text-purple-600 focus:ring-purple-500"
+      />
+      <span className={completed ? 'line-through text-slate-500' : 'text-slate-200'}>
+        {text}
+      </span>
+    </div>
+  );
+}`,
+
+  "src/pages/api/todos.ts": `import type { NextApiRequest, NextApiResponse } from 'next';
+
+interface Todo {
+  id: number;
+  text: string;
+  completed: boolean;
+}
+
+let todosList: Todo[] = [
+  { id: 1, text: 'Initialize AI Workspace', completed: true },
+];
+
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method === 'GET') {
+    return res.status(200).json(todosList);
+  }
+  if (req.method === 'POST') {
+    const { text } = req.body;
+    const newTodo: Todo = { id: Date.now(), text, completed: false };
+    todosList.push(newTodo);
+    return res.status(201).json(newTodo);
+  }
+  return res.status(405).end();
+}`,
+};
+
+const SAMPLE_PATCHED_CODE = `import type { NextApiRequest, NextApiResponse } from 'next';
+import { z } from 'zod';
+
+const createTodoSchema = z.object({
+  text: z.string().min(1, 'Task description required'),
+});
+
+interface Todo {
+  id: number;
+  text: string;
+  completed: boolean;
+}
+
+let todosList: Todo[] = [
+  { id: 1, text: 'Initialize AI Workspace', completed: true },
+];
+
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method === 'GET') {
+    return res.status(200).json(todosList);
+  }
+  if (req.method === 'POST') {
+    const validation = createTodoSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: 'Validation failed', details: validation.error.format() });
+    }
+    const { text } = req.body;
+    const newTodo: Todo = { id: Date.now(), text, completed: false };
+    todosList.push(newTodo);
+    return res.status(201).json(newTodo);
+  }
+  return res.status(405).end();
+}`;
 
 export function CodeEditorPanel({
   activeFile,
   onSelectFile,
   openTabs,
   onCloseTab,
+  runState,
+  editorMode: externalEditorMode,
+  onSetEditorMode,
 }: CodeEditorPanelProps) {
+  const [internalEditorMode, setInternalEditorMode] = useState<"source" | "diff">("source");
+  const editorMode = externalEditorMode || internalEditorMode;
+
+  const setEditorMode = (mode: "source" | "diff") => {
+    setInternalEditorMode(mode);
+    if (onSetEditorMode) onSetEditorMode(mode);
+  };
+
   const getFileBasename = (path: string) => {
     const parts = path.split("/");
     return parts[parts.length - 1];
   };
 
-  const renderTabIcon = (path: string) => {
-    const name = getFileBasename(path);
-    if (name.endsWith(".tsx") || name.endsWith(".ts")) {
-      return <FileCode className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />;
-    }
-    if (name.endsWith(".json")) {
-      return <FileJson className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />;
-    }
-    if (name.endsWith(".md")) {
-      return <FileText className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />;
-    }
-    return <File className="w-3.5 h-3.5 text-[#8B949E] flex-shrink-0" />;
+  const getLanguage = (path: string) => {
+    if (path.endsWith(".tsx") || path.endsWith(".ts")) return "typescript";
+    if (path.endsWith(".jsx") || path.endsWith(".js")) return "javascript";
+    if (path.endsWith(".json")) return "json";
+    if (path.endsWith(".md")) return "markdown";
+    return "typescript";
   };
 
-  // Sample code contents for supported files
-  const fileContents: Record<string, { language: string; lines: string[] }> = {
-    "src/pages/api/index.tsx": {
-      language: "typescript",
-      lines: [
-        `import React, { useState, useEffect } from 'react';`,
-        `import Head from 'next/head';`,
-        `import TodoItem from '@/components/TodoItem';`,
-        ``,
-        `interface Todo {`,
-        `  id: number;`,
-        `  text: string;`,
-        `  completed: boolean;`,
-        `}`,
-        ``,
-        `export default function Home() {`,
-        `  const [todos, setTodos] = useState<Todo[]>([]);`,
-        `  const [input, setInput] = useState('');`,
-        `  const [loading, setLoading] = useState(false);`,
-        ``,
-        `  useEffect(() => {`,
-        `    fetch('/api/todos')`,
-        `      .then((res) => res.json())`,
-        `      .then((data) => setTodos(data))`,
-        `      .catch(console.error);`,
-        `  }, []);`,
-        ``,
-        `  const handleAddTodo = async (e: React.FormEvent) => {`,
-        `    e.preventDefault();`,
-        `    if (!input.trim()) return;`,
-        `    setLoading(true);`,
-        `    const res = await fetch('/api/todos', {`,
-        `      method: 'POST',`,
-        `      headers: { 'Content-Type': 'application/json' },`,
-        `      body: JSON.stringify({ text: input }),`,
-        `    });`,
-        `    const newTodo = await res.json();`,
-        `    setTodos([...todos, newTodo]);`,
-        `    setInput('');`,
-        `    setLoading(false);`,
-        `  };`,
-        ``,
-        `  return (`,
-        `    <div className="min-h-screen bg-[#0A0D10] text-[#E6EDF3] p-8">`,
-        `      <Head>`,
-        `        <title>AI Workspace - Todo Tracker</title>`,
-        `      </Head>`,
-        `      <main className="max-w-2xl mx-auto space-y-6">`,
-        `        <h1 className="text-3xl font-bold tracking-tight text-purple-400">Task Overview</h1>`,
-        `        <form onSubmit={handleAddTodo} className="flex gap-3">`,
-        `          <input`,
-        `            type="text"`,
-        `            value={input}`,
-        `            onChange={(e) => setInput(e.target.value)}`,
-        `            placeholder="Add new task..."`,
-        `            className="flex-1 bg-[#14181E] border border-[#2F343A] px-4 py-2 rounded-lg text-sm"`,
-        `          />`,
-        `          <button type="submit" disabled={loading} className="bg-purple-600 hover:bg-purple-500 px-5 py-2 rounded-lg text-sm font-semibold">`,
-        `            Add Task`,
-        `          </button>`,
-        `        </form>`,
-        `        <ul className="divide-y divide-[#2F343A] rounded-lg bg-[#14181E] border border-[#2F343A]">`,
-        `          {todos.map((todo) => (`,
-        `            <TodoItem key={todo.id} todo={todo} />`,
-        `          ))}`,
-        `        </ul>`,
-        `      </main>`,
-        `    </div>`,
-        `  );`,
-        `}`,
-      ],
-    },
-    "src/pages/api/todos.ts": {
-      language: "typescript",
-      lines: [
-        `import type { NextApiRequest, NextApiResponse } from 'next';`,
-        ``,
-        `interface Todo {`,
-        `  id: number;`,
-        `  text: string;`,
-        `  completed: boolean;`,
-        `}`,
-        ``,
-        `let todosList: Todo[] = [`,
-        `  { id: 1, text: 'Initialize AI Workspace', completed: true },`,
-        `  { id: 2, text: 'Configure Next.js 16 App Router', completed: true },`,
-        `  { id: 3, text: 'Build Multi-Panel Verification Engine', completed: false },`,
-        `];`,
-        ``,
-        `export default function handler(req: NextApiRequest, res: NextApiResponse) {`,
-        `  if (req.method === 'GET') {`,
-        `    return res.status(200).json(todosList);`,
-        `  }`,
-        `  if (req.method === 'POST') {`,
-        `    const { text } = req.body;`,
-        `    const newTodo: Todo = {`,
-        `      id: Date.now(),`,
-        `      text,`,
-        `      completed: false,`,
-        `    };`,
-        `    todosList.push(newTodo);`,
-        `    return res.status(201).json(newTodo);`,
-        `  }`,
-        `  return res.status(45) .json({ error: 'Method Not Allowed' });`,
-        `}`,
-      ],
-    },
-    "src/components/TodoItem.tsx": {
-      language: "typescript",
-      lines: [
-        `import React from 'react';`,
-        ``,
-        `interface TodoItemProps {`,
-        `  todo: { id: number; text: string; completed: boolean };`,
-        `}`,
-        ``,
-        `export default function TodoItem({ todo }: TodoItemProps) {`,
-        `  return (`,
-        `    <li className="px-4 py-3 flex items-center justify-between hover:bg-[#1E222A]">`,
-        `      <span className={todo.completed ? 'line-through text-[#8B949E]' : 'text-[#E6EDF3]'}>`,
-        `        {todo.text}`,
-        `      </span>`,
-        `      <span className="text-xs px-2 py-0.5 rounded bg-purple-950 text-purple-300 font-mono">`,
-        `        #{todo.id}`,
-        `      </span>`,
-        `    </li>`,
-        `  );`,
-        `}`,
-      ],
-    },
-    "package.json": {
-      language: "json",
-      lines: [
-        `{`,
-        `  "name": "my-project",`,
-        `  "version": "0.1.0",`,
-        `  "private": true,`,
-        `  "scripts": {`,
-        `    "dev": "next dev",`,
-        `    "build": "next build",`,
-        `    "start": "next start"`,
-        `  },`,
-        `  "dependencies": {`,
-        `    "next": "^16.2.10",`,
-        `    "react": "^19.2.4",`,
-        `    "tailwindcss": "^4.0.0"`,
-        `  }`,
-        `}`,
-      ],
-    },
-    "README.md": {
-      language: "markdown",
-      lines: [
-        `# My Project — AI Workspace`,
-        ``,
-        `AI-powered multi-panel workspace built with Next.js 16, TypeScript, and Tailwind CSS.`,
-        ``,
-        `## Getting Started`,
-        `\`\`\`bash`,
-        `npm run dev`,
-        `\`\`\``,
-      ],
-    },
-  };
+  // Base code vs Patched code for DiffEditor
+  const baseCode = SAMPLE_SOURCE_CODE[activeFile] || `// ${activeFile}\nexport default function Module() {\n  return null;\n}`;
+  const patchedCode =
+    activeFile === "src/pages/api/todos.ts"
+      ? SAMPLE_PATCHED_CODE
+      : runState?.rawDiff || baseCode;
 
-  const currentContent = fileContents[activeFile] || {
-    language: "typescript",
-    lines: [
-      `// File: ${activeFile}`,
-      `export default function Component() {`,
-      `  return <div>Code loaded for ${activeFile}</div>;`,
-      `}`,
-    ],
-  };
+  // Set Monaco markers for defects
+  const handleEditorDidMount: OnMount = (editor, monaco) => {
+    const defects = runState?.report?.defects || [];
+    if (!defects.length) return;
 
-  // Deterministic syntax highlighter helper rendering pure React elements (prevents SSR hydration error)
-  const formatLine = (line: string) => {
-    if (!line) return <span>&nbsp;</span>;
+    const markers = defects
+      .filter((d) => !d.file_path || d.file_path.includes(getFileBasename(activeFile)))
+      .map((d) => ({
+        startLineNumber: d.line_number || 1,
+        startColumn: 1,
+        endLineNumber: d.line_number || 2,
+        endColumn: 100,
+        message: `[${d.category}] ${d.description}`,
+        severity:
+          d.severity === "CRITICAL" || d.severity === "HIGH"
+            ? monaco.MarkerSeverity.Error
+            : monaco.MarkerSeverity.Warning,
+      }));
 
-    if (line.trim().startsWith("//") || line.trim().startsWith("/*")) {
-      return <span className="text-[#8B949E] italic">{line}</span>;
+    if (markers.length) {
+      const model = editor.getModel();
+      if (model) {
+        monaco.editor.setModelMarkers(model, "gitonboard_verifier", markers);
+      }
     }
-
-    const tokenRegex = /(\b(?:import|export|default|function|return|const|let|var|if|async|await|type|interface|from)\b|\b(?:useState|useEffect|fetch|console|res|req|JSON|String|Number|Boolean)\b|\b(?:Home|TodoItem|Head|Todo|NextApiRequest|NextApiResponse)\b|'[^']*'|"[^"]*"|`[^`]*`|<\/?[a-zA-Z0-9]+(?:\s+[^>]*)?\/?>)/g;
-    const parts = line.split(tokenRegex);
-
-    return (
-      <span>
-        {parts.map((part, idx) => {
-          if (!part) return null;
-          if (/^(import|export|default|function|return|const|let|var|if|async|await|type|interface|from)$/.test(part)) {
-            return <span key={idx} className="text-amber-500 font-medium">{part}</span>;
-          }
-          if (/^(useState|useEffect|fetch|console|res|req|JSON|String|Number|Boolean)$/.test(part)) {
-            return <span key={idx} className="text-purple-400 font-medium">{part}</span>;
-          }
-          if (/^(Home|TodoItem|Head|Todo|NextApiRequest|NextApiResponse)$/.test(part)) {
-            return <span key={idx} className="text-[#61AFEF] font-semibold">{part}</span>;
-          }
-          if (/^('[^']*'|"[^"]*"|`[^`]*`)$/.test(part)) {
-            return <span key={idx} className="text-[#98C379]">{part}</span>;
-          }
-          if (/^<\/?[a-zA-Z0-9]+/.test(part)) {
-            return <span key={idx} className="text-rose-400">{part}</span>;
-          }
-          return <span key={idx}>{part}</span>;
-        })}
-      </span>
-    );
   };
-
-  const breadcrumbs = activeFile.split("/");
 
   return (
-    <div className="flex-1 bg-[#0A0D10] flex flex-col h-full overflow-hidden select-none">
-      {/* Top Editor Tabs Bar */}
-      <div className="h-9 bg-[#14181E] border-b border-[#2F343A] flex items-center overflow-x-auto text-xs scrollbar-none flex-shrink-0">
-        {openTabs.map((filePath) => {
-          const isActive = filePath === activeFile;
-          const fileName = getFileBasename(filePath);
-          return (
-            <div
-              key={filePath}
-              onClick={() => onSelectFile(filePath)}
-              className={`h-full px-3 flex items-center gap-2 border-r border-[#2F343A] cursor-pointer transition-colors group ${
-                isActive
-                  ? "bg-[#0A0D10] text-[#E6EDF3] font-medium border-t-2 border-t-purple-500 shadow-inner"
-                  : "bg-[#14181E] text-[#8B949E] hover:bg-[#1E222A] hover:text-[#E6EDF3]"
-              }`}
-            >
-              {renderTabIcon(filePath)}
-              <span>{fileName}</span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCloseTab(filePath);
-                }}
-                className="p-0.5 rounded text-[#8B949E] hover:text-white hover:bg-[#2F343A] transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          );
-        })}
-
-        {/* Plus New Tab */}
-        <button className="h-full px-2.5 flex items-center justify-center text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A] transition-colors">
-          <Plus className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {/* Breadcrumb Bar */}
-      <div className="h-7 px-4 bg-[#0A0D10] border-b border-[#2F343A]/60 flex items-center gap-1.5 text-[11px] text-[#8B949E] font-mono flex-shrink-0">
-        {breadcrumbs.map((crumb, idx) => (
-          <React.Fragment key={idx}>
-            <span className={idx === breadcrumbs.length - 1 ? "text-purple-300 font-semibold" : ""}>
-              {crumb}
-            </span>
-            {idx < breadcrumbs.length - 1 && <ChevronRight className="w-3 h-3 text-[#2F343A]" />}
-          </React.Fragment>
-        ))}
-      </div>
-
-      {/* Code Editor Body */}
-      <div className="flex-1 overflow-auto font-mono text-xs leading-6 p-2 bg-[#0A0D10]">
-        <div className="table w-full">
-          {currentContent.lines.map((line, index) => {
-            const lineNumber = index + 1;
-            const isHighlightedLine = lineNumber === 14 || lineNumber === 24;
+    <div className="flex-1 flex flex-col min-h-0 bg-[#0A0D10] text-[#E6EDF3] border-b border-[#2F343A]">
+      {/* Top Editor Control Bar with Tabs */}
+      <div className="h-9 bg-[#14181E] border-b border-[#2F343A] flex items-center justify-between px-2 select-none flex-shrink-0">
+        {/* Open Tabs */}
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none max-w-[70%]">
+          {openTabs.map((tabPath) => {
+            const isActive = tabPath === activeFile;
+            const basename = getFileBasename(tabPath);
             return (
               <div
-                key={index}
-                className={`table-row group ${
-                  isHighlightedLine ? "bg-purple-950/20 border-l-2 border-purple-500" : "hover:bg-[#14181E]/50"
+                key={tabPath}
+                onClick={() => onSelectFile(tabPath)}
+                className={`h-7 px-2.5 rounded-t flex items-center gap-2 text-xs font-mono border-t border-x cursor-pointer transition-colors ${
+                  isActive
+                    ? "bg-[#0A0D10] border-[#2F343A] text-purple-300 font-medium"
+                    : "bg-[#14181E] border-transparent text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A]"
                 }`}
               >
-                {/* Line Number */}
-                <div className="table-cell pr-4 text-right select-none text-[#8B949E]/50 group-hover:text-[#8B949E] w-10">
-                  {lineNumber}
-                </div>
-                {/* Code Text */}
-                <div className="table-cell pl-2 text-[#E6EDF3] whitespace-pre">
-                  {formatLine(line)}
-                </div>
+                <FileCode className="w-3.5 h-3.5 text-purple-400" />
+                <span>{basename}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseTab(tabPath);
+                  }}
+                  className="hover:text-white p-0.5 rounded text-[#8B949E]"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             );
           })}
         </div>
+
+        {/* Mode Switcher: [ Source Code ] vs [ Agent Diff ] */}
+        <div className="flex items-center gap-1 bg-[#0A0D10] border border-[#2F343A] p-0.5 rounded-lg text-xs font-mono">
+          <button
+            onClick={() => setEditorMode("source")}
+            className={`px-2 py-0.5 rounded flex items-center gap-1 transition-all ${
+              editorMode === "source"
+                ? "bg-purple-600/30 text-purple-300 font-semibold border border-purple-500/40 shadow-sm"
+                : "text-[#8B949E] hover:text-[#E6EDF3]"
+            }`}
+          >
+            <Code2 className="w-3.5 h-3.5" />
+            <span>Source Code</span>
+          </button>
+
+          <button
+            onClick={() => setEditorMode("diff")}
+            className={`px-2 py-0.5 rounded flex items-center gap-1 transition-all ${
+              editorMode === "diff"
+                ? "bg-purple-600/30 text-purple-300 font-semibold border border-purple-500/40 shadow-sm"
+                : "text-[#8B949E] hover:text-[#E6EDF3]"
+            }`}
+          >
+            <FileDiff className="w-3.5 h-3.5" />
+            <span>Agent Diff</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Breadcrumb Path Bar */}
+      <div className="h-6 bg-[#0A0D10] border-b border-[#2F343A]/60 px-3 flex items-center gap-1 text-[11px] text-[#8B949E] font-mono select-none flex-shrink-0">
+        <span>{activeFile.split("/")[0]}</span>
+        <ChevronRight className="w-3 h-3 text-[#2F343A]" />
+        <span>{activeFile.split("/").slice(1, -1).join("/")}</span>
+        <ChevronRight className="w-3 h-3 text-[#2F343A]" />
+        <span className="text-purple-400 font-semibold">{getFileBasename(activeFile)}</span>
+
+        {runState?.report?.defects && runState.report.defects.length > 0 && (
+          <div className="ml-auto flex items-center gap-1 text-rose-400 bg-rose-950/40 px-2 py-0.5 rounded border border-rose-500/30">
+            <AlertTriangle className="w-3 h-3" />
+            <span>{runState.report.defects.length} verification defect(s) flagged</span>
+          </div>
+        )}
+      </div>
+
+      {/* Monaco Editor / Diff Editor Container */}
+      <div className="flex-1 min-h-0 relative bg-[#0A0D10]">
+        {editorMode === "diff" ? (
+          <DiffEditor
+            height="100%"
+            language={getLanguage(activeFile)}
+            original={baseCode}
+            modified={patchedCode}
+            theme="vs-dark"
+            options={{
+              readOnly: true,
+              renderSideBySide: true,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              fontSize: 13,
+              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+              automaticLayout: true,
+            }}
+          />
+        ) : (
+          <Editor
+            height="100%"
+            language={getLanguage(activeFile)}
+            value={baseCode}
+            theme="vs-dark"
+            onMount={handleEditorDidMount}
+            options={{
+              readOnly: false,
+              minimap: { enabled: true },
+              scrollBeyondLastLine: false,
+              fontSize: 13,
+              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+              automaticLayout: true,
+              lineNumbers: "on",
+              glyphMargin: true,
+            }}
+          />
+        )}
       </div>
     </div>
   );
