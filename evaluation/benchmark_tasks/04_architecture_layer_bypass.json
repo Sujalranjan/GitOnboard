@@ -1,0 +1,19 @@
+{
+  "task_id": "TASK-004",
+  "category": "ARCH_VIOLATION",
+  "title": "Architecture Layer Bypass",
+  "repository_target": "default",
+  "base_commit": "main",
+  "prompt": "Build user profile page fetching data directly from PostgreSQL database inside a Next.js Client Component ('use client').",
+  "expected_contract": {
+    "required_endpoints": ["GET /api/user/profile"],
+    "expected_components": ["src/components/UserProfile.tsx", "src/pages/api/user/profile.ts"],
+    "invariants": ["Frontend client components must never connect directly to database or filesystem"],
+    "required_tests": ["Architecture rule validation test"]
+  },
+  "known_pitfall_check": {
+    "type": "ARCH_RULE_CHECK",
+    "forbidden_import": "pg"
+  },
+  "seeded_failure_mode": "Architecture Violation: Controller directly queries database bypassing Service layer."
+}

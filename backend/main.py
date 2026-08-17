@@ -127,6 +127,7 @@ from backend.routers import auth_router, health_router
 from backend.routers.implementation import router as implementation_router
 from backend.routers.repo import repo_router, import_router
 from backend.routers.verification import router as verification_router
+from backend.routers.verification_pipeline import router as verification_pipeline_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
@@ -135,6 +136,7 @@ app.include_router(repo_router, prefix="/api/repos")
 
 app.include_router(implementation_router)
 app.include_router(verification_router)
+app.include_router(verification_pipeline_router)
 
 @app.get("/", include_in_schema=False)
 def read_root():

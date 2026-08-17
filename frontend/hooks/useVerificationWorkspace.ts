@@ -3,13 +3,12 @@
 import { useState, useCallback } from "react";
 import { DefectItem, RunState, VerificationReport } from "@/types/workspace";
 import {
-  createContract,
-  executeAgentRun,
-  runVerification,
-  triggerRepair,
+  submitPipelineTask,
+  executePipelineTask,
+  repairPipelineTask,
 } from "@/services/verificationApi";
 
-export function useVerificationWorkspace() {
+export function useVerificationWorkspace(initialRepoName: string = "default") {
   const [activeFile, setActiveFile] = useState<string>("src/pages/api/index.tsx");
   const [openTabs, setOpenTabs] = useState<string[]>([
     "src/pages/api/index.tsx",
@@ -17,13 +16,13 @@ export function useVerificationWorkspace() {
   ]);
   const [editorMode, setEditorMode] = useState<"source" | "diff">("source");
   const [logs, setLogs] = useState<string[]>([
-    "[System] GitOnBoard Workspace initialized.",
+    `[System] GitOnBoard Workspace initialized for repository '${initialRepoName}'.`,
     "[Ready] Multi-Vector Verification Mesh stand-by.",
   ]);
 
   const [runState, setRunState] = useState<RunState>({
     runId: null,
-    repoId: "my-project",
+    repoId: initialRepoName,
     branch: "main",
     taskPrompt: "Add a new API route for managing user todos with GET and POST handlers.",
     contract: null,
@@ -59,7 +58,7 @@ export function useVerificationWorkspace() {
     [activeFile, openTabs]
   );
 
-  // Contract ➔ Agent ➔ Verification ➔ Judge sequence
+  // Contract ➔ Agent ➔ Verification ➔ Judge sequence via Pipeline Orchestrator
   const handleStartTaskPrompt = useCallback(
     async (prompt: string) => {
       setRunState((prev) => ({
@@ -68,42 +67,46 @@ export function useVerificationWorkspace() {
         isLoading: true,
         statusMessage: "1/3 Decomposing requirement into Implementation Contract...",
       }));
-      appendLog(`Starting requirement analysis for: "${prompt.slice(0, 45)}..."`);
+      appendLog(`Starting pipeline task for requirement: "${prompt.slice(0, 45)}..."`);
 
       try {
-        // 1. Create Implementation Contract
-        const contract = await createContract(runState.repoId, prompt);
+        // Step 1: Submit requirement and synthesize contract
+        const submitRes = await submitPipelineTask(runState.repoId, prompt);
         setRunState((prev) => ({
           ...prev,
-          contract,
-          statusMessage: "2/3 Executing AI Coding Agent in isolated Git worktree...",
+          runId: submitRes.task_id,
+          contract: submitRes.contract,
+          statusMessage: "2/3 Spawning Git worktree & executing AI Coding Agent...",
         }));
-        appendLog(`Synthesized Implementation Contract ID: ${contract.id}`);
+        appendLog(`Synthesized Implementation Contract ID: ${submitRes.contract.id}`);
 
-        // 2. Execute Agent Run
-        const agentRun = await executeAgentRun(runState.repoId, contract.id);
+        // Step 2: Execute sandboxed run and multi-vector verification
+        const execRes = await executePipelineTask(
+          submitRes.task_id,
+          runState.repoId,
+          submitRes.contract.id,
+          submitRes.contract
+        );
+
         setRunState((prev) => ({
           ...prev,
-          runId: agentRun.run_id,
-          rawDiff: agentRun.diff,
-          statusMessage: "3/3 Running Multi-Vector Verification Mesh (Static, Dynamic, Contract)...",
-        }));
-        appendLog(`Agent generated unified changeset diff (${agentRun.diff.split("\n").length} lines).`);
-
-        // 3. Multi-Vector Verification
-        const report = await runVerification(agentRun.run_id, runState.repoId);
-        setRunState((prev) => ({
-          ...prev,
-          report,
+          runId: execRes.run_id,
+          rawDiff: execRes.diff,
+          report: execRes.report,
+          iteration: 1,
           isLoading: false,
-          statusMessage: report.passed ? "Verification Passed" : "Verification Failed - Defect Detected",
+          statusMessage: execRes.report.passed
+            ? "Verification Passed — Zero Defects Detected"
+            : `Verification Failed — ${execRes.report.defects.length} Defect(s) Detected`,
         }));
 
-        if (report.passed) {
+        setEditorMode("diff");
+
+        if (execRes.report.passed) {
           appendLog("VERIFICATION PASS: All AST, Dynamic, and Contract checks satisfied.");
         } else {
-          appendLog(`VERIFICATION FAIL: Detected ${report.defects.length} defect(s).`);
-          report.defects.forEach((d) => {
+          appendLog(`VERIFICATION FAIL: Detected ${execRes.report.defects.length} defect(s).`);
+          execRes.report.defects.forEach((d) => {
             appendLog(`  - [${d.category}] ${d.file_path}: ${d.description}`);
           });
         }
@@ -143,11 +146,12 @@ export function useVerificationWorkspace() {
 
     try {
       const defects = runState.report?.defects || [];
-      const repairRes = await triggerRepair(
+      const repairRes = await repairPipelineTask(
         runState.runId,
+        runState.repoId,
         nextIteration,
         defects,
-        runState.repoId
+        runState.contract
       );
 
       setRunState((prev) => ({
@@ -157,13 +161,14 @@ export function useVerificationWorkspace() {
         iteration: nextIteration,
         isLoading: false,
         statusMessage: repairRes.report.passed
-          ? `Repair iteration ${nextIteration} passed!`
+          ? `Repair iteration ${nextIteration} passed successfully!`
           : `Repair iteration ${nextIteration} complete with remaining defects.`,
       }));
 
+      setEditorMode("diff");
+
       if (repairRes.report.passed) {
         appendLog(`REPAIR SUCCESS: Iteration ${nextIteration} resolved all defects.`);
-        setEditorMode("diff");
       } else {
         appendLog(`REPAIR ITERATION ${nextIteration}: ${repairRes.report.defects.length} remaining defect(s).`);
       }
@@ -176,7 +181,7 @@ export function useVerificationWorkspace() {
       }));
       appendLog(`REPAIR ERROR: ${error?.message || "Repair iteration failed."}`);
     }
-  }, [runState.runId, runState.iteration, runState.repoId, runState.report, appendLog]);
+  }, [runState.runId, runState.repoId, runState.iteration, runState.report, runState.contract, appendLog]);
 
   return {
     runState,

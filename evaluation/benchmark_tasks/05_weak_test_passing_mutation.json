@@ -1,0 +1,19 @@
+{
+  "task_id": "TASK-005",
+  "category": "EDGE_CASE_TEST_FAILURE",
+  "title": "Weak Test Passing Mutation",
+  "repository_target": "default",
+  "base_commit": "main",
+  "prompt": "Implement API rate limiter middleware supporting x-forwarded-for header fallback when remoteAddress is missing.",
+  "expected_contract": {
+    "required_endpoints": ["ALL /api/*"],
+    "expected_components": ["src/middleware/rateLimiter.ts"],
+    "invariants": ["IP parser must handle comma-separated proxy header lists"],
+    "required_tests": ["Unit test verifying rate limit error code 429"]
+  },
+  "known_pitfall_check": {
+    "type": "DYNAMIC_TEST_CHECK",
+    "test_command": "pytest backend/tests/ -k test_rate_limiter"
+  },
+  "seeded_failure_mode": "Test-Passing Incomplete Code: Passes local assert but breaks boundary validation."
+}
