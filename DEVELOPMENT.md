@@ -1,16 +1,23 @@
 # Local Development & Environment Guide
 
-This document contains verifiable commands and instructions for setting up, running, testing, and debugging the Repository Intelligence Platform.
+This document contains verifiable commands and instructions for setting up, running, testing, and debugging the Repository Intelligence Platform on **Windows** using **PowerShell (`pwsh` / Windows PowerShell)** or **WSL 2 (Ubuntu/Debian)**.
 
 ---
 
-## 1. Prerequisites
+## 1. Prerequisites (Windows & Cross-Platform)
 
-- **Python**: 3.10 or higher (3.12 recommended)
-- **uv**: Fast Python package installer and resolver (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- **Target Operating System**: Windows 10/11 (or Linux / macOS)
+- **Recommended Terminal**:
+  - **PowerShell 7+ (`pwsh`)** or **Windows PowerShell 5.1** (Primary for local host commands)
+  - **WSL 2 (Ubuntu/Debian)** / **Git Bash** (Alternative for POSIX shell scripts)
+- **Python**: 3.10 or higher (3.12 / 3.13 supported)
+- **uv**: Fast Python package manager and resolver:
+  - *Windows (PowerShell)*: `irm https://astral.sh/uv/install.ps1 | iex`
+  - *Linux / macOS / WSL*: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **Node.js**: 18+ (Node 20+ recommended) & npm
-- **Docker & Docker Compose**: For PostgreSQL container and pgAdmin 4
+- **Docker & Docker Compose**: Docker Desktop for Windows with WSL 2 backend
 - **Ollama**: (Optional) For local LLM summary generation (`http://localhost:11434`)
+
 
 ---
 
@@ -107,15 +114,44 @@ The frontend starts on `http://localhost:3000`.
 ---
 
 ## 5. Running Tests
+---
+
+## 5. Database Migrations (Alembic)
+
+Schema migrations are managed via Alembic.
+
+### Running Migrations in Docker (Recommended)
+```bash
+# Check current migration revision
+docker compose exec backend alembic current
+
+# Apply all pending migrations
+docker compose exec backend alembic upgrade head
+
+# Rollback one migration
+docker compose exec backend alembic downgrade -1
+
+# Generate auto-migration from model changes
+docker compose exec backend alembic revision --autogenerate -m "describe changes"
+```
+
+### Running Migrations on Host
+```bash
+DATABASE_URL="postgresql+psycopg://myuser:mypassword@localhost:5432/repository_intelligence" uv run alembic upgrade head
+```
+
+---
+
+## 6. Running Tests
 
 Execute test suites using `uv run pytest`:
 
 ```bash
-# Run all active test suites
-uv run pytest -v
+# Run core test suites (Fact Store, Capabilities, SQL integrity, Units, Integration)
+uv run pytest backend/tests/test_capabilities.py backend/tests/test_fact_store.py backend/tests/test_sql_integrity.py backend/tests/unit tests/ -v
 
 # Run Fact Store persistence and Layer 6 capability detection tests
-uv run pytest backend/tests/ -v
+uv run pytest backend/tests/test_capabilities.py backend/tests/test_fact_store.py backend/tests/test_sql_integrity.py -v
 
 # Run integration and API contract tests
 uv run pytest tests/ -v
@@ -123,12 +159,36 @@ uv run pytest tests/ -v
 
 ---
 
-## 6. Code Quality & Linting
+## 7. Individual Container Management & Database Shell
 
 ```bash
-# Python linting
+# Start/stop individual containers
+docker compose up -d postgres
+docker compose up -d azurite
+docker compose up -d pgadmin
+docker compose up -d --build backend
+
+# Interactive psql shell inside postgres container
+docker compose exec postgres psql -U myuser -d repository_intelligence
+
+# List database tables
+docker compose exec postgres psql -U myuser -d repository_intelligence -c "\dt"
+
+# Follow container logs
+docker compose logs -f backend
+docker compose logs -f postgres
+```
+
+---
+
+## 8. Code Quality & Linting
+
+```bash
+# Python linting & formatting
 uv run ruff check backend tests
+uv run ruff format backend tests
 
 # Frontend linting
 cd frontend && npm run lint
 ```
+
