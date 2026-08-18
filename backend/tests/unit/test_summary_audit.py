@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from backend.summary.pipeline import SummaryPipeline
 from backend.summary.schemas import (
+    ClaimCategory,
     DeployableUnit,
     DeployableUnitType,
     EvidenceItem,
@@ -94,7 +95,7 @@ def test_false_contradiction_rejected():
     verified_claims = [
         RepositoryClaim(
             claim_id="c1",
-            category="technology_dependency",
+            category=ClaimCategory.DEPENDENCY,
             subject="Typer",
             statement="Typer is declared but unused.",
             status=VerificationStatus.DECLARED_UNUSED,

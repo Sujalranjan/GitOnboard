@@ -29,6 +29,7 @@ from backend.storage import get_storage, build_blob_key
 @pytest.fixture(scope="module")
 def db_session():
     """Provides a database session for seeding test entities."""
+    Base.metadata.create_all(bind=engine)
     db = next(get_db())
     try:
         yield db

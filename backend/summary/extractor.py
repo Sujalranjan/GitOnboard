@@ -306,3 +306,93 @@ class EvidenceExtractor:
                     )
 
         return items
+
+    def extract_imports_from_source(self, file_path: str, content: str) -> List[EvidenceItem]:
+        """
+        Extracts code import statements from Python and JavaScript/TypeScript files.
+        """
+        items: List[EvidenceItem] = []
+        classification = self.classify_source(file_path)
+        py_pat = re.compile(r'^\s*(?:from|import)\s+([a-zA-Z0-9_\.]+)')
+        js_pat = re.compile(r'(?:import|require)\s*\(?[\'"]([@a-zA-Z0-9_\-\./]+)[\'"]')
+
+        if file_path.endswith(".py"):
+            for line_no, line in enumerate(content.splitlines(), start=1):
+                clean = line.strip()
+                m = py_pat.match(clean)
+                if m:
+                    mod = m.group(1).split(".")[0]
+                    items.append(
+                        EvidenceItem(
+                            evidence_id=self._next_id(),
+                            source_type=EvidenceSourceType.CODE_IMPORT,
+                            source_classification=classification,
+                            file_path=file_path,
+                            line_start=line_no,
+                            line_end=line_no,
+                            snippet=clean,
+                            symbol_name=mod,
+                            context_metadata={"import": mod}
+                        )
+                    )
+        elif any(file_path.endswith(ext) for ext in [".ts", ".tsx", ".js", ".jsx"]):
+            for line_no, line in enumerate(content.splitlines(), start=1):
+                clean = line.strip()
+                m = js_pat.search(clean)
+                if m:
+                    mod = m.group(1)
+                    items.append(
+                        EvidenceItem(
+                            evidence_id=self._next_id(),
+                            source_type=EvidenceSourceType.CODE_IMPORT,
+                            source_classification=classification,
+                            file_path=file_path,
+                            line_start=line_no,
+                            line_end=line_no,
+                            snippet=clean,
+                            symbol_name=mod,
+                            context_metadata={"import": mod}
+                        )
+                    )
+        return items
+
+    def extract_from_directory(self, repo_root: Path | str) -> List[EvidenceItem]:
+        """
+        Scans a local repository directory and deterministically extracts all evidence items.
+        """
+        root = Path(repo_root)
+        items: List[EvidenceItem] = []
+        if not root.exists():
+            return items
+
+        # Sort files for deterministic processing order
+        sorted_files = sorted(root.rglob("*"))
+        for file_path in sorted_files:
+            if not file_path.is_file():
+                continue
+            rel_str = str(file_path.relative_to(root)).replace("\\", "/")
+            if any(part.startswith(".") for part in file_path.relative_to(root).parts):
+                continue
+            if "node_modules/" in rel_str or ".venv/" in rel_str or "__pycache__" in rel_str:
+                continue
+
+            try:
+                content = file_path.read_text(encoding="utf-8", errors="ignore")
+                fname = file_path.name.lower()
+
+                # Manifests
+                if fname in {"pyproject.toml", "requirements.txt", "package.json", "cargo.toml", "go.mod", "pom.xml"}:
+                    items.extend(self.extract_from_manifests(rel_str, content))
+
+                # Docker & Compose
+                elif fname.startswith("dockerfile") or "docker-compose" in fname:
+                    items.extend(self.extract_from_compose(rel_str, content))
+
+                # Source code imports & routes
+                elif file_path.suffix in {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"}:
+                    items.extend(self.extract_imports_from_source(rel_str, content))
+                    items.extend(self.extract_routes_from_source(rel_str, content))
+            except Exception:
+                continue
+
+        return items

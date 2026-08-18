@@ -1,8 +1,5 @@
-import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-
-os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 
 from fastapi.testclient import TestClient
 
