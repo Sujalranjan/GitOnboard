@@ -1,0 +1,30 @@
+{
+  "repo_id": "14_serverless_functions",
+  "description": "AWS Lambda Serverless project with Python handlers",
+  "files": {
+    "serverless.yml": "service: lambda-analytics\nprovider:\n  name: aws\n  runtime: python3.11\nfunctions:\n  processEvent:\n    handler: handler.process\n",
+    "handler.py": "import json\ndef process(event, context):\n    return {'statusCode': 200, 'body': json.dumps('processed')}\n",
+    "README.md": "# Serverless Analytics\nServerless event processing functions deployed on AWS Lambda with Python 3.11.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "Serverless Framework",
+      "AWS Lambda"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "serverless_function"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Serverless Framework project",
+      "Targets AWS Lambda with python3.11 runtime",
+      "Entrypoint handler in handler.py"
+    ]
+  }
+}

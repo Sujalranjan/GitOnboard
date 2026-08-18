@@ -75,7 +75,8 @@ class ClaimVerifier:
             
             is_declared = any(e.source_type == EvidenceSourceType.MANIFEST_DEPENDENCY for e in ev_list)
             is_configured = any(e.source_type == EvidenceSourceType.CONFIG_ENTRY for e in ev_list)
-            is_documented = bool(re.search(rf'\b{tech}\b', all_doc_text))
+            escaped_tech = re.escape(tech)
+            is_documented = bool(re.search(rf'\b{escaped_tech}\b', all_doc_text))
             
             # Check for application imports / usages in source code
             app_usages = [
@@ -88,11 +89,12 @@ class ClaimVerifier:
             if not app_usages:
                 for f_path, f_code in source_code_texts.items():
                     if EvidenceExtractor.classify_source(f_path) == SourceClassification.APPLICATION:
-                        if re.search(rf'\bimport\s+{tech}\b|from\s+{tech}\b|{tech}\.', f_code.lower()):
+                        if re.search(rf'\bimport\s+{escaped_tech}\b|from\s+{escaped_tech}\b|{escaped_tech}\.', f_code.lower()):
                             is_declared = is_declared or True
                             app_usages.append(
                                 EvidenceItem(
                                     evidence_id=f"ev_app_{claim_idx:03d}",
+
                                     source_type=EvidenceSourceType.IMPORT_STATEMENT,
                                     source_classification=SourceClassification.APPLICATION,
                                     file_path=f_path,

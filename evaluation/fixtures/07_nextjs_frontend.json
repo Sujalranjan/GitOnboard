@@ -1,0 +1,32 @@
+{
+  "repo_id": "07_nextjs_frontend",
+  "description": "Next.js 14 App Router with React and Tailwind CSS",
+  "files": {
+    "package.json": "{\n  \"name\": \"portal-ui\",\n  \"dependencies\": {\n    \"next\": \"^14.1.0\",\n    \"react\": \"^18.2.0\",\n    \"tailwindcss\": \"^3.4.1\"\n  }\n}\n",
+    "app/page.tsx": "export default function Home() { return <main><h1>Portal UI</h1></main>; }\n",
+    "app/layout.tsx": "export default function RootLayout({ children }: { children: React.ReactNode }) { return <html><body>{children}</body></html>; }\n",
+    "README.md": "# Portal UI\nModern web frontend built with Next.js 14 App Router and Tailwind CSS.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "TypeScript"
+    ],
+    "frameworks": [
+      "Next.js",
+      "React",
+      "Tailwind CSS"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "frontend_spa"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Written in TypeScript",
+      "Uses Next.js App Router",
+      "Uses Tailwind CSS for styling"
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "repo_id": "02_fastapi_backend",
+  "description": "FastAPI HTTP API with PostgreSQL and SQLAlchemy",
+  "files": {
+    "requirements.txt": "fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==2.9.9\nsqlalchemy==2.0.28\n",
+    "app/main.py": "from fastapi import FastAPI\nfrom app.db import Base, engine\napp = FastAPI(title='UserAPI')\n",
+    "app/db.py": "from sqlalchemy import create_engine\nfrom sqlalchemy.orm import declarative_base\nengine = create_engine('postgresql://user:pass@localhost:5432/appdb')\nBase = declarative_base()\n",
+    "app/routes/users.py": "from fastapi import APIRouter\nrouter = APIRouter(prefix='/api/v1/users')\n",
+    "README.md": "# User API Service\nFastAPI REST service backed by PostgreSQL database.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "SQLAlchemy",
+      "Uvicorn"
+    ],
+    "databases": [
+      "PostgreSQL"
+    ],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Uses FastAPI web framework",
+      "Uses PostgreSQL database with SQLAlchemy",
+      "Exposes /api/v1/users route",
+      "Database connection configured in app/db.py"
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "repo_id": "12_multiservice_monorepo",
+  "description": "Monorepo containing FastAPI backend and React frontend with Docker Compose",
+  "files": {
+    "docker-compose.yml": "version: '3.8'\nservices:\n  api:\n    build: ./services/api\n    ports: ['8000:8000']\n  web:\n    build: ./services/web\n    ports: ['3000:3000']\n",
+    "services/api/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+    "services/api/requirements.txt": "fastapi==0.110.0\nuvicorn==0.28.0\n",
+    "services/web/package.json": "{\n  \"name\": \"web\",\n  \"dependencies\": { \"react\": \"^18.2.0\" }\n}\n",
+    "README.md": "# Platform Monorepo\nMulti-service architecture with FastAPI backend under services/api and React frontend under services/web.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Python",
+      "JavaScript"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "React",
+      "Docker Compose"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "services/api",
+      "services/web"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Multi-service monorepo structure",
+      "Backend service located at services/api using FastAPI",
+      "Frontend service located at services/web using React",
+      "Orchestrated with Docker Compose"
+    ]
+  }
+}

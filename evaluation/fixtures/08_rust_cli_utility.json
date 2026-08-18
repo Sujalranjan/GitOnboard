@@ -1,0 +1,30 @@
+{
+  "repo_id": "08_rust_cli_utility",
+  "description": "Rust command line tool using Tokio and Clap",
+  "files": {
+    "Cargo.toml": "[package]\nname = 'rust-parser'\nversion = '0.1.0'\nedition = '2021'\n\n[dependencies]\nclap = { version = '4.4', features = ['derive'] }\ntokio = { version = '1.35', features = ['full'] }\n",
+    "src/main.rs": "use clap::Parser;\n#[derive(Parser)]\nstruct Cli {}\n#[tokio::main]\nasync fn main() {}\n",
+    "README.md": "# Rust Parser\nAsync command line parser written in Rust using Tokio and Clap.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Rust"
+    ],
+    "frameworks": [
+      "Tokio",
+      "Clap"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "cli"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Written in Rust edition 2021",
+      "Uses Tokio async runtime",
+      "Uses Clap for command line argument parsing"
+    ]
+  }
+}

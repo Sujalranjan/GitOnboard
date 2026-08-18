@@ -1,0 +1,29 @@
+{
+  "repo_id": "01_minimal_python_cli",
+  "description": "Minimal Python CLI tool with pyproject.toml and click",
+  "files": {
+    "pyproject.toml": "[project]\nname = 'mincli'\nversion = '0.1.0'\ndependencies = ['click>=8.0.0']\n",
+    "src/mincli/main.py": "import click\n\n@click.command()\ndef main():\n    click.echo('Hello MinCLI')\n",
+    "README.md": "# MinCLI\nA minimal command line interface tool written in Python.\nUses click for argument parsing.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "click"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "cli"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Written in Python",
+      "Uses click CLI framework",
+      "Entrypoint is src/mincli/main.py"
+    ]
+  }
+}

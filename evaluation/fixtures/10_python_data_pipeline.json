@@ -1,0 +1,32 @@
+{
+  "repo_id": "10_python_data_pipeline",
+  "description": "Data engineering pipeline with Pandas, PyArrow and Clickhouse client",
+  "files": {
+    "pyproject.toml": "[project]\nname = 'datapipeline'\ndependencies = ['pandas>=2.2.0', 'pyarrow>=15.0.0', 'clickhouse-driver>=0.2.7']\n",
+    "pipeline/extract.py": "import pandas as pd\nimport pyarrow as pa\nfrom clickhouse_driver import Client\nclient = Client('localhost')\n",
+    "README.md": "# ETL Data Pipeline\nBatch processing pipeline extracting and ingesting analytics data into Clickhouse.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "Pandas",
+      "PyArrow"
+    ],
+    "databases": [
+      "ClickHouse"
+    ],
+    "deployable_units": [
+      "data_pipeline"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Python ETL pipeline",
+      "Uses Pandas and PyArrow for tabular data manipulation",
+      "Connects to ClickHouse database"
+    ]
+  }
+}

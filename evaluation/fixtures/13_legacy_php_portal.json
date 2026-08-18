@@ -1,0 +1,31 @@
+{
+  "repo_id": "13_legacy_php_portal",
+  "description": "Legacy PHP web app with MySQL PDO connection",
+  "files": {
+    "composer.json": "{\n  \"name\": \"legacy/portal\",\n  \"require\": {\n    \"php\": \">=7.4\",\n    \"twig/twig\": \"^3.0\"\n  }\n}\n",
+    "index.php": "<?php\n$pdo = new PDO('mysql:host=localhost;dbname=portal', 'user', 'pass');\n",
+    "README.md": "# Legacy Portal\nLegacy PHP application using Twig template engine and MySQL database.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "PHP"
+    ],
+    "frameworks": [
+      "Twig"
+    ],
+    "databases": [
+      "MySQL"
+    ],
+    "deployable_units": [
+      "web_portal"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Written in PHP >=7.4",
+      "Uses Twig template engine",
+      "Connects to MySQL database using PDO"
+    ]
+  }
+}
