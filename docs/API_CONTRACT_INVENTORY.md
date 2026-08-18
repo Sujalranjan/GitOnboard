@@ -341,3 +341,42 @@ This document provides a complete, machine-readable inventory of all active and 
 - **Handler**: `backend/routers/verification.py::iterate_repair`
 - **Request**: `{"run_id": "run-1", "repo_id": "default", "iteration": 2, "defects": [...]}`
 - **Response**: `{"run_id": "run-1", "repaired_diff": "...", "verification_report": { ... }}`
+
+---
+
+## 5. Worktree Sandbox Command Execution (`/api/v1/sandbox`)
+
+### `POST /api/v1/sandbox/{run_id}/exec`
+- **Handler**: `backend/routers/sandbox.py::exec_sandbox_command`
+- **Auth Required**: No (scoped by server-side `run_id` worktree resolution)
+- **Security Boundary**:
+  - Controlled host subprocess execution with validated worktree directory as `cwd`.
+  - Path validation verifies `run_id` worktree path resides within `data/worktrees/`.
+  - Sensitive backend environment variables (`JWT_SECRET`, `GITHUB_CLIENT_SECRET`, `AZURE_STORAGE_ACCOUNT_KEY`, `DATABASE_URL`) are stripped.
+  - Streaming stdout/stderr limit enforced at 1MB per stream; process group is terminated immediately on overage.
+  - Execution timeout enforced (1-120 seconds, default 30s) with process-group kill.
+  - *Note*: This is controlled host subprocess execution and does not provide container/kernel namespace isolation.
+- **Request Schema**:
+  ```json
+  {
+    "command": "pytest -v",
+    "timeout_sec": 30
+  }
+  ```
+- **Response Schema (200 OK)**:
+  ```json
+  {
+    "run_id": "task-1718000000",
+    "command": "pytest -v",
+    "stdout": "================ test session starts ================\n...",
+    "stderr": "",
+    "exit_code": 0,
+    "timed_out": false,
+    "output_truncated": false,
+    "duration_ms": 145.2
+  }
+  ```
+- **Error Codes**:
+  - `400 Bad Request`: Empty command or invalid `run_id` format
+  - `404 Not Found`: Run worktree does not exist on disk
+  - `500 Internal Server Error`: Subprocess spawn or runtime failure
