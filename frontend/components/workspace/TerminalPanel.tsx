@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Terminal as TerminalIcon,
   AlertCircle,
@@ -16,6 +16,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { RunState } from "@/types/workspace";
+import { execSandboxCommand, SandboxExecResponse } from "@/services/sandboxApi";
 
 interface TerminalPanelProps {
   isOpen: boolean;
@@ -23,30 +24,77 @@ interface TerminalPanelProps {
   runState?: RunState;
 }
 
+interface TerminalEntry {
+  command: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut?: boolean;
+  outputTruncated?: boolean;
+  durationMs?: number;
+  error?: string;
+}
+
 export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps) {
   const [activeTab, setActiveTab] = useState<"TERMINAL" | "VERIFICATION" | "PROBLEMS">("TERMINAL");
   const [selectedShell, setSelectedShell] = useState("bash (isolated sandbox)");
   const [commandInput, setCommandInput] = useState("");
-  const [customTerminalLogs, setCustomTerminalLogs] = useState<string[]>([]);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [terminalEntries, setTerminalEntries] = useState<TerminalEntry[]>([]);
+
+  const terminalEndRef = useRef<HTMLDivElement>(null);
 
   const report = runState?.report;
   const dynamicDetails = report?.dynamic_result?.details || {};
   const defects = report?.defects || [];
 
+  // Scroll to bottom when new terminal entries arrive
+  useEffect(() => {
+    if (activeTab === "TERMINAL" && terminalEndRef.current) {
+      terminalEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [terminalEntries, activeTab]);
+
   if (!isOpen) return null;
 
-  const handleCommandSubmit = (e: React.FormEvent) => {
+  const handleCommandSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!commandInput.trim()) return;
+    if (!commandInput.trim() || isExecuting) return;
 
     const cmd = commandInput.trim();
-    setCustomTerminalLogs((prev) => [
-      ...prev,
-      `$ ${cmd}`,
-      `Executing '${cmd}' in isolated repository worktree sandbox...`,
-      `Exit code: 0`,
-    ]);
     setCommandInput("");
+    setIsExecuting(true);
+
+    const activeRunId = runState?.runId || runState?.repoId || "default";
+
+    try {
+      const res = await execSandboxCommand(activeRunId, cmd);
+      setTerminalEntries((prev) => [
+        ...prev,
+        {
+          command: cmd,
+          stdout: res.stdout,
+          stderr: res.stderr,
+          exitCode: res.exit_code,
+          timedOut: res.timed_out,
+          outputTruncated: res.output_truncated,
+          durationMs: res.duration_ms,
+        },
+      ]);
+    } catch (err: any) {
+      setTerminalEntries((prev) => [
+        ...prev,
+        {
+          command: cmd,
+          stdout: "",
+          stderr: err?.message || "Execution error occurred",
+          exitCode: 1,
+          error: err?.message || "Failed to communicate with sandbox service",
+        },
+      ]);
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   return (
@@ -101,7 +149,7 @@ export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps)
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-mono text-[#8B949E]">{selectedShell}</span>
           <button
-            onClick={() => setCustomTerminalLogs([])}
+            onClick={() => setTerminalEntries([])}
             className="p-1 text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors"
             title="Clear Console"
           >
@@ -116,12 +164,12 @@ export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps)
       {/* Main Terminal Output Content */}
       <div className="flex-1 overflow-y-auto p-3 font-mono text-xs text-[#E6EDF3] bg-[#0A0D10] leading-relaxed scrollbar-thin">
         {activeTab === "TERMINAL" && (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <div className="text-purple-400 font-semibold">
-              GitOnBoard Isolated Worktree Sandbox Terminal [{runState?.repoId || "default"}]
+              GitOnBoard Worktree Sandbox Terminal [{runState?.repoId || "default"}]
             </div>
-            <div className="text-slate-500">
-              Type custom CLI commands below to execute against the repository worktree sandbox.
+            <div className="text-slate-500 text-[11px]">
+              Commands execute inside the isolated run worktree directory on the host. Real stdout, stderr, and exit codes are captured.
             </div>
 
             {/* Render Verification Progress Summary if present */}
@@ -131,12 +179,69 @@ export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps)
               </div>
             )}
 
-            {/* Custom Interactive Terminal Logs */}
-            {customTerminalLogs.map((log, idx) => (
-              <div key={idx} className="text-[#E6EDF3]">
-                {log}
+            {/* Real Interactive Terminal Log Entries */}
+            {terminalEntries.map((entry, idx) => (
+              <div key={idx} className="space-y-1 border-t border-[#2F343A]/40 pt-1.5">
+                {/* Command Line */}
+                <div className="flex items-center gap-2 text-purple-300 font-bold">
+                  <span>$</span>
+                  <span>{entry.command}</span>
+                </div>
+
+                {/* Real Stdout */}
+                {entry.stdout && (
+                  <pre className="whitespace-pre-wrap text-[#E6EDF3] font-mono text-[11px] leading-relaxed bg-[#14181E]/60 p-1.5 rounded border border-[#2F343A]/30">
+                    <code>{entry.stdout}</code>
+                  </pre>
+                )}
+
+                {/* Real Stderr */}
+                {entry.stderr && (
+                  <pre className="whitespace-pre-wrap text-rose-300 font-mono text-[11px] leading-relaxed bg-rose-950/20 p-1.5 rounded border border-rose-500/30">
+                    <code>{entry.stderr}</code>
+                  </pre>
+                )}
+
+                {/* Truncation & Timeout Badges */}
+                {entry.outputTruncated && (
+                  <div className="text-amber-400 text-[10px] flex items-center gap-1 font-semibold">
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>[Output stream capped at 1MB limit — process terminated]</span>
+                  </div>
+                )}
+                {entry.timedOut && (
+                  <div className="text-rose-400 text-[10px] flex items-center gap-1 font-semibold">
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>[Execution timed out — process group killed]</span>
+                  </div>
+                )}
+
+                {/* Exit Code & Timing Footer */}
+                <div className="flex items-center gap-2 text-[10px]">
+                  <span
+                    className={`px-1.5 py-0.5 rounded font-mono font-semibold ${
+                      entry.exitCode === 0
+                        ? "bg-emerald-950 text-emerald-300 border border-emerald-500/30"
+                        : "bg-rose-950 text-rose-300 border border-rose-500/30"
+                    }`}
+                  >
+                    Exit code: {entry.exitCode}
+                  </span>
+                  {entry.durationMs !== undefined && (
+                    <span className="text-slate-500">({entry.durationMs}ms)</span>
+                  )}
+                </div>
               </div>
             ))}
+
+            {isExecuting && (
+              <div className="flex items-center gap-2 text-purple-400 text-[11px] italic pt-1">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Executing in worktree sandbox...</span>
+              </div>
+            )}
+
+            <div ref={terminalEndRef} />
           </div>
         )}
 
@@ -215,8 +320,9 @@ export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps)
             type="text"
             value={commandInput}
             onChange={(e) => setCommandInput(e.target.value)}
-            placeholder="Type command and press Enter..."
-            className="flex-1 bg-transparent text-xs font-mono text-[#E6EDF3] placeholder-[#8B949E] focus:outline-none"
+            disabled={isExecuting}
+            placeholder={isExecuting ? "Command executing..." : "Type command and press Enter (e.g. ls, pwd, git status)..."}
+            className="flex-1 bg-transparent text-xs font-mono text-[#E6EDF3] placeholder-[#8B949E] focus:outline-none disabled:opacity-50"
           />
         </form>
       )}
