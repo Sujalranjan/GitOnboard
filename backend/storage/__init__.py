@@ -5,6 +5,7 @@ from typing import Optional
 from backend.config import settings
 from .base import ObjectStorage
 from .azure import AzureBlobStorage
+from .memory import InMemoryObjectStorage
 from .naming import build_blob_key, sanitize_relative_path
 
 _storage_instance: Optional[ObjectStorage] = None
@@ -37,6 +38,7 @@ def set_storage(storage: Optional[ObjectStorage]) -> None:
 __all__ = [
     "ObjectStorage",
     "AzureBlobStorage",
+    "InMemoryObjectStorage",
     "get_storage",
     "set_storage",
     "build_blob_key",

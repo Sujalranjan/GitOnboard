@@ -56,7 +56,6 @@ def test_user_and_repo(db_session: Session):
         user_id=user.id,
         url=f"https://github.com/testowner/{repo_name}",
         default_branch="main",
-        status="Completed",
     )
     db_session.add(repo)
     db_session.commit()
@@ -64,7 +63,7 @@ def test_user_and_repo(db_session: Session):
 
     analysis = Analysis(
         repository_id=repo.id,
-        commit_hash="c1a2b3d4e5f6",
+        commit_sha="c1a2b3d4e5f6",
         status="Completed",
     )
     db_session.add(analysis)
@@ -79,6 +78,7 @@ def test_user_and_repo(db_session: Session):
         "repo_name": repo_name,
         "analysis": analysis,
         "jwt_token": jwt_token,
+        "auth_headers": {"Authorization": f"Bearer {jwt_token}"},
     }
 
 
@@ -95,6 +95,16 @@ def unauthed_client():
     """Unauthenticated TestClient."""
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def setup_test_storage():
+    """Ensures test storage is isolated and deterministic."""
+    from backend.storage import set_storage, InMemoryObjectStorage
+    storage = InMemoryObjectStorage()
+    set_storage(storage)
+    yield storage
+    set_storage(None)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -166,6 +176,7 @@ def test_complete_azurite_read_write_read_cycle(client: TestClient, test_user_an
     6. Overwrite with second modification and verify fresh read reflects update.
     """
     repo_name = test_user_and_repo["repo_name"]
+    auth_headers = test_user_and_repo["auth_headers"]
     file_path = "backend/api/health_check.py"
     content_v1 = (
         "import fastapi\n\n"
@@ -179,8 +190,9 @@ def test_complete_azurite_read_write_read_cycle(client: TestClient, test_user_an
     save_res = client.post(
         f"/api/repos/{repo_name}/file",
         json={"path": file_path, "content": content_v1},
+        headers=auth_headers,
     )
-    assert save_res.status_code == 200
+    assert save_res.status_code == 200, f"save_res failed: {save_res.text}"
     save_data = save_res.json()
     assert save_data["status"] == "saved"
     assert save_data["path"] == file_path
@@ -204,7 +216,7 @@ def test_complete_azurite_read_write_read_cycle(client: TestClient, test_user_an
     assert azurite_text == content_v1
 
     # 4. Read back via GET endpoint
-    read_res = client.get(f"/api/repos/{repo_name}/file?path={file_path}")
+    read_res = client.get(f"/api/repos/{repo_name}/file?path={file_path}", headers=auth_headers)
     assert read_res.status_code == 200
     read_data = read_res.json()
     assert read_data["path"] == file_path
@@ -216,11 +228,12 @@ def test_complete_azurite_read_write_read_cycle(client: TestClient, test_user_an
     save_res_2 = client.post(
         f"/api/repos/{repo_name}/file",
         json={"path": file_path, "content": content_v2},
+        headers=auth_headers,
     )
     assert save_res_2.status_code == 200
 
     # 6. Read back fresh content and assert exact match
-    read_res_2 = client.get(f"/api/repos/{repo_name}/file?path={file_path}")
+    read_res_2 = client.get(f"/api/repos/{repo_name}/file?path={file_path}", headers=auth_headers)
     assert read_res_2.status_code == 200
     assert read_res_2.json()["content"] == content_v2
 
@@ -233,12 +246,13 @@ def test_repository_isolation_on_file_operations(client: TestClient, test_user_a
     """
     Verifies that a user cannot access another repository's files or analyses.
     """
+    unique_other = uuid.uuid4().hex[:8]
     other_user = User(
-        github_id="gh_other_9999",
-        email="other@example.com",
-        username="other_user",
+        github_id=f"gh_other_{unique_other}",
+        email=f"other_{unique_other}@example.com",
+        username=f"other_user_{unique_other}",
         avatar="https://example.com/avatar.png",
-        github_access_token="gho_other_token",
+        github_access_token=f"gho_other_token_{unique_other}",
     )
     db_session.add(other_user)
     db_session.commit()
@@ -246,9 +260,8 @@ def test_repository_isolation_on_file_operations(client: TestClient, test_user_a
 
     other_repo = Repository(
         user_id=other_user.id,
-        url="https://github.com/otherowner/private-repo",
+        url=f"https://github.com/otherowner/private-repo-{unique_other}",
         default_branch="main",
-        status="Completed",
     )
     db_session.add(other_repo)
     db_session.commit()

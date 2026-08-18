@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import {
   Code2,
+  FolderTree,
+  Terminal,
+  Sparkles,
   GitBranch,
-  FolderGit2,
-  Blocks,
   Database,
+  Keyboard,
   BookOpen,
   Settings2,
   User,
@@ -17,6 +19,11 @@ interface SidebarNavProps {
   setActiveTab: (tab: string) => void;
   isFileExplorerOpen: boolean;
   setIsFileExplorerOpen: (open: boolean) => void;
+  isTerminalOpen?: boolean;
+  onToggleTerminal?: () => void;
+  isAIAgentOpen?: boolean;
+  onToggleAIAgent?: () => void;
+  onOpenShortcuts?: () => void;
 }
 
 export function SidebarNav({
@@ -24,16 +31,23 @@ export function SidebarNav({
   setActiveTab,
   isFileExplorerOpen,
   setIsFileExplorerOpen,
+  isTerminalOpen,
+  onToggleTerminal,
+  isAIAgentOpen,
+  onToggleAIAgent,
+  onOpenShortcuts,
 }: SidebarNavProps) {
   const topNavItems = [
     { id: "editor", icon: Code2, label: "Code / Editor" },
+    { id: "projects", icon: FolderTree, label: "Explorer (Ctrl+B)", isPanelToggle: true, isOpen: isFileExplorerOpen },
+    { id: "terminal", icon: Terminal, label: "Terminal & Tests (Ctrl+`)", isPanelToggle: true, isOpen: isTerminalOpen },
+    { id: "agent", icon: Sparkles, label: "AI Agent Chat (Ctrl+L)", isPanelToggle: true, isOpen: isAIAgentOpen },
     { id: "git", icon: GitBranch, label: "Source Control" },
-    { id: "projects", icon: FolderGit2, label: "Projects / Files" },
-    { id: "extensions", icon: Blocks, label: "API & Extensions" },
     { id: "database", icon: Database, label: "Database" },
   ];
 
   const bottomNavItems = [
+    { id: "shortcuts", icon: Keyboard, label: "Keyboard Shortcuts (?)" },
     { id: "docs", icon: BookOpen, label: "Documentation" },
     { id: "settings", icon: Settings2, label: "Settings" },
     { id: "account", icon: User, label: "Account" },
@@ -41,8 +55,14 @@ export function SidebarNav({
 
   const handleItemClick = (id: string) => {
     setActiveTab(id);
-    if (id === "editor" || id === "projects") {
+    if (id === "projects" || id === "editor") {
       setIsFileExplorerOpen(!isFileExplorerOpen);
+    } else if (id === "terminal" && onToggleTerminal) {
+      onToggleTerminal();
+    } else if (id === "agent" && onToggleAIAgent) {
+      onToggleAIAgent();
+    } else if (id === "shortcuts" && onOpenShortcuts) {
+      onOpenShortcuts();
     }
   };
 
@@ -52,7 +72,7 @@ export function SidebarNav({
       <div className="flex flex-col gap-1 w-full items-center">
         {topNavItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.id;
+          const isActive = activeTab === item.id || (item.isPanelToggle && item.isOpen);
           return (
             <button
               key={item.id}
@@ -101,3 +121,4 @@ export function SidebarNav({
     </aside>
   );
 }
+
