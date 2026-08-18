@@ -1,0 +1,32 @@
+{
+  "repo_id": "09_java_spring_boot",
+  "description": "Java Spring Boot microservice with Maven and MySQL",
+  "files": {
+    "pom.xml": "<project>\n  <modelVersion>4.0.0</modelVersion>\n  <groupId>com.example</groupId>\n  <artifactId>account-service</artifactId>\n  <dependencies>\n    <dependency>\n      <groupId>org.springframework.boot</groupId>\n      <artifactId>spring-boot-starter-web</artifactId>\n    </dependency>\n    <dependency>\n      <groupId>mysql</groupId>\n      <artifactId>mysql-connector-java</artifactId>\n    </dependency>\n  </dependencies>\n</project>\n",
+    "src/main/java/com/example/Application.java": "package com.example;\nimport org.springframework.boot.SpringApplication;\nimport org.springframework.boot.autoconfigure.SpringBootApplication;\n@SpringBootApplication\npublic class Application {\n  public static void main(String[] args) {\n    SpringApplication.run(Application.class, args);\n  }\n}\n",
+    "README.md": "# Account Service\nEnterprise account management service built with Spring Boot and MySQL.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Java"
+    ],
+    "frameworks": [
+      "Spring Boot",
+      "Maven"
+    ],
+    "databases": [
+      "MySQL"
+    ],
+    "deployable_units": [
+      "backend_service"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Built in Java with Spring Boot",
+      "Uses Maven build configuration pom.xml",
+      "Connects to MySQL database"
+    ]
+  }
+}

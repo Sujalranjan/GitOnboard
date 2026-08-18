@@ -1,0 +1,34 @@
+{
+  "repo_id": "03_flask_monolith",
+  "description": "Flask monolith with SQLite and Jinja templates",
+  "files": {
+    "requirements.txt": "Flask==3.0.2\nFlask-SQLAlchemy==3.1.1\n",
+    "app.py": "from flask import Flask, render_template\napp = Flask(__name__)\napp.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'\n",
+    "templates/index.html": "<html><body><h1>Flask App</h1></body></html>\n",
+    "README.md": "# Flask Monolith\nTraditional server-rendered Flask web application with SQLite database.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Python",
+      "HTML"
+    ],
+    "frameworks": [
+      "Flask",
+      "Flask-SQLAlchemy"
+    ],
+    "databases": [
+      "SQLite"
+    ],
+    "deployable_units": [
+      "web_monolith"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Built with Flask framework",
+      "Uses SQLite as local database",
+      "Renders HTML templates with Jinja"
+    ]
+  }
+}

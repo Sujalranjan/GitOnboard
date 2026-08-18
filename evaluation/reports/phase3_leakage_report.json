@@ -1,0 +1,179 @@
+{
+  "aggregate": {
+    "invalid_claims_before_validation": 5,
+    "invalid_claims_rejected": 4,
+    "invalid_claims_leaked": 0,
+    "leakage_rate": 0.0,
+    "supported_claims": 94,
+    "supported_correctly_evidenced_claims": 54,
+    "supported_correctly_evidenced_rejected": 16,
+    "false_rejection_rate": 29.63
+  },
+  "per_repository": [
+    {
+      "repository": "01_minimal_python_cli",
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 5,
+      "supported_correctly_evidenced_claims": 4,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0
+    },
+    {
+      "repository": "02_fastapi_backend",
+      "invalid_claims_before_validator": 1,
+      "invalid_claims_rejected": 1,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 7,
+      "supported_correctly_evidenced_claims": 4,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0
+    },
+    {
+      "repository": "03_flask_monolith",
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 8,
+      "supported_correctly_evidenced_claims": 3,
+      "supported_correctly_evidenced_rejected": 3,
+      "false_rejection_rate": 100.0
+    },
+    {
+      "repository": "04_express_api",
+      "invalid_claims_before_validator": 1,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 3,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0
+    },
+    {
+      "repository": "05_django_rest",
+      "invalid_claims_before_validator": 1,
+      "invalid_claims_rejected": 1,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 3,
+      "supported_correctly_evidenced_rejected": 2,
+      "false_rejection_rate": 66.67
+    },
+    {
+      "repository": "06_go_microservice",
+      "invalid_claims_before_validator": 1,
+      "invalid_claims_rejected": 1,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 4,
+      "supported_correctly_evidenced_claims": 2,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0
+    },
+    {
+      "repository": "07_nextjs_frontend",
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 3,
+      "supported_correctly_evidenced_rejected": 2,
+      "false_rejection_rate": 66.67
+    },
+    {
+      "repository": "08_rust_cli_utility",
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 5,
+      "supported_correctly_evidenced_claims": 4,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0
+    },
+    {
+      "repository": "09_java_spring_boot",
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 3,
+      "supported_correctly_evidenced_rejected": 3,
+      "false_rejection_rate": 100.0
+    },
+    {
+      "repository": "10_python_data_pipeline",
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 4,
+      "supported_correctly_evidenced_rejected": 1,
+      "false_rejection_rate": 25.0
+    },
+    {
+      "repository": "11_ruby_rails_app",
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 2,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0
+    },
+    {
+      "repository": "12_multiservice_monorepo",
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 12,
+      "supported_correctly_evidenced_claims": 8,
+      "supported_correctly_evidenced_rejected": 2,
+      "false_rejection_rate": 25.0
+    },
+    {
+      "repository": "13_legacy_php_portal",
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 4,
+      "supported_correctly_evidenced_claims": 2,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0
+    },
+    {
+      "repository": "14_serverless_functions",
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 5,
+      "supported_correctly_evidenced_claims": 4,
+      "supported_correctly_evidenced_rejected": 3,
+      "false_rejection_rate": 75.0
+    },
+    {
+      "repository": "15_fullstack_ai_agent",
+      "invalid_claims_before_validator": 1,
+      "invalid_claims_rejected": 1,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 8,
+      "supported_correctly_evidenced_claims": 5,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0
+    }
+  ]
+}

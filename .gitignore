@@ -21,8 +21,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-frontend_old/
-evaluation/
+# Evaluation runs
+evaluation/runs/
 
 # Environment
 .env

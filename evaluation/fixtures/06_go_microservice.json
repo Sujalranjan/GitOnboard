@@ -1,0 +1,32 @@
+{
+  "repo_id": "06_go_microservice",
+  "description": "Go microservice with Gin and Redis cache",
+  "files": {
+    "go.mod": "module github.com/example/orders\n\ngo 1.22\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.9.1\n\tgithub.com/redis/go-redis/v9 v9.5.1\n)\n",
+    "main.go": "package main\nimport (\n\t\"github.com/gin-gonic/gin\"\n\t\"github.com/redis/go-redis/v9\"\n)\nfunc main() {\n\tr := gin.Default()\n\tr.Run(\":8080\")\n}\n",
+    "README.md": "# Order Microservice\nHigh performance Go microservice using Gin and Redis caching.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Go"
+    ],
+    "frameworks": [
+      "Gin"
+    ],
+    "databases": [
+      "Redis"
+    ],
+    "deployable_units": [
+      "microservice"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Written in Go",
+      "Uses Gin HTTP web framework",
+      "Uses Redis for caching",
+      "Runs on port 8080"
+    ]
+  }
+}

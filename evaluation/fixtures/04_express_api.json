@@ -1,0 +1,33 @@
+{
+  "repo_id": "04_express_api",
+  "description": "Express.js REST API with MongoDB and Mongoose",
+  "files": {
+    "package.json": "{\n  \"name\": \"express-api\",\n  \"version\": \"1.0.0\",\n  \"dependencies\": {\n    \"express\": \"^4.18.2\",\n    \"mongoose\": \"^8.2.1\",\n    \"cors\": \"^2.8.5\"\n  }\n}\n",
+    "src/server.js": "const express = require('express');\nconst mongoose = require('mongoose');\nconst app = express();\nmongoose.connect('mongodb://localhost:27017/shop');\n",
+    "src/routes/items.js": "const express = require('express');\nconst router = express.Router();\nmodule.exports = router;\n",
+    "README.md": "# Shop API\nNode.js and Express REST API connected to MongoDB database.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "JavaScript"
+    ],
+    "frameworks": [
+      "Express",
+      "Mongoose"
+    ],
+    "databases": [
+      "MongoDB"
+    ],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Written in JavaScript on Node.js",
+      "Uses Express framework",
+      "Uses MongoDB with Mongoose ODM"
+    ]
+  }
+}

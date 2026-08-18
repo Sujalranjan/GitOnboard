@@ -1,0 +1,4311 @@
+{
+  "phase": "phase3_hallucination_baseline",
+  "writer": {
+    "provider": "ollama",
+    "model": "qwen2.5-coder:7b"
+  },
+  "benchmark": {
+    "repositories": 15
+  },
+  "claims": {
+    "total": 143,
+    "evaluable": 99,
+    "supported": 94,
+    "unsupported": 5,
+    "contradicted": 0,
+    "unresolved": 44
+  },
+  "writer_metrics": {
+    "hallucination_rate": 3.5,
+    "conditional_hallucination_rate": 5.05,
+    "unsupported_rate": 3.5,
+    "contradiction_rate": 0.0
+  },
+  "hallucination_categories": {
+    "fabricated_paths": 2,
+    "fabricated_files": 0,
+    "fabricated_symbols": 0,
+    "false_contradictions": 2,
+    "incorrect_technologies": 1
+  },
+  "citation_quality": {
+    "total_citations": 142,
+    "valid_citations": 58,
+    "invalid_id_citations": 1,
+    "unentailed_citations": 83,
+    "validity_rate": 40.85,
+    "entailment_rate": 41.13
+  },
+  "validator": {
+    "invalid_claims_before_validation": 5,
+    "invalid_claims_rejected": 4,
+    "invalid_claims_leaked": 0,
+    "leakage_rate": 0.0,
+    "supported_claims": 94,
+    "supported_correctly_evidenced_claims": 54,
+    "supported_correctly_evidenced_rejected": 16,
+    "false_rejection_rate": 29.63
+  },
+  "per_repository": [
+    {
+      "repository": "01_minimal_python_cli",
+      "total_claims": 6,
+      "evaluable_claims": 5,
+      "supported": 5,
+      "unsupported": 0,
+      "contradicted": 0,
+      "unresolved": 1,
+      "hallucination_rate": 0.0,
+      "conditional_hallucination_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 6,
+        "valid_citations": 4,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 2,
+        "validity_rate": 66.67,
+        "entailment_rate": 66.67
+      },
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 5,
+      "supported_correctly_evidenced_claims": 4,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0,
+      "claims": [
+        {
+          "claim_id": "01_minimal_python_cli_C001",
+          "repository": "01_minimal_python_cli",
+          "text": "01_minimal_python_cli is a software project implementing click.",
+          "claim_type": "OTHER",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'mincli'\nversion = '0.1.0'\ndepend...') does not entail claim '01_minimal_python_cli is a software project implementing click.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Python'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "01_minimal_python_cli_C002",
+          "repository": "01_minimal_python_cli",
+          "text": "Deployable unit 'cli' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "01_minimal_python_cli_C003",
+          "repository": "01_minimal_python_cli",
+          "text": "Unit 'cli' is categorized as 'cli'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Verified via valid and entailed evidence citations."
+        },
+        {
+          "claim_id": "01_minimal_python_cli_C004",
+          "repository": "01_minimal_python_cli",
+          "text": "Unit 'cli' role: cli component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Verified via valid and entailed evidence citations."
+        },
+        {
+          "claim_id": "01_minimal_python_cli_C005",
+          "repository": "01_minimal_python_cli",
+          "text": "The project uses Python (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'mincli'\nversion = '0.1.0'\ndepend...') does not entail claim 'The project uses Python (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Python'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "01_minimal_python_cli_C006",
+          "repository": "01_minimal_python_cli",
+          "text": "The project uses click (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        }
+      ]
+    },
+    {
+      "repository": "02_fastapi_backend",
+      "total_claims": 14,
+      "evaluable_claims": 8,
+      "supported": 7,
+      "unsupported": 1,
+      "contradicted": 0,
+      "unresolved": 6,
+      "hallucination_rate": 7.14,
+      "conditional_hallucination_rate": 12.5,
+      "unsupported_rate": 7.14,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 1,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 14,
+        "valid_citations": 4,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 10,
+        "validity_rate": 28.57,
+        "entailment_rate": 28.57
+      },
+      "invalid_claims_before_validator": 1,
+      "invalid_claims_rejected": 1,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 7,
+      "supported_correctly_evidenced_claims": 4,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0,
+      "claims": [
+        {
+          "claim_id": "02_fastapi_backend_C001",
+          "repository": "02_fastapi_backend",
+          "text": "02_fastapi_backend is a software project implementing FastAPI, SQLAlchemy, Uvicorn.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'requirements.txt' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C002",
+          "repository": "02_fastapi_backend",
+          "text": "Deployable unit 'backend_api' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==...') does not entail claim 'Deployable unit 'backend_api' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C003",
+          "repository": "02_fastapi_backend",
+          "text": "Unit 'backend_api' is categorized as 'backend_api'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==...') does not entail claim 'Unit 'backend_api' is categorized as 'backend_api'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C004",
+          "repository": "02_fastapi_backend",
+          "text": "Unit 'backend_api' role: backend_api component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==...') does not entail claim 'Unit 'backend_api' role: backend_api component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C005",
+          "repository": "02_fastapi_backend",
+          "text": "Deployable unit 'admin_panel' exists at root path '/services/admin_dashboard'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==...') does not entail claim 'Deployable unit 'admin_panel' exists at root path '/services/admin_dashboard'.'."
+            }
+          ],
+          "support_status": "UNSUPPORTED",
+          "hallucination_categories": [
+            "FABRICATED_PATH"
+          ],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Path '/services/admin_dashboard' does not exist in repository snapshot."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/services/admin_dashboard' does NOT exist in repository snapshot."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C006",
+          "repository": "02_fastapi_backend",
+          "text": "Unit 'admin_panel' is categorized as 'admin_dashboard'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==...') does not entail claim 'Unit 'admin_panel' is categorized as 'admin_dashboard'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C007",
+          "repository": "02_fastapi_backend",
+          "text": "Unit 'admin_panel' role: Administrative dashboard",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==...') does not entail claim 'Unit 'admin_panel' role: Administrative dashboard'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C008",
+          "repository": "02_fastapi_backend",
+          "text": "The project uses Python (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==...') does not entail claim 'The project uses Python (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Python'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C009",
+          "repository": "02_fastapi_backend",
+          "text": "The project uses FastAPI (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'requirements.txt' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C010",
+          "repository": "02_fastapi_backend",
+          "text": "The project uses SQLAlchemy (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'requirements.txt' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C011",
+          "repository": "02_fastapi_backend",
+          "text": "The project uses Uvicorn (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'requirements.txt' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C012",
+          "repository": "02_fastapi_backend",
+          "text": "The project uses PostgreSQL (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==...') does not entail claim 'The project uses PostgreSQL (Database). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'PostgreSQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C013",
+          "repository": "02_fastapi_backend",
+          "text": "The project uses Celery (TaskQueue). Status: supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==...') does not entail claim 'The project uses Celery (TaskQueue). Status: supported.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Celery'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Generic technology claim cannot be strictly validated from AST alone."
+        },
+        {
+          "claim_id": "02_fastapi_backend_C014",
+          "repository": "02_fastapi_backend",
+          "text": "The project uses database 'PostgreSQL'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'fastapi==0.110.0\nuvicorn==0.28.0\npsycopg2-binary==...') does not entail claim 'The project uses database 'PostgreSQL'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'PostgreSQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Generic technology claim cannot be strictly validated from AST alone."
+        }
+      ]
+    },
+    {
+      "repository": "03_flask_monolith",
+      "total_claims": 11,
+      "evaluable_claims": 8,
+      "supported": 8,
+      "unsupported": 0,
+      "contradicted": 0,
+      "unresolved": 3,
+      "hallucination_rate": 0.0,
+      "conditional_hallucination_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 11,
+        "valid_citations": 3,
+        "invalid_id_citations": 1,
+        "unentailed_citations": 7,
+        "validity_rate": 27.27,
+        "entailment_rate": 30.0
+      },
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 8,
+      "supported_correctly_evidenced_claims": 3,
+      "supported_correctly_evidenced_rejected": 3,
+      "false_rejection_rate": 100.0,
+      "claims": [
+        {
+          "claim_id": "03_flask_monolith_C001",
+          "repository": "03_flask_monolith",
+          "text": "03_flask_monolith is a software project implementing Flask, Flask-SQLAlchemy.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'requirements.txt' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations [] do not genuinely entail technology 'Flask'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "03_flask_monolith_C002",
+          "repository": "03_flask_monolith",
+          "text": "Deployable unit 'web_monolith' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'Flask==3.0.2\nFlask-SQLAlchemy==3.1.1\n...') does not entail claim 'Deployable unit 'web_monolith' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "03_flask_monolith_C003",
+          "repository": "03_flask_monolith",
+          "text": "Unit 'web_monolith' is categorized as 'web_monolith'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'Flask==3.0.2\nFlask-SQLAlchemy==3.1.1\n...') does not entail claim 'Unit 'web_monolith' is categorized as 'web_monolith'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "03_flask_monolith_C004",
+          "repository": "03_flask_monolith",
+          "text": "Unit 'web_monolith' role: web_monolith component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'Flask==3.0.2\nFlask-SQLAlchemy==3.1.1\n...') does not entail claim 'Unit 'web_monolith' role: web_monolith component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "03_flask_monolith_C005",
+          "repository": "03_flask_monolith",
+          "text": "The project uses Python (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'Flask==3.0.2\nFlask-SQLAlchemy==3.1.1\n...') does not entail claim 'The project uses Python (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Python'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "03_flask_monolith_C006",
+          "repository": "03_flask_monolith",
+          "text": "The project uses HTML (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'Flask==3.0.2\nFlask-SQLAlchemy==3.1.1\n...') does not entail claim 'The project uses HTML (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'HTML'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "03_flask_monolith_C007",
+          "repository": "03_flask_monolith",
+          "text": "The project uses Flask (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'requirements.txt' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations [] do not genuinely entail technology 'Flask'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "03_flask_monolith_C008",
+          "repository": "03_flask_monolith",
+          "text": "The project uses Flask-SQLAlchemy (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'requirements.txt' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations [] do not genuinely entail technology 'Flask'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "03_flask_monolith_C009",
+          "repository": "03_flask_monolith",
+          "text": "The project uses SQLite (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'Flask==3.0.2\nFlask-SQLAlchemy==3.1.1\n...') does not entail claim 'The project uses SQLite (Database). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'SQLite'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "03_flask_monolith_C010",
+          "repository": "03_flask_monolith",
+          "text": "The project uses Flask (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_9999_invalid"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_9999_invalid",
+              "status": "INVALID_ID",
+              "detail": "Evidence ID 'ev_9999_invalid' does not exist in repository evidence index."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations [] do not genuinely entail technology 'Flask'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "03_flask_monolith_C011",
+          "repository": "03_flask_monolith",
+          "text": "The project uses database 'SQLite'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'Flask==3.0.2\nFlask-SQLAlchemy==3.1.1\n...') does not entail claim 'The project uses database 'SQLite'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'SQLite'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Generic technology claim cannot be strictly validated from AST alone."
+        }
+      ]
+    },
+    {
+      "repository": "04_express_api",
+      "total_claims": 10,
+      "evaluable_claims": 7,
+      "supported": 6,
+      "unsupported": 1,
+      "contradicted": 0,
+      "unresolved": 3,
+      "hallucination_rate": 10.0,
+      "conditional_hallucination_rate": 14.29,
+      "unsupported_rate": 10.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 1,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 10,
+        "valid_citations": 4,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 6,
+        "validity_rate": 40.0,
+        "entailment_rate": 40.0
+      },
+      "invalid_claims_before_validator": 1,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 3,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0,
+      "claims": [
+        {
+          "claim_id": "04_express_api_C001",
+          "repository": "04_express_api",
+          "text": "04_express_api is a software project implementing Express, Mongoose.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'package.json' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "04_express_api_C002",
+          "repository": "04_express_api",
+          "text": "Deployable unit 'backend_api' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"express-api\",\n  \"version\": \"1.0.0\",\n ...') does not entail claim 'Deployable unit 'backend_api' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "04_express_api_C003",
+          "repository": "04_express_api",
+          "text": "Unit 'backend_api' is categorized as 'backend_api'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"express-api\",\n  \"version\": \"1.0.0\",\n ...') does not entail claim 'Unit 'backend_api' is categorized as 'backend_api'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "04_express_api_C004",
+          "repository": "04_express_api",
+          "text": "Unit 'backend_api' role: backend_api component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"express-api\",\n  \"version\": \"1.0.0\",\n ...') does not entail claim 'Unit 'backend_api' role: backend_api component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "04_express_api_C005",
+          "repository": "04_express_api",
+          "text": "The project uses JavaScript (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"express-api\",\n  \"version\": \"1.0.0\",\n ...') does not entail claim 'The project uses JavaScript (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'JavaScript'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "04_express_api_C006",
+          "repository": "04_express_api",
+          "text": "The project uses Express (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'package.json' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "04_express_api_C007",
+          "repository": "04_express_api",
+          "text": "The project uses Mongoose (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'package.json' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "04_express_api_C008",
+          "repository": "04_express_api",
+          "text": "The project uses MongoDB (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"express-api\",\n  \"version\": \"1.0.0\",\n ...') does not entail claim 'The project uses MongoDB (Database). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'MongoDB'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "04_express_api_C009",
+          "repository": "04_express_api",
+          "text": "The project uses database 'MongoDB'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"express-api\",\n  \"version\": \"1.0.0\",\n ...') does not entail claim 'The project uses database 'MongoDB'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'MongoDB'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Generic technology claim cannot be strictly validated from AST alone."
+        },
+        {
+          "claim_id": "04_express_api_C010",
+          "repository": "04_express_api",
+          "text": "Documentation claims 'GraphQL API', but actual code exhibits 'REST endpoints only'.",
+          "claim_type": "CONTRADICTION",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'package.json' entails claim."
+            }
+          ],
+          "support_status": "UNSUPPORTED",
+          "hallucination_categories": [
+            "FALSE_CONTRADICTION"
+          ],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "False contradiction: Writer invented a discrepancy not backed by evidence."
+        }
+      ]
+    },
+    {
+      "repository": "05_django_rest",
+      "total_claims": 10,
+      "evaluable_claims": 7,
+      "supported": 6,
+      "unsupported": 1,
+      "contradicted": 0,
+      "unresolved": 3,
+      "hallucination_rate": 10.0,
+      "conditional_hallucination_rate": 14.29,
+      "unsupported_rate": 10.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 1,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 10,
+        "valid_citations": 3,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 7,
+        "validity_rate": 30.0,
+        "entailment_rate": 30.0
+      },
+      "invalid_claims_before_validator": 1,
+      "invalid_claims_rejected": 1,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 3,
+      "supported_correctly_evidenced_rejected": 2,
+      "false_rejection_rate": 66.67,
+      "claims": [
+        {
+          "claim_id": "05_django_rest_C001",
+          "repository": "05_django_rest",
+          "text": "05_django_rest is a software project implementing Django, Django REST Framework.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'requirements.txt' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Django REST Framework'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "05_django_rest_C002",
+          "repository": "05_django_rest",
+          "text": "Deployable unit 'web_backend' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'django==5.0.3\ndjangorestframework==3.14.0\npsycopg2...') does not entail claim 'Deployable unit 'web_backend' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "05_django_rest_C003",
+          "repository": "05_django_rest",
+          "text": "Unit 'web_backend' is categorized as 'web_backend'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'django==5.0.3\ndjangorestframework==3.14.0\npsycopg2...') does not entail claim 'Unit 'web_backend' is categorized as 'web_backend'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "05_django_rest_C004",
+          "repository": "05_django_rest",
+          "text": "Unit 'web_backend' role: web_backend component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'django==5.0.3\ndjangorestframework==3.14.0\npsycopg2...') does not entail claim 'Unit 'web_backend' role: web_backend component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "05_django_rest_C005",
+          "repository": "05_django_rest",
+          "text": "The project uses Python (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'django==5.0.3\ndjangorestframework==3.14.0\npsycopg2...') does not entail claim 'The project uses Python (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Python'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "05_django_rest_C006",
+          "repository": "05_django_rest",
+          "text": "The project uses Django (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'requirements.txt' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "05_django_rest_C007",
+          "repository": "05_django_rest",
+          "text": "The project uses Django REST Framework (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'requirements.txt' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Django REST Framework'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "05_django_rest_C008",
+          "repository": "05_django_rest",
+          "text": "The project uses PostgreSQL (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'django==5.0.3\ndjangorestframework==3.14.0\npsycopg2...') does not entail claim 'The project uses PostgreSQL (Database). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'PostgreSQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "05_django_rest_C009",
+          "repository": "05_django_rest",
+          "text": "The project uses database 'PostgreSQL'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'django==5.0.3\ndjangorestframework==3.14.0\npsycopg2...') does not entail claim 'The project uses database 'PostgreSQL'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'PostgreSQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Generic technology claim cannot be strictly validated from AST alone."
+        },
+        {
+          "claim_id": "05_django_rest_C010",
+          "repository": "05_django_rest",
+          "text": "Documentation claims 'SQLite', but actual code exhibits 'PostgreSQL'.",
+          "claim_type": "CONTRADICTION",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (requirements.txt: 'django==5.0.3\ndjangorestframework==3.14.0\npsycopg2...') does not entail claim 'Documentation claims 'SQLite', but actual code exhibits 'PostgreSQL'.'."
+            }
+          ],
+          "support_status": "UNSUPPORTED",
+          "hallucination_categories": [
+            "FALSE_CONTRADICTION"
+          ],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'PostgreSQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "False contradiction: Writer invented a discrepancy not backed by evidence."
+        }
+      ]
+    },
+    {
+      "repository": "06_go_microservice",
+      "total_claims": 11,
+      "evaluable_claims": 5,
+      "supported": 4,
+      "unsupported": 1,
+      "contradicted": 0,
+      "unresolved": 6,
+      "hallucination_rate": 9.09,
+      "conditional_hallucination_rate": 20.0,
+      "unsupported_rate": 9.09,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 1,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 11,
+        "valid_citations": 3,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 8,
+        "validity_rate": 27.27,
+        "entailment_rate": 27.27
+      },
+      "invalid_claims_before_validator": 1,
+      "invalid_claims_rejected": 1,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 4,
+      "supported_correctly_evidenced_claims": 2,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0,
+      "claims": [
+        {
+          "claim_id": "06_go_microservice_C001",
+          "repository": "06_go_microservice",
+          "text": "06_go_microservice is a software project implementing Gin.",
+          "claim_type": "OTHER",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (go.mod: 'module github.com/example/orders\n\ngo 1.22\n\nrequire...') does not entail claim '06_go_microservice is a software project implementing Gin.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "06_go_microservice_C002",
+          "repository": "06_go_microservice",
+          "text": "Deployable unit 'microservice' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (go.mod: 'module github.com/example/orders\n\ngo 1.22\n\nrequire...') does not entail claim 'Deployable unit 'microservice' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "06_go_microservice_C003",
+          "repository": "06_go_microservice",
+          "text": "Unit 'microservice' is categorized as 'microservice'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (go.mod: 'module github.com/example/orders\n\ngo 1.22\n\nrequire...') does not entail claim 'Unit 'microservice' is categorized as 'microservice'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "06_go_microservice_C004",
+          "repository": "06_go_microservice",
+          "text": "Unit 'microservice' role: microservice component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (go.mod: 'module github.com/example/orders\n\ngo 1.22\n\nrequire...') does not entail claim 'Unit 'microservice' role: microservice component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "06_go_microservice_C005",
+          "repository": "06_go_microservice",
+          "text": "Deployable unit 'metrics_collector' exists at root path 'cmd/metrics_daemon'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (go.mod: 'module github.com/example/orders\n\ngo 1.22\n\nrequire...') does not entail claim 'Deployable unit 'metrics_collector' exists at root path 'cmd/metrics_daemon'.'."
+            }
+          ],
+          "support_status": "UNSUPPORTED",
+          "hallucination_categories": [
+            "FABRICATED_PATH"
+          ],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Path 'cmd/metrics_daemon' does not exist in repository snapshot."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File 'cmd/metrics_daemon' does NOT exist in repository snapshot."
+        },
+        {
+          "claim_id": "06_go_microservice_C006",
+          "repository": "06_go_microservice",
+          "text": "Unit 'metrics_collector' is categorized as 'worker'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (go.mod: 'module github.com/example/orders\n\ngo 1.22\n\nrequire...') does not entail claim 'Unit 'metrics_collector' is categorized as 'worker'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "06_go_microservice_C007",
+          "repository": "06_go_microservice",
+          "text": "Unit 'metrics_collector' role: Daemon process",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (go.mod: 'module github.com/example/orders\n\ngo 1.22\n\nrequire...') does not entail claim 'Unit 'metrics_collector' role: Daemon process'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "06_go_microservice_C008",
+          "repository": "06_go_microservice",
+          "text": "The project uses Go (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (go.mod: 'module github.com/example/orders\n\ngo 1.22\n\nrequire...') does not entail claim 'The project uses Go (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "06_go_microservice_C009",
+          "repository": "06_go_microservice",
+          "text": "The project uses Gin (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'go.mod' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "06_go_microservice_C010",
+          "repository": "06_go_microservice",
+          "text": "The project uses Redis (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'go.mod' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "06_go_microservice_C011",
+          "repository": "06_go_microservice",
+          "text": "The project uses database 'Redis'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'go.mod' entails claim."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Generic technology claim cannot be strictly validated from AST alone."
+        }
+      ]
+    },
+    {
+      "repository": "07_nextjs_frontend",
+      "total_claims": 8,
+      "evaluable_claims": 6,
+      "supported": 6,
+      "unsupported": 0,
+      "contradicted": 0,
+      "unresolved": 2,
+      "hallucination_rate": 0.0,
+      "conditional_hallucination_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 8,
+        "valid_citations": 3,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 5,
+        "validity_rate": 37.5,
+        "entailment_rate": 37.5
+      },
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 3,
+      "supported_correctly_evidenced_rejected": 2,
+      "false_rejection_rate": 66.67,
+      "claims": [
+        {
+          "claim_id": "07_nextjs_frontend_C001",
+          "repository": "07_nextjs_frontend",
+          "text": "07_nextjs_frontend is a software project implementing Next.js, React, Tailwind CSS.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'package.json' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Next.js'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "07_nextjs_frontend_C002",
+          "repository": "07_nextjs_frontend",
+          "text": "Deployable unit 'frontend_spa' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"portal-ui\",\n  \"dependencies\": {\n    \"...') does not entail claim 'Deployable unit 'frontend_spa' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "07_nextjs_frontend_C003",
+          "repository": "07_nextjs_frontend",
+          "text": "Unit 'frontend_spa' is categorized as 'frontend_spa'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"portal-ui\",\n  \"dependencies\": {\n    \"...') does not entail claim 'Unit 'frontend_spa' is categorized as 'frontend_spa'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "07_nextjs_frontend_C004",
+          "repository": "07_nextjs_frontend",
+          "text": "Unit 'frontend_spa' role: frontend_spa component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"portal-ui\",\n  \"dependencies\": {\n    \"...') does not entail claim 'Unit 'frontend_spa' role: frontend_spa component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "07_nextjs_frontend_C005",
+          "repository": "07_nextjs_frontend",
+          "text": "The project uses TypeScript (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"portal-ui\",\n  \"dependencies\": {\n    \"...') does not entail claim 'The project uses TypeScript (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'TypeScript'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "07_nextjs_frontend_C006",
+          "repository": "07_nextjs_frontend",
+          "text": "The project uses Next.js (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (package.json: '{\n  \"name\": \"portal-ui\",\n  \"dependencies\": {\n    \"...') does not entail claim 'The project uses Next.js (Framework). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Next.js'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "07_nextjs_frontend_C007",
+          "repository": "07_nextjs_frontend",
+          "text": "The project uses React (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'package.json' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "07_nextjs_frontend_C008",
+          "repository": "07_nextjs_frontend",
+          "text": "The project uses Tailwind CSS (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'package.json' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Tailwind CSS'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        }
+      ]
+    },
+    {
+      "repository": "08_rust_cli_utility",
+      "total_claims": 7,
+      "evaluable_claims": 5,
+      "supported": 5,
+      "unsupported": 0,
+      "contradicted": 0,
+      "unresolved": 2,
+      "hallucination_rate": 0.0,
+      "conditional_hallucination_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 7,
+        "valid_citations": 4,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 3,
+        "validity_rate": 57.14,
+        "entailment_rate": 57.14
+      },
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 5,
+      "supported_correctly_evidenced_claims": 4,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0,
+      "claims": [
+        {
+          "claim_id": "08_rust_cli_utility_C001",
+          "repository": "08_rust_cli_utility",
+          "text": "08_rust_cli_utility is a software project implementing Tokio, Clap.",
+          "claim_type": "OTHER",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'Cargo.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Verified via valid and entailed evidence citations."
+        },
+        {
+          "claim_id": "08_rust_cli_utility_C002",
+          "repository": "08_rust_cli_utility",
+          "text": "Deployable unit 'cli' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (Cargo.toml: '[package]\nname = 'rust-parser'\nversion = '0.1.0'\ne...') does not entail claim 'Deployable unit 'cli' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "08_rust_cli_utility_C003",
+          "repository": "08_rust_cli_utility",
+          "text": "Unit 'cli' is categorized as 'cli'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (Cargo.toml: '[package]\nname = 'rust-parser'\nversion = '0.1.0'\ne...') does not entail claim 'Unit 'cli' is categorized as 'cli'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "08_rust_cli_utility_C004",
+          "repository": "08_rust_cli_utility",
+          "text": "Unit 'cli' role: cli component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (Cargo.toml: '[package]\nname = 'rust-parser'\nversion = '0.1.0'\ne...') does not entail claim 'Unit 'cli' role: cli component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "08_rust_cli_utility_C005",
+          "repository": "08_rust_cli_utility",
+          "text": "The project uses Rust (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'Cargo.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "08_rust_cli_utility_C006",
+          "repository": "08_rust_cli_utility",
+          "text": "The project uses Tokio (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'Cargo.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "08_rust_cli_utility_C007",
+          "repository": "08_rust_cli_utility",
+          "text": "The project uses Clap (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'Cargo.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        }
+      ]
+    },
+    {
+      "repository": "09_java_spring_boot",
+      "total_claims": 9,
+      "evaluable_claims": 6,
+      "supported": 6,
+      "unsupported": 0,
+      "contradicted": 0,
+      "unresolved": 3,
+      "hallucination_rate": 0.0,
+      "conditional_hallucination_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 9,
+        "valid_citations": 3,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 6,
+        "validity_rate": 33.33,
+        "entailment_rate": 33.33
+      },
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 3,
+      "supported_correctly_evidenced_rejected": 3,
+      "false_rejection_rate": 100.0,
+      "claims": [
+        {
+          "claim_id": "09_java_spring_boot_C001",
+          "repository": "09_java_spring_boot",
+          "text": "09_java_spring_boot is a software project implementing Spring Boot, Maven.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pom.xml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Java'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "09_java_spring_boot_C002",
+          "repository": "09_java_spring_boot",
+          "text": "Deployable unit 'backend_service' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pom.xml: '<project>\n  <modelVersion>4.0.0</modelVersion>\n  <...') does not entail claim 'Deployable unit 'backend_service' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "09_java_spring_boot_C003",
+          "repository": "09_java_spring_boot",
+          "text": "Unit 'backend_service' is categorized as 'backend_service'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pom.xml: '<project>\n  <modelVersion>4.0.0</modelVersion>\n  <...') does not entail claim 'Unit 'backend_service' is categorized as 'backend_service'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "09_java_spring_boot_C004",
+          "repository": "09_java_spring_boot",
+          "text": "Unit 'backend_service' role: backend_service component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pom.xml: '<project>\n  <modelVersion>4.0.0</modelVersion>\n  <...') does not entail claim 'Unit 'backend_service' role: backend_service component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "09_java_spring_boot_C005",
+          "repository": "09_java_spring_boot",
+          "text": "The project uses Java (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pom.xml: '<project>\n  <modelVersion>4.0.0</modelVersion>\n  <...') does not entail claim 'The project uses Java (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Java'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "09_java_spring_boot_C006",
+          "repository": "09_java_spring_boot",
+          "text": "The project uses Spring Boot (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pom.xml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Spring Boot'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "09_java_spring_boot_C007",
+          "repository": "09_java_spring_boot",
+          "text": "The project uses Maven (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pom.xml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Maven'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "09_java_spring_boot_C008",
+          "repository": "09_java_spring_boot",
+          "text": "The project uses MySQL (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pom.xml: '<project>\n  <modelVersion>4.0.0</modelVersion>\n  <...') does not entail claim 'The project uses MySQL (Database). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'MySQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "09_java_spring_boot_C009",
+          "repository": "09_java_spring_boot",
+          "text": "The project uses database 'MySQL'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pom.xml: '<project>\n  <modelVersion>4.0.0</modelVersion>\n  <...') does not entail claim 'The project uses database 'MySQL'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'MySQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Generic technology claim cannot be strictly validated from AST alone."
+        }
+      ]
+    },
+    {
+      "repository": "10_python_data_pipeline",
+      "total_claims": 9,
+      "evaluable_claims": 6,
+      "supported": 6,
+      "unsupported": 0,
+      "contradicted": 0,
+      "unresolved": 3,
+      "hallucination_rate": 0.0,
+      "conditional_hallucination_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 9,
+        "valid_citations": 5,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 4,
+        "validity_rate": 55.56,
+        "entailment_rate": 55.56
+      },
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 4,
+      "supported_correctly_evidenced_rejected": 1,
+      "false_rejection_rate": 25.0,
+      "claims": [
+        {
+          "claim_id": "10_python_data_pipeline_C001",
+          "repository": "10_python_data_pipeline",
+          "text": "10_python_data_pipeline is a software project implementing Pandas, PyArrow.",
+          "claim_type": "OTHER",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Python'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Verified via valid and entailed evidence citations."
+        },
+        {
+          "claim_id": "10_python_data_pipeline_C002",
+          "repository": "10_python_data_pipeline",
+          "text": "Deployable unit 'data_pipeline' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'datapipeline'\ndependencies = ['p...') does not entail claim 'Deployable unit 'data_pipeline' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "10_python_data_pipeline_C003",
+          "repository": "10_python_data_pipeline",
+          "text": "Unit 'data_pipeline' is categorized as 'data_pipeline'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'datapipeline'\ndependencies = ['p...') does not entail claim 'Unit 'data_pipeline' is categorized as 'data_pipeline'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "10_python_data_pipeline_C004",
+          "repository": "10_python_data_pipeline",
+          "text": "Unit 'data_pipeline' role: data_pipeline component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'datapipeline'\ndependencies = ['p...') does not entail claim 'Unit 'data_pipeline' role: data_pipeline component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "10_python_data_pipeline_C005",
+          "repository": "10_python_data_pipeline",
+          "text": "The project uses Python (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'datapipeline'\ndependencies = ['p...') does not entail claim 'The project uses Python (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Python'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "10_python_data_pipeline_C006",
+          "repository": "10_python_data_pipeline",
+          "text": "The project uses Pandas (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "10_python_data_pipeline_C007",
+          "repository": "10_python_data_pipeline",
+          "text": "The project uses PyArrow (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "10_python_data_pipeline_C008",
+          "repository": "10_python_data_pipeline",
+          "text": "The project uses ClickHouse (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "10_python_data_pipeline_C009",
+          "repository": "10_python_data_pipeline",
+          "text": "The project uses database 'ClickHouse'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Generic technology claim cannot be strictly validated from AST alone."
+        }
+      ]
+    },
+    {
+      "repository": "11_ruby_rails_app",
+      "total_claims": 8,
+      "evaluable_claims": 6,
+      "supported": 6,
+      "unsupported": 0,
+      "contradicted": 0,
+      "unresolved": 2,
+      "hallucination_rate": 0.0,
+      "conditional_hallucination_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 8,
+        "valid_citations": 2,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 6,
+        "validity_rate": 25.0,
+        "entailment_rate": 25.0
+      },
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 6,
+      "supported_correctly_evidenced_claims": 2,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0,
+      "claims": [
+        {
+          "claim_id": "11_ruby_rails_app_C001",
+          "repository": "11_ruby_rails_app",
+          "text": "11_ruby_rails_app is a software project implementing Rails.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (Gemfile: 'source 'https://rubygems.org'\ngem 'rails', '~> 7.1...') does not entail claim '11_ruby_rails_app is a software project implementing Rails.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "11_ruby_rails_app_C002",
+          "repository": "11_ruby_rails_app",
+          "text": "Deployable unit 'web_app' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (Gemfile: 'source 'https://rubygems.org'\ngem 'rails', '~> 7.1...') does not entail claim 'Deployable unit 'web_app' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "11_ruby_rails_app_C003",
+          "repository": "11_ruby_rails_app",
+          "text": "Unit 'web_app' is categorized as 'web_app'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (Gemfile: 'source 'https://rubygems.org'\ngem 'rails', '~> 7.1...') does not entail claim 'Unit 'web_app' is categorized as 'web_app'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "11_ruby_rails_app_C004",
+          "repository": "11_ruby_rails_app",
+          "text": "Unit 'web_app' role: web_app component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (Gemfile: 'source 'https://rubygems.org'\ngem 'rails', '~> 7.1...') does not entail claim 'Unit 'web_app' role: web_app component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "11_ruby_rails_app_C005",
+          "repository": "11_ruby_rails_app",
+          "text": "The project uses Ruby (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'Gemfile' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "11_ruby_rails_app_C006",
+          "repository": "11_ruby_rails_app",
+          "text": "The project uses Rails (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'Gemfile' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "11_ruby_rails_app_C007",
+          "repository": "11_ruby_rails_app",
+          "text": "The project uses PostgreSQL (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (Gemfile: 'source 'https://rubygems.org'\ngem 'rails', '~> 7.1...') does not entail claim 'The project uses PostgreSQL (Database). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'PostgreSQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "11_ruby_rails_app_C008",
+          "repository": "11_ruby_rails_app",
+          "text": "The project uses database 'PostgreSQL'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (Gemfile: 'source 'https://rubygems.org'\ngem 'rails', '~> 7.1...') does not entail claim 'The project uses database 'PostgreSQL'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'PostgreSQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        }
+      ]
+    },
+    {
+      "repository": "12_multiservice_monorepo",
+      "total_claims": 13,
+      "evaluable_claims": 12,
+      "supported": 12,
+      "unsupported": 0,
+      "contradicted": 0,
+      "unresolved": 1,
+      "hallucination_rate": 0.0,
+      "conditional_hallucination_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 12,
+        "valid_citations": 8,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 4,
+        "validity_rate": 66.67,
+        "entailment_rate": 66.67
+      },
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 12,
+      "supported_correctly_evidenced_claims": 8,
+      "supported_correctly_evidenced_rejected": 2,
+      "false_rejection_rate": 25.0,
+      "claims": [
+        {
+          "claim_id": "12_multiservice_monorepo_C001",
+          "repository": "12_multiservice_monorepo",
+          "text": "12_multiservice_monorepo is a software project implementing FastAPI, React, Docker Compose.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'docker-compose.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'FastAPI'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C002",
+          "repository": "12_multiservice_monorepo",
+          "text": "Deployable unit 'services/api' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'docker-compose.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File 'services/api' verified in repository snapshot."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C003",
+          "repository": "12_multiservice_monorepo",
+          "text": "Unit 'services/api' is categorized as 'services/api'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'docker-compose.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Verified via valid and entailed evidence citations."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C004",
+          "repository": "12_multiservice_monorepo",
+          "text": "Unit 'services/api' role: services/api component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'docker-compose.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Verified via valid and entailed evidence citations."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C005",
+          "repository": "12_multiservice_monorepo",
+          "text": "Deployable unit 'services/web' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'docker-compose.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File 'services/web' verified in repository snapshot."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C006",
+          "repository": "12_multiservice_monorepo",
+          "text": "Unit 'services/web' is categorized as 'services/web'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'docker-compose.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Verified via valid and entailed evidence citations."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C007",
+          "repository": "12_multiservice_monorepo",
+          "text": "Unit 'services/web' role: services/web component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'docker-compose.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Verified via valid and entailed evidence citations."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C008",
+          "repository": "12_multiservice_monorepo",
+          "text": "The project uses Python (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (docker-compose.yml: 'version: '3.8'\nservices:\n  api:\n    build: ./servi...') does not entail claim 'The project uses Python (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Python'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C009",
+          "repository": "12_multiservice_monorepo",
+          "text": "The project uses JavaScript (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (docker-compose.yml: 'version: '3.8'\nservices:\n  api:\n    build: ./servi...') does not entail claim 'The project uses JavaScript (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'JavaScript'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C010",
+          "repository": "12_multiservice_monorepo",
+          "text": "The project uses FastAPI (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (docker-compose.yml: 'version: '3.8'\nservices:\n  api:\n    build: ./servi...') does not entail claim 'The project uses FastAPI (Framework). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'FastAPI'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C011",
+          "repository": "12_multiservice_monorepo",
+          "text": "The project uses React (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (docker-compose.yml: 'version: '3.8'\nservices:\n  api:\n    build: ./servi...') does not entail claim 'The project uses React (Framework). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'React'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C012",
+          "repository": "12_multiservice_monorepo",
+          "text": "The project uses Docker Compose (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'docker-compose.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Docker Compose'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "12_multiservice_monorepo_C013",
+          "repository": "12_multiservice_monorepo",
+          "text": "Deployment configuration 'orchestration': Docker Compose",
+          "claim_type": "DEPLOYMENT",
+          "citations": [],
+          "citation_evaluations": [],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Docker Compose'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        }
+      ]
+    },
+    {
+      "repository": "13_legacy_php_portal",
+      "total_claims": 8,
+      "evaluable_claims": 4,
+      "supported": 4,
+      "unsupported": 0,
+      "contradicted": 0,
+      "unresolved": 4,
+      "hallucination_rate": 0.0,
+      "conditional_hallucination_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 8,
+        "valid_citations": 2,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 6,
+        "validity_rate": 25.0,
+        "entailment_rate": 25.0
+      },
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 4,
+      "supported_correctly_evidenced_claims": 2,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0,
+      "claims": [
+        {
+          "claim_id": "13_legacy_php_portal_C001",
+          "repository": "13_legacy_php_portal",
+          "text": "13_legacy_php_portal is a software project implementing Twig.",
+          "claim_type": "DEPLOYMENT",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (composer.json: '{\n  \"name\": \"legacy/portal\",\n  \"require\": {\n    \"p...') does not entail claim '13_legacy_php_portal is a software project implementing Twig.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "13_legacy_php_portal_C002",
+          "repository": "13_legacy_php_portal",
+          "text": "Deployable unit 'web_portal' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (composer.json: '{\n  \"name\": \"legacy/portal\",\n  \"require\": {\n    \"p...') does not entail claim 'Deployable unit 'web_portal' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "13_legacy_php_portal_C003",
+          "repository": "13_legacy_php_portal",
+          "text": "Unit 'web_portal' is categorized as 'web_portal'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (composer.json: '{\n  \"name\": \"legacy/portal\",\n  \"require\": {\n    \"p...') does not entail claim 'Unit 'web_portal' is categorized as 'web_portal'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "13_legacy_php_portal_C004",
+          "repository": "13_legacy_php_portal",
+          "text": "Unit 'web_portal' role: web_portal component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (composer.json: '{\n  \"name\": \"legacy/portal\",\n  \"require\": {\n    \"p...') does not entail claim 'Unit 'web_portal' role: web_portal component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "13_legacy_php_portal_C005",
+          "repository": "13_legacy_php_portal",
+          "text": "The project uses PHP (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'composer.json' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "13_legacy_php_portal_C006",
+          "repository": "13_legacy_php_portal",
+          "text": "The project uses Twig (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'composer.json' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "13_legacy_php_portal_C007",
+          "repository": "13_legacy_php_portal",
+          "text": "The project uses MySQL (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (composer.json: '{\n  \"name\": \"legacy/portal\",\n  \"require\": {\n    \"p...') does not entail claim 'The project uses MySQL (Database). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'MySQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "13_legacy_php_portal_C008",
+          "repository": "13_legacy_php_portal",
+          "text": "The project uses database 'MySQL'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (composer.json: '{\n  \"name\": \"legacy/portal\",\n  \"require\": {\n    \"p...') does not entail claim 'The project uses database 'MySQL'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'MySQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Generic technology claim cannot be strictly validated from AST alone."
+        }
+      ]
+    },
+    {
+      "repository": "14_serverless_functions",
+      "total_claims": 7,
+      "evaluable_claims": 5,
+      "supported": 5,
+      "unsupported": 0,
+      "contradicted": 0,
+      "unresolved": 2,
+      "hallucination_rate": 0.0,
+      "conditional_hallucination_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 0,
+      "citation_quality": {
+        "total_citations": 7,
+        "valid_citations": 4,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 3,
+        "validity_rate": 57.14,
+        "entailment_rate": 57.14
+      },
+      "invalid_claims_before_validator": 0,
+      "invalid_claims_rejected": 0,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 5,
+      "supported_correctly_evidenced_claims": 4,
+      "supported_correctly_evidenced_rejected": 3,
+      "false_rejection_rate": 75.0,
+      "claims": [
+        {
+          "claim_id": "14_serverless_functions_C001",
+          "repository": "14_serverless_functions",
+          "text": "14_serverless_functions is a software project implementing Serverless Framework, AWS Lambda.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'serverless.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Serverless Framework'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "14_serverless_functions_C002",
+          "repository": "14_serverless_functions",
+          "text": "Deployable unit 'serverless_function' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (serverless.yml: 'service: lambda-analytics\nprovider:\n  name: aws\n  ...') does not entail claim 'Deployable unit 'serverless_function' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "14_serverless_functions_C003",
+          "repository": "14_serverless_functions",
+          "text": "Unit 'serverless_function' is categorized as 'serverless_function'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (serverless.yml: 'service: lambda-analytics\nprovider:\n  name: aws\n  ...') does not entail claim 'Unit 'serverless_function' is categorized as 'serverless_function'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "14_serverless_functions_C004",
+          "repository": "14_serverless_functions",
+          "text": "Unit 'serverless_function' role: serverless_function component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (serverless.yml: 'service: lambda-analytics\nprovider:\n  name: aws\n  ...') does not entail claim 'Unit 'serverless_function' role: serverless_function component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "14_serverless_functions_C005",
+          "repository": "14_serverless_functions",
+          "text": "The project uses Python (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'serverless.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "14_serverless_functions_C006",
+          "repository": "14_serverless_functions",
+          "text": "The project uses Serverless Framework (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'serverless.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Serverless Framework'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "14_serverless_functions_C007",
+          "repository": "14_serverless_functions",
+          "text": "The project uses AWS Lambda (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'serverless.yml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'AWS Lambda'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        }
+      ]
+    },
+    {
+      "repository": "15_fullstack_ai_agent",
+      "total_claims": 12,
+      "evaluable_claims": 9,
+      "supported": 8,
+      "unsupported": 1,
+      "contradicted": 0,
+      "unresolved": 3,
+      "hallucination_rate": 8.33,
+      "conditional_hallucination_rate": 11.11,
+      "unsupported_rate": 8.33,
+      "contradiction_rate": 0.0,
+      "fabricated_paths": 0,
+      "fabricated_files": 0,
+      "fabricated_symbols": 0,
+      "false_contradictions": 0,
+      "incorrect_technologies": 1,
+      "citation_quality": {
+        "total_citations": 12,
+        "valid_citations": 6,
+        "invalid_id_citations": 0,
+        "unentailed_citations": 6,
+        "validity_rate": 50.0,
+        "entailment_rate": 50.0
+      },
+      "invalid_claims_before_validator": 1,
+      "invalid_claims_rejected": 1,
+      "invalid_claims_leaked": 0,
+      "leakage_rate": 0.0,
+      "supported_claims": 8,
+      "supported_correctly_evidenced_claims": 5,
+      "supported_correctly_evidenced_rejected": 0,
+      "false_rejection_rate": 0.0,
+      "claims": [
+        {
+          "claim_id": "15_fullstack_ai_agent_C001",
+          "repository": "15_fullstack_ai_agent",
+          "text": "15_fullstack_ai_agent is a software project implementing FastAPI, LangChain, ChromaDB.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C002",
+          "repository": "15_fullstack_ai_agent",
+          "text": "Deployable unit 'ai_agent_service' exists at root path '/'.",
+          "claim_type": "PATH",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'ai-agent'\ndependencies = ['fasta...') does not entail claim 'Deployable unit 'ai_agent_service' exists at root path '/'.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Path/File '/' verified in repository snapshot."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C003",
+          "repository": "15_fullstack_ai_agent",
+          "text": "Unit 'ai_agent_service' is categorized as 'ai_agent_service'.",
+          "claim_type": "ARCHITECTURE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'ai-agent'\ndependencies = ['fasta...') does not entail claim 'Unit 'ai_agent_service' is categorized as 'ai_agent_service'.'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C004",
+          "repository": "15_fullstack_ai_agent",
+          "text": "Unit 'ai_agent_service' role: ai_agent_service component",
+          "claim_type": "BEHAVIOR",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'ai-agent'\ndependencies = ['fasta...') does not entail claim 'Unit 'ai_agent_service' role: ai_agent_service component'."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Descriptive claim without discrete AST verification target."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C005",
+          "repository": "15_fullstack_ai_agent",
+          "text": "The project uses Python (Language). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'ai-agent'\ndependencies = ['fasta...') does not entail claim 'The project uses Python (Language). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'Python'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C006",
+          "repository": "15_fullstack_ai_agent",
+          "text": "The project uses FastAPI (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C007",
+          "repository": "15_fullstack_ai_agent",
+          "text": "The project uses LangChain (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C008",
+          "repository": "15_fullstack_ai_agent",
+          "text": "The project uses ChromaDB (Framework). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C009",
+          "repository": "15_fullstack_ai_agent",
+          "text": "The project uses ChromaDB (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C010",
+          "repository": "15_fullstack_ai_agent",
+          "text": "The project uses PostgreSQL (Database). Status: strongly_supported.",
+          "claim_type": "TECHNOLOGY",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'ai-agent'\ndependencies = ['fasta...') does not entail claim 'The project uses PostgreSQL (Database). Status: strongly_supported.'."
+            }
+          ],
+          "support_status": "SUPPORTED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'PostgreSQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology verified in manifest dependencies, AST, or repository config."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C011",
+          "repository": "15_fullstack_ai_agent",
+          "text": "The project uses database 'ChromaDB'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "VALID",
+              "detail": "Evidence 'ev_0001' in 'pyproject.toml' entails claim."
+            }
+          ],
+          "support_status": "UNRESOLVED",
+          "hallucination_categories": [],
+          "validator": {
+            "decision": "ACCEPT",
+            "reason": null
+          },
+          "final_summary": {
+            "present": true
+          },
+          "evidence_detail": "Generic technology claim cannot be strictly validated from AST alone."
+        },
+        {
+          "claim_id": "15_fullstack_ai_agent_C012",
+          "repository": "15_fullstack_ai_agent",
+          "text": "The project uses database 'PostgreSQL'.",
+          "claim_type": "DATABASE",
+          "citations": [
+            "ev_0001"
+          ],
+          "citation_evaluations": [
+            {
+              "evidence_id": "ev_0001",
+              "status": "NOT_ENTAILED",
+              "detail": "Evidence 'ev_0001' (pyproject.toml: '[project]\nname = 'ai-agent'\ndependencies = ['fasta...') does not entail claim 'The project uses database 'PostgreSQL'.'."
+            }
+          ],
+          "support_status": "UNSUPPORTED",
+          "hallucination_categories": [
+            "INCORRECT_TECHNOLOGY"
+          ],
+          "validator": {
+            "decision": "REJECT",
+            "reason": "Citations ['ev_0001'] do not genuinely entail technology 'PostgreSQL'."
+          },
+          "final_summary": {
+            "present": false
+          },
+          "evidence_detail": "Technology assertion not found in repository manifests or source imports."
+        }
+      ]
+    }
+  ]
+}

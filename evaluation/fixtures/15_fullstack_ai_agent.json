@@ -1,0 +1,35 @@
+{
+  "repo_id": "15_fullstack_ai_agent",
+  "description": "Fullstack AI agent service with FastAPI, ChromaDB, and LangChain",
+  "files": {
+    "pyproject.toml": "[project]\nname = 'ai-agent'\ndependencies = ['fastapi', 'chromadb', 'langchain-core', 'psycopg[binary]']\n",
+    "agent/server.py": "from fastapi import FastAPI\nimport chromadb\napp = FastAPI(title='AgentAPI')\nclient = chromadb.Client()\n",
+    "README.md": "# AI Agent Service\nFastAPI agent server integrating ChromaDB vector search and PostgreSQL relational storage.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "LangChain",
+      "ChromaDB"
+    ],
+    "databases": [
+      "ChromaDB",
+      "PostgreSQL"
+    ],
+    "deployable_units": [
+      "ai_agent_service"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Fullstack AI agent service",
+      "Uses FastAPI web framework",
+      "Integrates ChromaDB for vector retrieval",
+      "Uses PostgreSQL for relational persistence"
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "repo_id": "05_django_rest",
+  "description": "Django REST Framework with documentation contradiction (claims SQLite but uses Postgres)",
+  "files": {
+    "requirements.txt": "django==5.0.3\ndjangorestframework==3.14.0\npsycopg2-binary==2.9.9\n",
+    "myproject/settings.py": "DATABASES = {'default': {'ENGINE': 'django.db.backends.postgresql', 'NAME': 'prod_db'}}\n",
+    "myproject/urls.py": "from django.urls import path\nurlpatterns = []\n",
+    "README.md": "# Django Portal\nBuilt on Django REST Framework.\nNote: Uses SQLite database for storage.\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "Django",
+      "Django REST Framework"
+    ],
+    "databases": [
+      "PostgreSQL"
+    ],
+    "deployable_units": [
+      "web_backend"
+    ],
+    "declared_unused": [],
+    "known_contradictions": [
+      {
+        "claimed": "SQLite",
+        "actual": "PostgreSQL"
+      }
+    ],
+    "unverified_doc_claims": [],
+    "important_facts": [
+      "Uses Django framework",
+      "Uses PostgreSQL in settings.py",
+      "Documentation contradicts code by claiming SQLite"
+    ]
+  }
+}
