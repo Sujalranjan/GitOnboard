@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 from backend.config import settings
+from backend.services.worktree_provisioner import WorktreeProvisioner
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class GitManager:
     def __init__(self, base_worktree_dir: Optional[Union[str, Path]] = None):
         self.base_dir = Path(base_worktree_dir or settings.worktrees_dir).resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.provisioner = WorktreeProvisioner(self.base_dir)
 
     def _run_cmd(
         self,
@@ -73,7 +75,6 @@ class GitManager:
             self._run_cmd(["git", "init"], cwd=repo_path)
             self._run_cmd(["git", "config", "user.name", "GitOnBoard Agent"], cwd=repo_path)
             self._run_cmd(["git", "config", "user.email", "agent@gitonboard.local"], cwd=repo_path)
-            # Add initial commit if repo is empty
             try:
                 self._run_cmd(["git", "add", "."], cwd=repo_path)
                 self._run_cmd(["git", "commit", "-m", "Initial baseline commit", "--allow-empty"], cwd=repo_path)
@@ -90,7 +91,7 @@ class GitManager:
     ) -> Path:
         """
         Creates an isolated Git worktree sandbox under STORAGE_PATH/worktrees/<repo_id>_<run_id>.
-        Command: git worktree add -b <new_branch> <target_path> <base_branch>
+        Guarantees source repository and target worktree are populated with real repository files.
         """
         repo_id_str = str(repo_id)
         worktree_name = f"{repo_id_str}_{run_id}"
@@ -102,9 +103,9 @@ class GitManager:
         else:
             source_path = (Path(settings.storage_path) / "repos" / repo_id_str).resolve()
 
-        if not source_path.exists():
-            source_path.mkdir(parents=True, exist_ok=True)
-            self._ensure_git_repo(source_path)
+        # Provision repository contents into source_path if not populated
+        if not self.provisioner.is_worktree_populated(source_path):
+            self.provisioner.provision(repo_identifier=repo_id_str, worktree_path=source_path)
 
         self._ensure_git_repo(source_path)
 
@@ -121,21 +122,28 @@ class GitManager:
                 cwd=source_path,
             )
         except GitManagerError:
-            # Fallback if branch already exists
             try:
                 self._run_cmd(
                     ["git", "worktree", "add", str(worktree_path), branch],
                     cwd=source_path,
                 )
             except GitManagerError:
-                # Fallback: force create worktree from HEAD
-                self._run_cmd(
-                    ["git", "worktree", "add", "-B", branch, str(worktree_path), "HEAD"],
-                    cwd=source_path,
-                )
+                try:
+                    self._run_cmd(
+                        ["git", "worktree", "add", "-B", branch, str(worktree_path), "HEAD"],
+                        cwd=source_path,
+                    )
+                except GitManagerError:
+                    # Direct copy fallback if git worktree add fails
+                    self.provisioner.provision(repo_identifier=repo_id_str, worktree_path=worktree_path)
+
+        # Ensure worktree is populated with repository files
+        if not self.provisioner.is_worktree_populated(worktree_path):
+            self.provisioner.provision(repo_identifier=repo_id_str, worktree_path=worktree_path)
 
         logger.info(f"Created isolated Git worktree sandbox: {worktree_path} on branch {branch}")
         return worktree_path
+
 
     def get_diff(
         self,
