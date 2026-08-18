@@ -46,7 +46,8 @@ export function CodeEditorPanel({
   };
 
   const [fileContent, setFileContent] = useState<string>("");
-  const [loadingFile, setLoadingFile] = useState<boolean>(true);
+  const [loadingFile, setLoadingFile] = useState<boolean>(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
 
@@ -54,6 +55,7 @@ export function CodeEditorPanel({
 
   // Auto-detect language for Monaco
   const getLanguage = (path: string) => {
+    if (!path) return "plaintext";
     const lower = path.toLowerCase();
     if (lower.endsWith(".tsx") || lower.endsWith(".ts")) return "typescript";
     if (lower.endsWith(".jsx") || lower.endsWith(".js")) return "javascript";
@@ -67,40 +69,70 @@ export function CodeEditorPanel({
   };
 
   const getFileBasename = (path: string) => {
+    if (!path) return "";
     const parts = path.split("/");
     return parts[parts.length - 1];
   };
 
-  // Dynamically fetch file content from Azurite Blob Storage on activeFile change
-  useEffect(() => {
-    if (!activeFile) return;
+  // Fetch file content with race condition cancellation guard
+  const fetchActiveFile = () => {
+    if (!activeFile) {
+      setFileContent("");
+      setLoadingFile(false);
+      setFileError(null);
+      return;
+    }
 
-    let isMounted = true;
     setLoadingFile(true);
+    setFileError(null);
     setSaveSuccess(false);
 
     getFileContent(repoName, activeFile)
       .then((res) => {
-        if (isMounted) {
-          setFileContent(res.content || "");
-          setLoadingFile(false);
-        }
+        setFileContent(res.content || "");
+        setLoadingFile(false);
       })
-      .catch(() => {
-        if (isMounted) {
-          setFileContent(`// Error loading file content for ${activeFile}`);
-          setLoadingFile(false);
-        }
+      .catch((err: any) => {
+        setFileContent("");
+        setFileError(err?.message || "Failed to load file content from storage");
+        setLoadingFile(false);
+      });
+  };
+
+  useEffect(() => {
+    if (!activeFile) {
+      setFileContent("");
+      setLoadingFile(false);
+      setFileError(null);
+      return;
+    }
+
+    let isCurrent = true;
+    setLoadingFile(true);
+    setFileError(null);
+    setSaveSuccess(false);
+
+    getFileContent(repoName, activeFile)
+      .then((res) => {
+        if (!isCurrent) return;
+        setFileContent(res.content || "");
+        setLoadingFile(false);
+      })
+      .catch((err: any) => {
+        if (!isCurrent) return;
+        setFileContent("");
+        setFileError(err?.message || "Failed to load file content from storage");
+        setLoadingFile(false);
       });
 
     return () => {
-      isMounted = false;
+      isCurrent = false;
     };
   }, [repoName, activeFile]);
 
   // Handle Save Action (Ctrl+S or Save Button)
   const handleSave = async () => {
-    if (!activeFile || isSaving) return;
+    if (!activeFile || isSaving || fileError) return;
 
     const currentCode = editorRef.current ? editorRef.current.getValue() : fileContent;
     setIsSaving(true);
@@ -157,33 +189,37 @@ export function CodeEditorPanel({
       <div className="h-9 bg-[#14181E] border-b border-[#2F343A] flex items-center justify-between px-2 select-none flex-shrink-0">
         {/* Open Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none max-w-[65%]">
-          {openTabs.map((tabPath) => {
-            const isActive = tabPath === activeFile;
-            const basename = getFileBasename(tabPath);
-            return (
-              <div
-                key={tabPath}
-                onClick={() => onSelectFile(tabPath)}
-                className={`h-7 px-2.5 rounded-t flex items-center gap-2 text-xs font-mono border-t border-x cursor-pointer transition-colors ${
-                  isActive
-                    ? "bg-[#0A0D10] border-[#2F343A] text-purple-300 font-medium"
-                    : "bg-[#14181E] border-transparent text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A]"
-                }`}
-              >
-                <FileCode className="w-3.5 h-3.5 text-purple-400" />
-                <span>{basename}</span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCloseTab(tabPath);
-                  }}
-                  className="hover:text-white p-0.5 rounded text-[#8B949E]"
+          {openTabs.length > 0 ? (
+            openTabs.map((tabPath) => {
+              const isActive = tabPath === activeFile;
+              const basename = getFileBasename(tabPath);
+              return (
+                <div
+                  key={tabPath}
+                  onClick={() => onSelectFile(tabPath)}
+                  className={`h-7 px-2.5 rounded-t flex items-center gap-2 text-xs font-mono border-t border-x cursor-pointer transition-colors ${
+                    isActive
+                      ? "bg-[#0A0D10] border-[#2F343A] text-purple-300 font-medium"
+                      : "bg-[#14181E] border-transparent text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A]"
+                  }`}
                 >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            );
-          })}
+                  <FileCode className="w-3.5 h-3.5 text-purple-400" />
+                  <span>{basename}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCloseTab(tabPath);
+                    }}
+                    className="hover:text-white p-0.5 rounded text-[#8B949E]"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-[11px] text-[#8B949E] italic px-2">No files open</div>
+          )}
         </div>
 
         {/* Right Actions: Save Button & Mode Switcher */}
@@ -191,10 +227,12 @@ export function CodeEditorPanel({
           {/* Save Button */}
           <button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={!activeFile || isSaving || Boolean(fileError)}
             className={`px-2 py-0.5 rounded text-xs font-semibold flex items-center gap-1 transition-all ${
               saveSuccess
                 ? "bg-emerald-950 text-emerald-300 border border-emerald-500/40"
+                : !activeFile || Boolean(fileError)
+                ? "opacity-40 cursor-not-allowed bg-purple-950/20 text-[#8B949E] border border-[#2F343A]"
                 : "bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 border border-purple-500/40"
             }`}
             title="Save File (Ctrl+S)"
@@ -242,9 +280,15 @@ export function CodeEditorPanel({
       <div className="h-6 bg-[#0A0D10] border-b border-[#2F343A]/60 px-3 flex items-center gap-1 text-[11px] text-[#8B949E] font-mono select-none flex-shrink-0">
         <span>{repoName}</span>
         <ChevronRight className="w-3 h-3 text-[#2F343A]" />
-        <span>{activeFile.split("/").slice(0, -1).join("/") || "."}</span>
-        <ChevronRight className="w-3 h-3 text-[#2F343A]" />
-        <span className="text-purple-400 font-semibold">{getFileBasename(activeFile)}</span>
+        {activeFile ? (
+          <>
+            <span>{activeFile.split("/").slice(0, -1).join("/") || "."}</span>
+            <ChevronRight className="w-3 h-3 text-[#2F343A]" />
+            <span className="text-purple-400 font-semibold">{getFileBasename(activeFile)}</span>
+          </>
+        ) : (
+          <span className="text-[#8B949E] italic">(No active file)</span>
+        )}
 
         {runState?.report?.defects && runState.report.defects.length > 0 && (
           <div className="ml-auto flex items-center gap-1 text-rose-400 bg-rose-950/40 px-2 py-0.5 rounded border border-rose-500/30">
@@ -254,14 +298,41 @@ export function CodeEditorPanel({
         )}
       </div>
 
-      {/* Monaco Editor / Loading Skeleton */}
+      {/* Monaco Editor / Loading Skeleton / Empty State / Explicit Error Card */}
       <div className="flex-1 min-h-0 relative bg-[#0A0D10]">
-        {loadingFile ? (
+        {!activeFile ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0A0D10] text-[#8B949E] text-xs font-mono p-6 select-none">
+            <div className="w-12 h-12 rounded-xl bg-[#14181E] border border-[#2F343A] flex items-center justify-center mb-3 text-purple-400">
+              <FileCode className="w-6 h-6" />
+            </div>
+            <div className="text-sm font-semibold text-[#E6EDF3] mb-1">No File Selected</div>
+            <div className="text-xs text-[#8B949E] max-w-sm text-center">
+              Select a file from the repository explorer on the left or search symbols (⌘K) to open code in Monaco.
+            </div>
+          </div>
+        ) : loadingFile ? (
           <div className="absolute inset-0 flex items-center justify-center bg-[#0A0D10] text-[#8B949E] text-xs font-mono">
             <div className="flex items-center gap-2">
               <RefreshCw className="w-4 h-4 animate-spin text-purple-400" />
-              <span>Streaming blob payload from Azurite Storage...</span>
+              <span>Loading {getFileBasename(activeFile)} from Azurite Storage...</span>
             </div>
+          </div>
+        ) : fileError ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0A0D10] text-rose-300 text-xs font-mono p-6">
+            <div className="w-12 h-12 rounded-xl bg-rose-950/30 border border-rose-500/40 flex items-center justify-center mb-3 text-rose-400">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div className="text-sm font-semibold text-rose-200 mb-1">Failed to Load File</div>
+            <div className="text-xs text-rose-400/90 max-w-md text-center mb-4 bg-[#14181E] p-3 rounded border border-rose-500/30">
+              {fileError}
+            </div>
+            <button
+              onClick={fetchActiveFile}
+              className="px-3 py-1.5 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 border border-purple-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Load</span>
+            </button>
           </div>
         ) : editorMode === "diff" ? (
           <DiffEditor

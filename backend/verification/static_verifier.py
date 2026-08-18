@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from .schemas import Defect, DefectCategory, DefectSeverity, VerificationResult
+from .schemas import Defect, DefectCategory, DefectSeverity, ExecutionState, VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -87,20 +87,45 @@ class StaticVerifier:
                     wt_path, rel_file, file_full, declared_js_deps, defects
                 )
 
+        evidence_manifest: List[Dict[str, Any]] = [
+            {
+                "type": "static_files_inspected",
+                "count": len(target_files),
+                "files": target_files[:20],
+            },
+            {
+                "type": "manifest_dependencies_declared",
+                "python_deps_count": len(declared_py_deps),
+                "js_deps_count": len(declared_js_deps),
+            }
+        ]
+
         elapsed_ms = (time.time() - start_time) * 1000
-        passed = len(defects) == 0
-        status = "PASS" if passed else "FAIL"
+        has_evidence = len(target_files) > 0
+        passed = (len(defects) == 0) and has_evidence
+        
+        if not has_evidence and len(defects) == 0:
+            exec_state = ExecutionState.UNVERIFIED.value
+        elif passed:
+            exec_state = ExecutionState.PASS.value
+        else:
+            exec_state = ExecutionState.FAIL.value
+
+        status = exec_state
 
         logger.info(f"StaticVerifier finished: status={status}, defects={len(defects)}, time={elapsed_ms:.1f}ms")
         return VerificationResult(
             vector_name="static",
             status=status,
             passed=passed,
+            execution_state=exec_state,
             defects=defects,
+            evidence_manifest=evidence_manifest,
             details={
                 "target_files_count": len(target_files),
                 "declared_python_deps": list(declared_py_deps),
                 "declared_js_deps": list(declared_js_deps),
+                "evidence_count": len(evidence_manifest),
             },
             execution_time_ms=elapsed_ms,
         )

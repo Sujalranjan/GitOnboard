@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { DefectItem, RunState, VerificationReport } from "@/types/workspace";
 import {
   submitPipelineTask,
@@ -9,11 +9,8 @@ import {
 } from "@/services/verificationApi";
 
 export function useVerificationWorkspace(initialRepoName: string = "default") {
-  const [activeFile, setActiveFile] = useState<string>("src/pages/api/index.tsx");
-  const [openTabs, setOpenTabs] = useState<string[]>([
-    "src/pages/api/index.tsx",
-    "src/components/TodoItem.tsx",
-  ]);
+  const [activeFile, setActiveFile] = useState<string>("");
+  const [openTabs, setOpenTabs] = useState<string[]>([]);
   const [editorMode, setEditorMode] = useState<"source" | "diff">("source");
   const [logs, setLogs] = useState<string[]>([
     `[System] GitOnBoard Workspace initialized for repository '${initialRepoName}'.`,
@@ -32,6 +29,29 @@ export function useVerificationWorkspace(initialRepoName: string = "default") {
     isLoading: false,
     statusMessage: "",
   });
+
+  // Complete state reset when repository changes
+  useEffect(() => {
+    setActiveFile("");
+    setOpenTabs([]);
+    setEditorMode("source");
+    setLogs([
+      `[System] Switched to repository '${initialRepoName}'.`,
+      "[Ready] Multi-Vector Verification Mesh stand-by.",
+    ]);
+    setRunState({
+      runId: null,
+      repoId: initialRepoName,
+      branch: "main",
+      taskPrompt: "Add a new API route for managing user todos with GET and POST handlers.",
+      contract: null,
+      rawDiff: "",
+      report: null,
+      iteration: 0,
+      isLoading: false,
+      statusMessage: "",
+    });
+  }, [initialRepoName]);
 
   const appendLog = useCallback((message: string) => {
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);

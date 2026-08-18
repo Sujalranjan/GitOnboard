@@ -389,6 +389,9 @@ async def get_raw_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not path or not path.strip():
+        raise HTTPException(status_code=400, detail="Invalid empty file path")
+
     repo, analysis = get_latest_analysis(repo_name, db, current_user)
     from backend.models.fact_store import FactFile
     from backend.storage import get_storage
@@ -404,27 +407,40 @@ async def get_raw_file(
         try:
             storage = get_storage()
             content = storage.get_object_text(fact_file.blob_name)
-            return {
-                "path": clean_path,
-                "content": content,
-                "size": fact_file.size,
-                "language": fact_file.language,
-                "content_type": fact_file.content_type,
-            }
+            if content is not None:
+                return {
+                    "path": clean_path,
+                    "content": content,
+                    "size": fact_file.size,
+                    "language": fact_file.language,
+                    "content_type": fact_file.content_type,
+                }
         except Exception as e:
             logger.warning(f"Error reading blob {fact_file.blob_name}: {e}")
 
-    # Fallback to GitHub API
-    parts = repo.url.rstrip("/").split("/")
-    owner = parts[-2]
-    content = await fetch_file_content(owner, repo_name, repo.default_branch, clean_path, current_user.github_access_token)
-    return {
-        "path": clean_path,
-        "content": content,
-        "size": len(content) if content else 0,
-        "language": None,
-        "content_type": "text/plain",
-    }
+    # Fallback to GitHub API if token and repository URL are available
+    if current_user.github_access_token and repo.url:
+        try:
+            parts = repo.url.rstrip("/").split("/")
+            if len(parts) >= 2:
+                owner = parts[-2]
+                content = await fetch_file_content(owner, repo_name, repo.default_branch or "main", clean_path, current_user.github_access_token)
+                if content is not None:
+                    return {
+                        "path": clean_path,
+                        "content": content,
+                        "size": len(content.encode("utf-8")),
+                        "language": None,
+                        "content_type": "text/plain",
+                    }
+        except Exception as e:
+            logger.debug(f"GitHub fallback read failed for {clean_path}: {e}")
+
+    # If neither Azurite blob nor GitHub contains the file, return explicit 404
+    raise HTTPException(
+        status_code=404,
+        detail=f"File not found in storage or repository: '{clean_path}'"
+    )
 
 
 from pydantic import BaseModel
@@ -440,28 +456,55 @@ async def save_repo_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not body.path or not body.path.strip():
+        raise HTTPException(status_code=400, detail="Invalid empty file path")
+
     clean_path = body.path.replace("\\", "/").lstrip("./").lstrip("/")
+    repo, analysis = get_latest_analysis(repo_name, db, current_user)
+    from backend.models.fact_store import FactFile
+    from backend.storage import get_storage, build_blob_key
+
+    fact_file = (
+        db.query(FactFile)
+        .filter(FactFile.analysis_id == analysis.id, FactFile.path == clean_path)
+        .first()
+    )
+
+    if fact_file and fact_file.blob_name:
+        blob_name = fact_file.blob_name
+    else:
+        blob_name = build_blob_key(repo.id, f"snap_{analysis.id}", clean_path)
+
+    # Persist payload into Azurite Blob Storage
     try:
-        repo, analysis = get_latest_analysis(repo_name, db, current_user)
-        from backend.models.fact_store import FactFile
-        from backend.storage import get_storage
-
-        fact_file = (
-            db.query(FactFile)
-            .filter(FactFile.analysis_id == analysis.id, FactFile.path == clean_path)
-            .first()
-        )
-
-        if fact_file and fact_file.blob_name:
-            storage = get_storage()
-            storage.put_object(fact_file.blob_name, body.content)
-            fact_file.size = len(body.content.encode("utf-8"))
-            db.commit()
+        storage = get_storage()
+        storage.put_object(blob_name, body.content)
     except Exception as e:
-        logger.warning(f"Save file blob update warning: {e}")
+        logger.error(f"Failed to write blob {blob_name} to Azurite storage: {e}")
+        raise HTTPException(status_code=500, detail=f"Storage write error: {str(e)}")
+
+    # Update or insert FactFile record
+    content_bytes = body.content.encode("utf-8")
+    if fact_file:
+        fact_file.blob_name = blob_name
+        fact_file.size = len(content_bytes)
+        fact_file.is_deleted = False
+    else:
+        fact_file = FactFile(
+            analysis_id=analysis.id,
+            path=clean_path,
+            blob_name=blob_name,
+            size=len(content_bytes),
+            language=None,
+            is_deleted=False,
+        )
+        db.add(fact_file)
+
+    db.commit()
 
     return {
         "status": "saved",
         "path": clean_path,
         "content_length": len(body.content),
+        "blob_name": blob_name,
     }

@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from .schemas import Defect, DefectCategory, DefectSeverity, VerificationResult
+from .schemas import Defect, DefectCategory, DefectSeverity, ExecutionState, VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -62,16 +62,39 @@ class DynamicVerifier:
             node_dir = wt_path / "frontend" if (wt_path / "frontend" / "package.json").exists() else wt_path
             self._run_node_checks(node_dir, defects, execution_details, timeout_sec)
 
+        evidence_manifest: List[Dict[str, Any]] = []
+        if "pytest_stdout" in execution_details and execution_details["pytest_stdout"]:
+            evidence_manifest.append({
+                "type": "pytest_execution",
+                "stdout_snippet": execution_details["pytest_stdout"][:500],
+            })
+        if "node_build_stdout" in execution_details and execution_details["node_build_stdout"]:
+            evidence_manifest.append({
+                "type": "node_build_execution",
+                "stdout_snippet": execution_details["node_build_stdout"][:500],
+            })
+
         elapsed_ms = (time.time() - start_time) * 1000
-        passed = len(defects) == 0
-        status = "PASS" if passed else "FAIL"
+        has_evidence = len(evidence_manifest) > 0 or bool(execution_details)
+        passed = (len(defects) == 0) and has_evidence
+
+        if not has_evidence and len(defects) == 0:
+            exec_state = ExecutionState.UNVERIFIED.value
+        elif passed:
+            exec_state = ExecutionState.PASS.value
+        else:
+            exec_state = ExecutionState.FAIL.value
+
+        status = exec_state
 
         logger.info(f"DynamicVerifier finished: status={status}, defects={len(defects)}, time={elapsed_ms:.1f}ms")
         return VerificationResult(
             vector_name="dynamic",
             status=status,
             passed=passed,
+            execution_state=exec_state,
             defects=defects,
+            evidence_manifest=evidence_manifest,
             details=execution_details,
             execution_time_ms=elapsed_ms,
         )

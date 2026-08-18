@@ -14,6 +14,8 @@ export type DefectCategory =
 
 export type DefectSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
+export type ExecutionState = 'PASS' | 'FAIL' | 'ERROR' | 'UNVERIFIED' | 'MOCKED';
+
 export interface DefectItem {
   id: string;
   category: DefectCategory | string;
@@ -27,18 +29,21 @@ export interface DefectItem {
 
 export interface VerificationVectorResult {
   vector_name: string;
-  status: 'PASS' | 'FAIL' | string;
+  status: ExecutionState | string;
   passed: boolean;
+  execution_state?: ExecutionState | string;
   defects: DefectItem[];
+  evidence_manifest?: Record<string, any>[];
   details?: Record<string, any>;
   execution_time_ms?: number;
 }
 
 export interface VerificationReport {
   run_id: string;
-  overall_status: 'PENDING' | 'PASS' | 'FAIL' | string;
-  status?: 'PASS' | 'FAIL' | string;
+  overall_status: 'PENDING' | ExecutionState | string;
+  status?: ExecutionState | string;
   passed?: boolean;
+  execution_state?: ExecutionState | string;
   static_passed: boolean;
   dynamic_passed: boolean;
   semantic_passed: boolean;
@@ -46,6 +51,7 @@ export interface VerificationReport {
   dynamic_result?: VerificationVectorResult;
   contract_result?: VerificationVectorResult;
   defects: DefectItem[];
+  evidence_manifest?: Record<string, any>[];
   summary?: string;
   created_at: string;
 }

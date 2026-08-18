@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/pipeline", tags=["Verification Pipeline"])
 orchestrator = VerificationOrchestrator()
 
+# In-memory store for worktree paths keyed by task_id (P7: worktree persistence)
+_task_worktree_paths: Dict[str, str] = {}
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Request & Response Schemas
@@ -83,8 +86,8 @@ async def submit_pipeline_task(
     Step 1: Accepts feature prompt requirement and synthesizes an ImplementationContract JSON.
     """
     logger.info(f"Pipeline: Submitting task requirement for repo '{req.repo_name}'")
-    contract = orchestrator.generate_contract(req.repo_name, req.prompt, db)
-    task_id = f"task-{int(contract.get('id', '0').replace('contract-', ''))}"
+    contract = await orchestrator.generate_contract(req.repo_name, req.prompt, db)
+    task_id = f"task-{int(contract.get('id', '0').replace('contract-', '') if isinstance(contract.get('id'), str) else contract.get('id', 0))}"
 
     return SubmitTaskResponse(
         task_id=task_id,
@@ -108,14 +111,17 @@ async def execute_pipeline_task(
     contract_data = req.contract_data or {
         "id": req.contract_id or f"contract-{task_id}",
         "requirement": "Requirement implementation",
-        "required_endpoints": ["POST /api/todos", "GET /api/todos"],
-        "expected_components": ["src/pages/api/todos.ts"],
-        "invariants": ["Request payload validation required using schema"],
-        "affected_components": [{"file": "src/pages/api/todos.ts", "symbol": "handler"}],
+        "required_endpoints": [],
+        "expected_components": [],
+        "invariants": ["Implementation must satisfy the stated requirement"],
+        "affected_components": [],
     }
 
     # 1. Run agent inside Git worktree
-    wt_path, raw_diff, mod_files = orchestrator.run_agent(req.repo_name, contract_data, task_id)
+    wt_path, raw_diff, mod_files = await orchestrator.run_agent(req.repo_name, contract_data, task_id)
+
+    # Store worktree path for repair step (P7: worktree persistence)
+    _task_worktree_paths[task_id] = str(wt_path)
 
     # 2. Run multi-vector verification
     report = orchestrator.verify_run(
@@ -150,15 +156,20 @@ async def repair_pipeline_task(
     contract_data = req.contract_data or {
         "id": f"contract-{task_id}",
         "requirement": "Requirement implementation",
-        "required_endpoints": ["POST /api/todos", "GET /api/todos"],
-        "expected_components": ["src/pages/api/todos.ts"],
-        "invariants": ["Request payload validation required using schema"],
+        "required_endpoints": [],
+        "expected_components": [],
+        "invariants": ["Implementation must satisfy the stated requirement"],
     }
 
-    wt_path = (Path(settings.worktrees_dir) / f"{req.repo_name}_{task_id}").resolve()
+    # P7: Retrieve stored worktree path from execute step
+    stored_path = _task_worktree_paths.get(task_id)
+    if stored_path:
+        wt_path = Path(stored_path).resolve()
+    else:
+        wt_path = (Path(settings.worktrees_dir) / f"{req.repo_name}_{task_id}").resolve()
     wt_path.mkdir(parents=True, exist_ok=True)
 
-    report, status_str, repaired_diff = orchestrator.judge_and_repair(
+    report, status_str, repaired_diff = await orchestrator.judge_and_repair(
         task_id=task_id,
         repo_id=req.repo_name,
         worktree_path=wt_path,

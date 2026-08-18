@@ -11,7 +11,7 @@ export default function LandingPage() {
 
   const handleLogin = () => {
     // Appended prompt=consent query param to force GitHub to re-prompt user consent/login
-    window.location.href = "http://localhost:8000/api/auth/github/login?prompt=consent";
+    window.location.href = "/api/auth/github/login?prompt=consent";
   };
 
   return (

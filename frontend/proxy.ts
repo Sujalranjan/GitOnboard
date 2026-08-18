@@ -4,7 +4,8 @@ import type { NextRequest } from 'next/server';
 // Add paths that require authentication here
 const protectedPaths = [
   '/dashboard',
-  '/repository'
+  '/repository',
+  '/workspace'
 ];
 
 export function proxy(request: NextRequest) {

@@ -1,14 +1,18 @@
 import backend.models  # Register all models with Base.metadata
 from fastapi import FastAPI, HTTPException, APIRouter, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 from contextlib import asynccontextmanager
 import logging
+import uuid
+import time
 from pathlib import Path
 import shutil
 import asyncio
 
 from backend.config import settings
-from backend.logger import setup_logging
+from backend.logger import setup_logging, set_correlation_context, emit_execution_log, sanitize_log_data
 from backend.database import engine, Base, SessionLocal
 from backend.models.user import User
 from backend.models.repository import Repository, AnalysisJob
@@ -121,7 +125,74 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Correlation-ID"],
 )
+
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    # Extract or generate correlation ID
+    correlation_id = request.headers.get("X-Correlation-ID") or request.headers.get("x-correlation-id") or str(uuid.uuid4())
+    
+    # Try to extract repository or task ID from path if present
+    path = request.url.path
+    repo_id = None
+    task_id = None
+    parts = path.strip("/").split("/")
+    if "repos" in parts:
+        try:
+            repo_idx = parts.index("repos")
+            if repo_idx + 1 < len(parts):
+                repo_id = parts[repo_idx + 1]
+        except (ValueError, IndexError):
+            pass
+    if "task" in parts:
+        try:
+            task_idx = parts.index("task")
+            if task_idx + 1 < len(parts):
+                task_id = parts[task_idx + 1]
+        except (ValueError, IndexError):
+            pass
+
+    set_correlation_context(correlation_id=correlation_id, repo_id=repo_id, task_id=task_id)
+
+    start_time = time.time()
+    try:
+        response: Response = await call_next(request)
+        duration_ms = (time.time() - start_time) * 1000
+        response.headers["X-Correlation-ID"] = correlation_id
+
+        # Emit structured execution log for non-health endpoints
+        if not path.endswith("/health") and path != "/":
+            emit_execution_log(
+                event_type="http_request",
+                status=str(response.status_code),
+                correlation_id=correlation_id,
+                repo_id=repo_id,
+                task_id=task_id,
+                details={
+                    "method": request.method,
+                    "path": path,
+                    "status_code": response.status_code,
+                    "duration_ms": round(duration_ms, 2),
+                }
+            )
+        return response
+    except Exception as exc:
+        duration_ms = (time.time() - start_time) * 1000
+        emit_execution_log(
+            event_type="http_error",
+            status="500",
+            correlation_id=correlation_id,
+            repo_id=repo_id,
+            task_id=task_id,
+            details={
+                "method": request.method,
+                "path": path,
+                "error": str(exc),
+                "duration_ms": round(duration_ms, 2),
+            }
+        )
+        raise exc
 
 from backend.routers import auth_router, health_router
 from backend.routers.implementation import router as implementation_router
