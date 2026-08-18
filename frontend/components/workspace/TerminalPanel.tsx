@@ -22,6 +22,7 @@ interface TerminalPanelProps {
   isOpen: boolean;
   onClose: () => void;
   runState?: RunState;
+  height?: number;
 }
 
 interface TerminalEntry {
@@ -35,7 +36,7 @@ interface TerminalEntry {
   error?: string;
 }
 
-export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps) {
+export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: TerminalPanelProps) {
   const [activeTab, setActiveTab] = useState<"TERMINAL" | "VERIFICATION" | "PROBLEMS">("TERMINAL");
   const [selectedShell, setSelectedShell] = useState("bash (isolated sandbox)");
   const [commandInput, setCommandInput] = useState("");
@@ -98,7 +99,10 @@ export function TerminalPanel({ isOpen, onClose, runState }: TerminalPanelProps)
   };
 
   return (
-    <div className="h-56 bg-[#0A0D10] border-t border-[#2F343A] flex flex-col select-none text-[#E6EDF3] flex-shrink-0">
+    <div
+      style={{ height: `${height}px` }}
+      className="bg-[#0A0D10] border-t border-[#2F343A] flex flex-col select-none text-[#E6EDF3] flex-shrink-0"
+    >
       {/* Top Console Bar */}
       <div className="h-8 bg-[#14181E] border-b border-[#2F343A] flex items-center justify-between px-3 text-xs flex-shrink-0">
         {/* Left Console Sub-Tabs */}

@@ -35,6 +35,7 @@ interface AIAgentPanelProps {
   runState?: RunState;
   onStartTaskPrompt?: (prompt: string) => void;
   onTriggerRepair?: () => void;
+  width?: number;
 }
 
 export function AIAgentPanel({
@@ -44,6 +45,7 @@ export function AIAgentPanel({
   runState,
   onStartTaskPrompt,
   onTriggerRepair,
+  width = 340,
 }: AIAgentPanelProps) {
   const [activeSubTab, setActiveSubTab] = useState<"chat" | "matrix" | "context">("chat");
   const [selectedModel, setSelectedModel] = useState("GPT-4o");
@@ -100,7 +102,10 @@ export function AIAgentPanel({
   const contractDefects = defects.filter((d) => (d.category || "").includes("CONTRACT"));
 
   return (
-    <div className="w-80 bg-[#14181E] border-l border-[#2F343A] flex flex-col h-full select-none flex-shrink-0 text-[#E6EDF3]">
+    <div
+      style={{ width: `${width}px` }}
+      className="bg-[#14181E] border-l border-[#2F343A] flex flex-col h-full select-none flex-shrink-0 text-[#E6EDF3]"
+    >
       {/* Top Header */}
       <div className="h-12 px-3 border-b border-[#2F343A] flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">

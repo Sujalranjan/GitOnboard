@@ -28,3 +28,4 @@ Strictly manage dependencies using modern, standardized tooling.
 ## Dependency Justification
 - Favor the Python Standard Library before adding third-party packages.
 - Always check if an existing installed library (sqlalchemy, fastapi, tree-sitter, httpx, chromadb, azure-storage-blob) can fulfill the requirement.
+- See [.agents/rules/10-command-execution.md](.agents/rules/10-command-execution.md) for the complete verified command catalog across Python, Next.js, Docker, and host environment invariants.

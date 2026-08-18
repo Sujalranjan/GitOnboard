@@ -39,6 +39,7 @@ interface FileExplorerPanelProps {
   isOpen: boolean;
   onClose: () => void;
   runState?: RunState;
+  width?: number;
 }
 
 /**
@@ -239,6 +240,7 @@ export function FileExplorerPanel({
   isOpen,
   onClose,
   runState,
+  width = 240,
 }: FileExplorerPanelProps) {
   const repoName = runState?.repoId || "my-project";
 
@@ -299,7 +301,10 @@ export function FileExplorerPanel({
   if (!isOpen) return null;
 
   return (
-    <div className="w-60 bg-[#14181E] border-r border-[#2F343A] flex flex-col h-full select-none flex-shrink-0 text-[#E6EDF3]">
+    <div
+      style={{ width: `${width}px` }}
+      className="bg-[#14181E] border-r border-[#2F343A] flex flex-col h-full select-none flex-shrink-0 text-[#E6EDF3]"
+    >
       {/* Top Header */}
       <div className="h-9 px-3 border-b border-[#2F343A] flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-[#8B949E] flex-shrink-0">
         <div className="flex items-center gap-1.5">

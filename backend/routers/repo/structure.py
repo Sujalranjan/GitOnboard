@@ -488,15 +488,14 @@ async def save_repo_file(
     if fact_file:
         fact_file.blob_name = blob_name
         fact_file.size = len(content_bytes)
-        fact_file.is_deleted = False
     else:
         fact_file = FactFile(
+            id=f"{analysis.id}:{clean_path}",
             analysis_id=analysis.id,
             path=clean_path,
             blob_name=blob_name,
             size=len(content_bytes),
             language=None,
-            is_deleted=False,
         )
         db.add(fact_file)
 
