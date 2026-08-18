@@ -88,3 +88,19 @@ All API routes are prefixed under `/api` (e.g., `http://localhost:8000/api`).
 |---|---|---|---|
 | `GET` | `/api/repos/{repo_name}/summary` | Retrieve cached Markdown repository summary | Yes |
 | `POST` | `/api/repos/{repo_name}/summary/generate` | Dispatch background task to generate grounded repository summary via local Ollama LLM | Yes |
+
+---
+
+## 8. AI Implementation Pipeline (`/api/v1/pipeline`)
+
+Coding Agent Adapter: requirement → Implementation Contract → isolated git-worktree code generation → multi-vector verification (static AST, dynamic build/test — executed in an ephemeral Docker container, see `ARCHITECTURE.md` §4 — and contract coverage) → bounded (max 3 attempts) repair. Each step persists an `AgentRun`/`AgentEvent`/`FileChange` trail (`DATA_MODEL.md` §1.5) instead of only returning a single synchronous response.
+
+| Method | Endpoint | Description | Auth Required |
+|---|---|---|---|
+| `POST` | `/api/v1/pipeline/task/submit` | Synthesizes an `ImplementationContract` from a natural-language requirement prompt | No¹ |
+| `POST` | `/api/v1/pipeline/task/{task_id}/execute` | Runs the coding agent in an isolated git worktree and executes multi-vector verification | No¹ |
+| `POST` | `/api/v1/pipeline/task/{task_id}/repair` | Runs one bounded repair iteration (max 3) against reported defects and re-verifies | No¹ |
+| `GET` | `/api/v1/pipeline/task/{task_id}/events/stream` | Server-Sent Events (SSE) stream of `AgentEvent` progress for the task's most recent `AgentRun` (same TaskManager pub/sub pattern as §4) | No¹ |
+| `GET` | `/api/v1/pipeline/task/{task_id}/changes` | Returns persisted, structured `FileChange` rows (path, change type, added/removed line counts, per-file diff) for the task's most recent `AgentRun` | No¹ |
+
+¹ This router does not yet enforce authentication — a pre-existing gap, not introduced by the event/diff persistence work above.

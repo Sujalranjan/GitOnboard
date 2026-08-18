@@ -27,6 +27,7 @@ dependencies = [
     "requests",
     "azure-storage-blob>=12.19.0",
     "pytest-asyncio>=1.4.0",
+    "docker>=7.1.0",
 ]
 
 [tool.ruff]

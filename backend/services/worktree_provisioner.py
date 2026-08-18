@@ -21,6 +21,7 @@ from backend.database import SessionLocal
 from backend.models.repository import Repository, Analysis
 from backend.models.fact_store import FactFile
 from backend.storage import get_storage
+from backend.utils.repo_paths import PathTraversalError, safe_join
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +117,11 @@ class WorktreeProvisioner:
         for ff in fact_files:
             if not ff.path:
                 continue
-            clean_path = ff.path.replace("\\", "/").lstrip("./").lstrip("/")
-            dest_file = target_dir / clean_path
+            try:
+                dest_file = safe_join(target_dir, ff.path)
+            except PathTraversalError as err:
+                logger.warning(f"Skipping FactFile with unsafe path {ff.path!r}: {err}")
+                continue
             dest_file.parent.mkdir(parents=True, exist_ok=True)
 
             # Try reading from blob

@@ -10,6 +10,8 @@ from backend.dependencies.auth import get_current_user
 from backend.services.github import fetch_file_content
 from backend.routers.repo.services.analysis import get_latest_analysis
 from backend.routers.repo.services.models import get_or_build_model
+from backend.routers.repo.services.hierarchy import build_directory_hierarchy, ensure_dir_node
+from backend.utils.repo_paths import PathTraversalError, normalize_relative, posix_name, posix_parent, to_posix
 
 logger = logging.getLogger(__name__)
 
@@ -64,34 +66,25 @@ def scan_repo(repo_name: str, db: Session = Depends(get_db), current_user: User 
     classes = [e for e in query_layer.model.entities.values() if e.type == EntityType.CLASS]
     methods = [e for e in query_layer.model.entities.values() if e.type == EntityType.METHOD]
     
-    # Build nested hierarchy tree
-    dirs_by_path = {}
-    hierarchy = {"name": repo_name, "type": "directory", "children": [], "path": ""}
-    dirs_by_path[""] = hierarchy
-    
-    # Sort dirs so parents always come before children
-    dir_paths = sorted([d.location.repository_path for d in dirs])
-    for d_path in dir_paths:
-        parts = PPath(d_path).parts
-        name = parts[-1]
-        parent_path = str(PPath(d_path).parent)
-        if parent_path == ".":
-            parent_path = ""
-        d_node = {"name": name, "type": "directory", "path": d_path, "children": []}
-        dirs_by_path[d_path] = d_node
-        parent = dirs_by_path.get(parent_path, hierarchy)
-        parent["children"].append(d_node)
-    
+    # Build nested hierarchy tree. Directory paths (and parent paths derived
+    # from them) are canonicalized to POSIX "/" via the centralized repo-path
+    # utility — computing a parent with a platform Path() here would render
+    # "\" on Windows even though dirs_by_path keys are POSIX, causing lookups
+    # to miss and silently flattening the tree onto the root. Order doesn't
+    # matter — missing intermediary ancestors are reconstructed on demand
+    # rather than falling back to attaching orphaned nodes at root.
+    hierarchy, dirs_by_path = build_directory_hierarchy(
+        repo_name, [d.location.repository_path for d in dirs]
+    )
+
     # Add files — with their functions and classes as children
     files_metadata = []
     for f in files:
-        f_path = f.location.repository_path
+        f_path = to_posix(f.location.repository_path)
         parts = PPath(f_path).parts
         name = parts[-1]
-        parent_path = str(PPath(f_path).parent)
-        if parent_path == ".":
-            parent_path = ""
-        
+        parent_path = posix_parent(f_path)
+
         # Build file children (classes + top-level functions)
         file_classes = [c for c in classes if c.metadata.get("file_id") == f_path or c.location.repository_path == f_path]
         file_fns = [fn for fn in functions if fn.metadata.get("file_id") == f_path or fn.location.repository_path == f_path]
@@ -112,7 +105,7 @@ def scan_repo(repo_name: str, db: Session = Depends(get_db), current_user: User 
         lang = lang_map.get(ext.lower(), f.location.language if hasattr(f.location, 'language') else "Unknown")
         
         f_node = {"name": name, "type": "file", "path": f_path, "children": file_children}
-        parent = dirs_by_path.get(parent_path, hierarchy)
+        parent = ensure_dir_node(hierarchy, dirs_by_path, parent_path) if parent_path else hierarchy
         parent["children"].append(f_node)
         
         files_metadata.append({"path": f_path, "extension": ext, "language": lang, "size": 0, "modified_time": ""})
@@ -160,7 +153,10 @@ async def parse_repo_file(repo_name: str, file_path: str, db: Session = Depends(
     from backend.models.fact_store import FactFile
     from backend.storage import get_storage
 
-    clean_path = file_path.replace("\\", "/").lstrip("./").lstrip("/")
+    try:
+        clean_path = normalize_relative(file_path)
+    except PathTraversalError:
+        raise HTTPException(status_code=400, detail=f"Invalid repository-relative file path: '{file_path}'")
     source_code = ""
 
     # Priority 1: Fetch from Azure Blob Storage via Fact Store reference
@@ -346,24 +342,24 @@ def get_architecture(repo_name: str, node_id: str = "root", db: Session = Depend
     if node_id == "root":
         for d in query_layer.get_directories():
             path = d.location.repository_path
-            parent = str(PPath(path).parent).replace("\\", "/")
-            if parent in (".", ""):
+            parent = posix_parent(path)
+            if parent == "":
                 nodes.append({"id": path, "name": d.name, "type": "folder", "parent": "root", "has_children": True, "path": path})
         for f in query_layer.get_files():
             path = f.location.repository_path
-            parent = str(PPath(path).parent).replace("\\", "/")
-            if parent in (".", ""):
+            parent = posix_parent(path)
+            if parent == "":
                 has_children = f.metadata.get("is_supported", False)
                 nodes.append({"id": path, "name": f.name, "type": "file", "parent": "root", "has_children": has_children, "path": path})
     elif "::" not in node_id:
         for d in query_layer.get_directories():
             path = d.location.repository_path
-            parent = str(PPath(path).parent).replace("\\", "/")
+            parent = posix_parent(path)
             if parent == node_id:
                 nodes.append({"id": path, "name": d.name, "type": "folder", "parent": node_id, "has_children": True, "path": path})
         for f in query_layer.get_files():
             path = f.location.repository_path
-            parent = str(PPath(path).parent).replace("\\", "/")
+            parent = posix_parent(path)
             if parent == node_id:
                 has_children = f.metadata.get("is_supported", False)
                 nodes.append({"id": path, "name": f.name, "type": "file", "parent": node_id, "has_children": has_children, "path": path})
@@ -396,7 +392,10 @@ async def get_raw_file(
     from backend.models.fact_store import FactFile
     from backend.storage import get_storage
 
-    clean_path = path.replace("\\", "/").lstrip("./").lstrip("/")
+    try:
+        clean_path = normalize_relative(path)
+    except PathTraversalError:
+        raise HTTPException(status_code=400, detail=f"Invalid repository-relative file path: '{path}'")
     fact_file = (
         db.query(FactFile)
         .filter(FactFile.analysis_id == analysis.id, FactFile.path == clean_path)
@@ -459,7 +458,10 @@ async def save_repo_file(
     if not body.path or not body.path.strip():
         raise HTTPException(status_code=400, detail="Invalid empty file path")
 
-    clean_path = body.path.replace("\\", "/").lstrip("./").lstrip("/")
+    try:
+        clean_path = normalize_relative(body.path)
+    except PathTraversalError:
+        raise HTTPException(status_code=400, detail=f"Invalid repository-relative file path: '{body.path}'")
     repo, analysis = get_latest_analysis(repo_name, db, current_user)
     from backend.models.fact_store import FactFile
     from backend.storage import get_storage, build_blob_key

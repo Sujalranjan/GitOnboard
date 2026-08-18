@@ -20,9 +20,18 @@ from sqlalchemy.orm import Session
 
 from backend.config import settings
 from backend.models.implementation import (
+    AgentRun,
+    AgentRunStatus,
+    AgentEventType,
     Implementation,
     ImplementationContract,
     ImplementationStatus,
+)
+from backend.services.agent_events import (
+    complete_agent_run,
+    emit_event,
+    persist_file_changes,
+    start_agent_run,
 )
 from backend.services.git_manager import GitManager, GitManagerError
 from backend.verification.contract_verifier import ContractVerifier
@@ -211,6 +220,7 @@ class VerificationOrchestrator:
         repo_id: str,
         contract_data: Dict[str, Any],
         task_id: str,
+        db: Optional[Session] = None,
     ) -> Tuple[Path, str, List[str]]:
         """
         2. Initializes isolated Git worktree sandbox, executes LLM-based code generation,
@@ -232,12 +242,19 @@ class VerificationOrchestrator:
             wt_path = (Path(settings.worktrees_dir) / f"{repo_id}_{task_id}").resolve()
             wt_path.mkdir(parents=True, exist_ok=True)
 
+        agent_run: Optional[AgentRun] = None
+        if db is not None:
+            agent_run = start_agent_run(db, task_id, worktree_path=str(wt_path))
+
         # Build the code generation prompt from the contract
         requirement = contract_data.get("requirement", "")
         components = contract_data.get("affected_components", [])
         invariants = contract_data.get("invariants", [])
         tests = contract_data.get("required_tests", [])
         endpoints = contract_data.get("required_endpoints", [])
+
+        if agent_run:
+            emit_event(db, agent_run, AgentEventType.CODE_GENERATING, "Generating implementation code via LLM")
 
         try:
             from backend.ai.service import get_llm_service
@@ -315,12 +332,24 @@ class VerificationOrchestrator:
             logger.warning(f"Orchestrator: LLM code generation failed, using scaffold: {e}")
             files_written = _write_scaffold(wt_path, components, requirement)
 
+        if agent_run:
+            for f in files_written:
+                emit_event(db, agent_run, AgentEventType.FILE_WRITTEN, f"Wrote {f}", {"file": f})
+
         # Capture git diff and modified files
         git_diff = self.git_manager.get_diff(wt_path)
         modified_files = self.git_manager.list_modified_files(wt_path)
 
         if not modified_files:
             modified_files = files_written or []
+
+        if agent_run:
+            changed_count = persist_file_changes(db, agent_run, git_diff)
+            emit_event(
+                db, agent_run, AgentEventType.DIFF_CAPTURED,
+                f"Captured diff across {changed_count} file(s)",
+                {"file_count": changed_count},
+            )
 
         return wt_path, git_diff, modified_files
 
@@ -332,12 +361,20 @@ class VerificationOrchestrator:
         contract_data: Dict[str, Any],
         modified_files: Optional[List[str]] = None,
         git_diff: str = "",
+        db: Optional[Session] = None,
     ) -> VerificationReport:
         """
         3. Executes Triangulated Multi-Vector Verification Mesh (Static, Dynamic, Contract).
         """
         wt_path = Path(worktree_path).resolve()
         mod_files = modified_files or self.git_manager.list_modified_files(wt_path)
+
+        agent_run = _get_active_agent_run(db, run_id) if db is not None else None
+        if agent_run:
+            agent_run.status = AgentRunStatus.VERIFYING
+            db.add(agent_run)
+            db.commit()
+            emit_event(db, agent_run, AgentEventType.VERIFICATION_STARTED, "Running multi-vector verification")
 
         # Vector 1: Static AST & Symbol Verifier
         static_result = self.static_verifier.verify(wt_path, mod_files, git_diff)
@@ -366,6 +403,16 @@ class VerificationOrchestrator:
 
         # Aggregate via Judge
         report = self.judge.aggregate(run_id, static_result, dynamic_result, contract_result)
+
+        if agent_run:
+            emit_event(
+                db, agent_run, AgentEventType.VERIFICATION_COMPLETED,
+                f"Verification {'passed' if report.passed else 'failed'}",
+                {"passed": report.passed, "status": report.status, "defect_count": len(report.defects)},
+            )
+            if report.passed:
+                complete_agent_run(db, agent_run, AgentRunStatus.COMPLETED)
+
         return report
 
     async def judge_and_repair(
@@ -384,6 +431,8 @@ class VerificationOrchestrator:
         Uses LLMService to generate repair patches based on defect descriptions.
         Falls back to deterministic repair if LLM is unavailable.
         """
+        agent_run = _get_active_agent_run(db, task_id) if db is not None else None
+
         # Bounded Iteration Guard
         if iteration > 3:
             logger.warning(f"Orchestrator: Repair iteration {iteration} exceeds limit (3). Marking UNRESOLVED.")
@@ -397,11 +446,20 @@ class VerificationOrchestrator:
                 defects=defects,
                 summary="Maximum repair attempts (3) exceeded. Remaining defects require manual review.",
             )
+            if agent_run:
+                complete_agent_run(db, agent_run, AgentRunStatus.FAILED, error_message="Maximum repair attempts (3) exceeded.")
             return empty_report, "UNRESOLVED", ""
 
         wt_path = Path(worktree_path).resolve()
         components = contract_data.get("expected_components", [])
         requirement = contract_data.get("requirement", "")
+
+        if agent_run:
+            agent_run.status = AgentRunStatus.REPAIRING
+            agent_run.iteration = iteration
+            db.add(agent_run)
+            db.commit()
+            emit_event(db, agent_run, AgentEventType.REPAIR_STARTED, f"Repair iteration {iteration}/3 started", {"iteration": iteration, "defect_count": len(defects)})
 
         try:
             from backend.ai.service import get_llm_service
@@ -500,6 +558,14 @@ class VerificationOrchestrator:
         if not mod_files:
             mod_files = list(components) + ["tests/test_implementation.py"]
 
+        if agent_run:
+            changed_count = persist_file_changes(db, agent_run, repaired_diff)
+            emit_event(
+                db, agent_run, AgentEventType.DIFF_CAPTURED,
+                f"Repair captured diff across {changed_count} file(s)",
+                {"file_count": changed_count, "iteration": iteration},
+            )
+
         # Re-verify against contract
         new_report = self.verify_run(
             run_id=task_id,
@@ -508,15 +574,34 @@ class VerificationOrchestrator:
             contract_data=contract_data,
             modified_files=mod_files,
             git_diff=repaired_diff,
+            db=db,
         )
 
         status_str = "VERIFIED" if new_report.passed else ("REPAIRING" if iteration < 3 else "UNRESOLVED")
+
+        # verify_run() above already marks the AgentRun COMPLETED when it passes;
+        # only the exhausted-attempts case needs to be marked terminal here.
+        if agent_run and status_str == "UNRESOLVED":
+            complete_agent_run(db, agent_run, AgentRunStatus.FAILED, error_message="Maximum repair attempts (3) exceeded.")
+
         return new_report, status_str, repaired_diff
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Private Helper Functions
 # ──────────────────────────────────────────────────────────────────────────────
+
+
+def _get_active_agent_run(db: Optional[Session], task_id: str) -> Optional[AgentRun]:
+    """Returns the most recently started AgentRun for task_id, if any."""
+    if db is None:
+        return None
+    return (
+        db.query(AgentRun)
+        .filter(AgentRun.task_id == task_id)
+        .order_by(AgentRun.started_at.desc())
+        .first()
+    )
 
 
 def _extract_keywords(prompt: str) -> List[str]:

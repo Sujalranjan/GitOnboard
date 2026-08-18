@@ -17,6 +17,12 @@ from .implementation import (
     ImplementationStatus,
     PlanStepStatus,
     ComponentType,
+    AgentRun,
+    AgentEvent,
+    FileChange,
+    AgentRunStatus,
+    AgentEventType,
+    FileChangeType,
 )
 
 __all__ = [
@@ -26,4 +32,6 @@ __all__ = [
     "FactDatabaseObject", "FactCapability", "FactEvidence", "FactCapabilityMember",
     "Implementation", "ImplementationContract", "ImplementationPlan",
     "ImplementationStatus", "PlanStepStatus", "ComponentType",
+    "AgentRun", "AgentEvent", "FileChange",
+    "AgentRunStatus", "AgentEventType", "FileChangeType",
 ]

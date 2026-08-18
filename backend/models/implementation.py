@@ -60,6 +60,34 @@ class ComponentType(str, Enum):
     NEW = "NEW"            # Symbol/file to be created by the agent
 
 
+class AgentRunStatus(str, Enum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    VERIFYING = "VERIFYING"
+    REPAIRING = "REPAIRING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class AgentEventType(str, Enum):
+    STARTED = "STARTED"
+    CONTRACT_GENERATED = "CONTRACT_GENERATED"
+    CODE_GENERATING = "CODE_GENERATING"
+    FILE_WRITTEN = "FILE_WRITTEN"
+    DIFF_CAPTURED = "DIFF_CAPTURED"
+    VERIFICATION_STARTED = "VERIFICATION_STARTED"
+    VERIFICATION_COMPLETED = "VERIFICATION_COMPLETED"
+    REPAIR_STARTED = "REPAIR_STARTED"
+    FINISHED = "FINISHED"
+    FAILED = "FAILED"
+
+
+class FileChangeType(str, Enum):
+    ADDED = "ADDED"
+    MODIFIED = "MODIFIED"
+    DELETED = "DELETED"
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Models
 # ──────────────────────────────────────────────────────────────────────────────
@@ -178,3 +206,86 @@ class ImplementationPlan(Base):
 
     def __repr__(self) -> str:
         return f"<ImplementationPlan step={self.step_number} title={self.title!r} type={self.component_type!r}>"
+
+
+class AgentRun(Base):
+    """
+    A single execution of the Coding Agent Adapter (code generation, verification,
+    and bounded repair) against one worktree. implementation_id is nullable since
+    the pipeline can also be driven ad-hoc (task_id only, no persisted Implementation).
+    """
+    __tablename__ = "agent_runs"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    implementation_id = Column(
+        String, ForeignKey("implementations.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    task_id = Column(String, nullable=False, index=True)
+
+    status = Column(
+        SAEnum(AgentRunStatus, name="agent_run_status"),
+        nullable=False,
+        default=AgentRunStatus.QUEUED,
+        index=True,
+    )
+    iteration = Column(Integer, nullable=False, default=1)
+    worktree_path = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    started_at = Column(DateTime(timezone=True), default=_now, nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    events = relationship(
+        "AgentEvent", back_populates="agent_run", cascade="all, delete-orphan",
+        order_by="AgentEvent.created_at",
+    )
+    file_changes = relationship(
+        "FileChange", back_populates="agent_run", cascade="all, delete-orphan",
+    )
+
+    def __repr__(self) -> str:
+        return f"<AgentRun id={self.id!r} task_id={self.task_id!r} status={self.status!r}>"
+
+
+class AgentEvent(Base):
+    """An append-only progress event emitted during an AgentRun's execution."""
+    __tablename__ = "agent_events"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    agent_run_id = Column(
+        String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    event_type = Column(SAEnum(AgentEventType, name="agent_event_type"), nullable=False)
+    message = Column(Text, nullable=False)
+    payload = Column(JSONType, nullable=False, default=dict)
+
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False, index=True)
+
+    agent_run = relationship("AgentRun", back_populates="events")
+
+    def __repr__(self) -> str:
+        return f"<AgentEvent run={self.agent_run_id!r} type={self.event_type!r}>"
+
+
+class FileChange(Base):
+    """A single file's change, parsed from an AgentRun's captured git diff."""
+    __tablename__ = "file_changes"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    agent_run_id = Column(
+        String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    file_path = Column(String, nullable=False)
+    change_type = Column(SAEnum(FileChangeType, name="file_change_type"), nullable=False)
+    lines_added = Column(Integer, nullable=False, default=0)
+    lines_removed = Column(Integer, nullable=False, default=0)
+    diff_patch = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
+
+    agent_run = relationship("AgentRun", back_populates="file_changes")
+
+    def __repr__(self) -> str:
+        return f"<FileChange run={self.agent_run_id!r} path={self.file_path!r} type={self.change_type!r}>"

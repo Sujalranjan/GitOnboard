@@ -6,10 +6,15 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shlex
 import subprocess
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+from backend.config import settings
+from backend.utils.repo_paths import to_posix
+from backend.verification.docker_runner import DockerVerificationError, DockerVerificationRunner
 
 from .schemas import Defect, DefectCategory, DefectSeverity, ExecutionState, VerificationResult
 
@@ -19,9 +24,13 @@ logger = logging.getLogger(__name__)
 class DynamicVerifier:
     """
     Dynamic Verification Vector:
-    Executes automated test suites, type checking, and linters inside isolated worktrees.
-    Parses stdout/stderr into itemized Defect objects.
+    Executes automated test suites, type checking, and linters inside an ephemeral
+    Docker container scoped to the worktree (falling back to host subprocess only
+    if the Docker daemon is unavailable). Parses stdout/stderr into itemized Defect objects.
     """
+
+    def __init__(self) -> None:
+        self._docker_runner = DockerVerificationRunner()
 
     def verify(
         self,
@@ -53,14 +62,19 @@ class DynamicVerifier:
         has_python = any(wt_path.glob("*.py")) or (wt_path / "backend").exists()
         has_node = (wt_path / "package.json").exists() or (wt_path / "frontend" / "package.json").exists()
 
+        use_docker = settings.verification_use_docker and self._docker_runner.is_available()
+        execution_details["sandbox_mode"] = "docker" if use_docker else "host"
+        if not use_docker and settings.verification_use_docker:
+            logger.warning("DynamicVerifier: Docker unavailable, falling back to host subprocess execution.")
+
         # 1. Run Python pytest & linters if Python project
         if has_python:
-            self._run_python_checks(wt_path, defects, execution_details, timeout_sec)
+            self._run_python_checks(wt_path, defects, execution_details, timeout_sec, use_docker)
 
         # 2. Run Node.js tests & build if Node project
         if has_node:
             node_dir = wt_path / "frontend" if (wt_path / "frontend" / "package.json").exists() else wt_path
-            self._run_node_checks(node_dir, defects, execution_details, timeout_sec)
+            self._run_node_checks(node_dir, defects, execution_details, timeout_sec, use_docker, wt_path)
 
         evidence_manifest: List[Dict[str, Any]] = []
         if "pytest_stdout" in execution_details and execution_details["pytest_stdout"]:
@@ -99,12 +113,41 @@ class DynamicVerifier:
             execution_time_ms=elapsed_ms,
         )
 
+    def _run_via_docker(
+        self,
+        docker_root: Path,
+        cwd: Path,
+        commands: List[str],
+        timeout_sec: int,
+    ) -> Optional[Tuple[int, str, str]]:
+        """
+        Runs `commands` inside the verification container, cd-ing into cwd's
+        path relative to docker_root first. Returns None (signalling the caller
+        to fall back to host execution) if the container run itself fails.
+        """
+        try:
+            rel = cwd.resolve().relative_to(docker_root.resolve())
+        except ValueError:
+            rel = Path(".")
+        rel_str = to_posix(str(rel))
+
+        prefixed = list(commands)
+        if rel_str not in ("", "."):
+            prefixed = [f"cd {shlex.quote(rel_str)}"] + prefixed
+
+        try:
+            return self._docker_runner.run(docker_root, prefixed, timeout_sec=timeout_sec)
+        except DockerVerificationError as err:
+            logger.warning(f"DynamicVerifier: docker execution failed, falling back to host: {err}")
+            return None
+
     def _run_python_checks(
         self,
         wt_path: Path,
         defects: List[Defect],
         details: Dict[str, str],
         timeout_sec: int,
+        use_docker: bool,
     ) -> None:
         # Check syntax/compile
         py_files = list(wt_path.glob("**/*.py"))
@@ -114,7 +157,7 @@ class DynamicVerifier:
             try:
                 compile(py_file.read_text(encoding="utf-8", errors="ignore"), str(py_file), "exec")
             except SyntaxError as err:
-                rel_path = str(py_file.relative_to(wt_path)).replace("\\", "/")
+                rel_path = to_posix(str(py_file.relative_to(wt_path)))
                 defects.append(
                     Defect(
                         category=DefectCategory.DYNAMIC_BUILD_FAILURE.value,
@@ -130,11 +173,23 @@ class DynamicVerifier:
         backend_test_dir = wt_path / "backend" / "tests"
 
         if test_dir.exists() or backend_test_dir.exists():
-            cmd = ["uv", "run", "pytest", "-v", "--tb=short"]
-            if not shutil_which("uv"):
-                cmd = ["pytest", "-v", "--tb=short"]
+            result = None
+            if use_docker:
+                install_cmds = []
+                if (wt_path / "requirements.txt").exists():
+                    install_cmds.append("pip install -q -r requirements.txt")
+                result = self._run_via_docker(
+                    wt_path, wt_path, install_cmds + ["python -m pytest -v --tb=short"], timeout_sec
+                )
 
-            res_code, stdout, stderr = self._exec_cmd(cmd, wt_path, timeout_sec)
+            if result is not None:
+                res_code, stdout, stderr = result
+            else:
+                cmd = ["uv", "run", "pytest", "-v", "--tb=short"]
+                if not shutil_which("uv"):
+                    cmd = ["pytest", "-v", "--tb=short"]
+                res_code, stdout, stderr = self._exec_cmd(cmd, wt_path, timeout_sec)
+
             details["pytest_stdout"] = stdout[:2000]
             details["pytest_stderr"] = stderr[:1000]
 
@@ -147,10 +202,21 @@ class DynamicVerifier:
         defects: List[Defect],
         details: Dict[str, str],
         timeout_sec: int,
+        use_docker: bool,
+        docker_root: Path,
     ) -> None:
-        # Run TypeScript type check / build if package.json present
-        cmd_typecheck = ["npm", "run", "build"]
-        res_code, stdout, stderr = self._exec_cmd(cmd_typecheck, node_dir, timeout_sec)
+        result = None
+        if use_docker:
+            result = self._run_via_docker(
+                docker_root, node_dir, ["npm install --no-audit --no-fund", "npm run build"], timeout_sec
+            )
+
+        if result is not None:
+            res_code, stdout, stderr = result
+        else:
+            cmd_typecheck = ["npm", "run", "build"]
+            res_code, stdout, stderr = self._exec_cmd(cmd_typecheck, node_dir, timeout_sec)
+
         details["node_build_stdout"] = stdout[:1500]
         details["node_build_stderr"] = stderr[:1000]
 
