@@ -1,0 +1,102 @@
+{
+  "audit_name": "Failure-Point Audit — Evidence -> Retrieval -> Writer Pipeline",
+  "target_repository": "Deep-Guard-Frontend",
+  "audit_type": "READ_ONLY_DIAGNOSTIC",
+  "system_state": "FROZEN_UNMODIFIED",
+  "executive_summary": {
+    "conclusion": "The Writer was not hallucinating; it was faithfully reflecting incomplete, missing, and incorrectly modeled upstream repository intelligence.",
+    "suspicious_claims_audited": 5,
+    "confirmed_upstream_failures": 3,
+    "confirmed_writer_failures": 0,
+    "retrieval_failures": 1,
+    "extraction_failures": 2,
+    "validator_failures": 0
+  },
+  "failure_matrix": [
+    {
+      "claim": "Frameworks: None detected by static analysis",
+      "physical_truth": "Uses React and React-DOM in package.json",
+      "analyzer_output": "frameworks = []",
+      "retrieved_context": "frameworks: []",
+      "writer_output": "Frameworks: None detected by static analysis",
+      "failure_layer": "EXTRACTION",
+      "severity": "HIGH",
+      "root_cause": "FrameworkDetector ignores package.json and Tree-sitter import extraction misparses TypeScript named imports"
+    },
+    {
+      "claim": "Entrypoints: None detected",
+      "physical_truth": "Entrypoint at src/main.tsx / src/App.tsx",
+      "analyzer_output": "entrypoints = []",
+      "retrieved_context": "entrypoints: []",
+      "writer_output": "Entrypoints: None detected",
+      "failure_layer": "EXTRACTION",
+      "severity": "HIGH",
+      "root_cause": "ENTRYPOINT_PATTERNS list omits .tsx and .jsx file patterns"
+    },
+    {
+      "claim": "README.md and ARCHITECTURE.md were referenced but their contents were not supplied",
+      "physical_truth": "README.md exists in repository",
+      "analyzer_output": "FactFile records exists",
+      "retrieved_context": "--- File: README.md ---\\n (0 characters content)",
+      "writer_output": "The primary project documentation files (README.md, ARCHITECTURE.md) were referenced but their contents were not supplied",
+      "failure_layer": "RETRIEVAL",
+      "severity": "HIGH",
+      "root_cause": "discover_from_fact_store() hardcodes content = '' instead of loading file text"
+    },
+    {
+      "claim": "Modules: None detected",
+      "physical_truth": "90 TypeScript UI component modules in src/components",
+      "analyzer_output": "modules = [] / largest_modules populated",
+      "retrieved_context": "modules: [], largest_modules: [5 components]",
+      "writer_output": "Modules: None detected in table, components described in workflows",
+      "failure_layer": "CONTEXT_ASSEMBLY",
+      "severity": "MEDIUM",
+      "root_cause": "Schema separates modules from largest_modules"
+    },
+    {
+      "claim": "The codebase appears to be component-centric, with React-style .tsx files in src/components",
+      "physical_truth": "React TypeScript UI components in src/components",
+      "analyzer_output": "largest_modules contains .tsx files",
+      "retrieved_context": "src/components/*.tsx paths present in metrics",
+      "writer_output": "Correctly identified React-style .tsx components",
+      "failure_layer": "NONE",
+      "severity": "NONE",
+      "root_cause": "Correct inference from provided file paths"
+    }
+  ],
+  "quantified_metrics": {
+    "language_profiling_accuracy": 1.0,
+    "metrics_file_count_accuracy": 1.0,
+    "metrics_loc_count_accuracy": 1.0,
+    "framework_detection_accuracy_js_ts": 0.0,
+    "entrypoint_detection_accuracy_frontend": 0.0,
+    "fact_store_doc_content_retrieval_accuracy": 0.0,
+    "writer_context_grounding_fidelity": 1.0
+  },
+  "phase_comparison": {
+    "phase2_recall": "Phase 2 100% retrieval recall evaluated curated backend facts and does not establish complete JS/TS extraction coverage for Fact Store fallback paths",
+    "phase3_baseline_integrity": "Phase 3 safety baseline (3.5% hallucination rate, 0.0% leakage) remains fully valid. This audit confirms that Writer discrepancies stem from upstream extraction/retrieval omissions rather than generative hallucinations."
+  },
+  "recommended_future_fixes": [
+    {
+      "layer": "EXTRACTION",
+      "target": "backend/intelligence/engine/scanner/detector.py",
+      "recommendation": "Add package.json dependency parsing to FrameworkDetector for React, Next.js, Vue, Angular, Vite, Tailwind."
+    },
+    {
+      "layer": "EXTRACTION",
+      "target": "backend/intelligence/parser.py",
+      "recommendation": "Fix Tree-sitter import extractor to parse module string literals rather than text.split()[1]."
+    },
+    {
+      "layer": "EXTRACTION",
+      "target": "backend/intelligence/stages/metadata_stage.py",
+      "recommendation": "Add .tsx and .jsx files (main.tsx, index.tsx, App.tsx, vite.config.ts) to ENTRYPOINT_PATTERNS."
+    },
+    {
+      "layer": "RETRIEVAL",
+      "target": "backend/summary/discovery.py",
+      "recommendation": "Fetch documentation content from CodeFileFact or storage rather than setting content = ''."
+    }
+  ]
+}

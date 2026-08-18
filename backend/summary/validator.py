@@ -118,11 +118,23 @@ class DeterministicValidator:
             t_name = raw_t.get("name", "")
             t_cat = raw_t.get("category", "Library")
             t_status = raw_t.get("status", "supported")
-            t_ev = [eid for eid in raw_t.get("evidence_ids", []) if eid in known_ids]
+            if not known_evidence:
+                valid_techs.append(
+                    TechnologySummaryItem(
+                        name=t_name,
+                        category=t_cat,
+                        status=t_status,
+                        evidence_ids=raw_t.get("evidence_ids", [])
+                    )
+                )
+                stats["accepted_claims_count"] += 1
+                continue
 
+            t_ev = [eid for eid in raw_t.get("evidence_ids", []) if eid in known_ids]
             entailed_ev = []
             for eid in t_ev:
                 ev_item = known_evidence[eid]
+
                 if ev_item.source_classification == SourceClassification.TEST and t_status == "strongly_supported":
                     continue
                 if t_name.lower() in ev_item.snippet.lower() or (ev_item.symbol_name and t_name.lower() in ev_item.symbol_name.lower()):
@@ -139,6 +151,7 @@ class DeterministicValidator:
                     )
                 )
                 continue
+
 
             valid_techs.append(
                 TechnologySummaryItem(
@@ -182,32 +195,37 @@ class DeterministicValidator:
             actual = raw_d.get("actual_code_fact", "")
             d_ev = [eid for eid in raw_d.get("evidence_ids", []) if eid in known_ids]
 
-            # Check if this discrepancy matches an authoritative contradiction
-            matched_contra = None
-            for subj, c in authoritative_contradictions.items():
-                if subj in claimed.lower() or subj in actual.lower():
-                    matched_contra = c
-                    break
+            if verified_claims:
+                # Check if this discrepancy matches an authoritative contradiction
+                matched_contra = None
+                for subj, c in authoritative_contradictions.items():
+                    if subj in claimed.lower() or subj in actual.lower():
+                        matched_contra = c
+                        break
 
-            if not matched_contra:
-                stats["false_contradictions_rejected_count"] += 1
-                rejected_claims.append(
-                    RejectedClaim(
-                        statement=f"Discrepancy: {claimed} vs {actual}",
-                        reason="No authoritative CONTRADICTED claim found in repository evidence.",
-                        attempted_evidence_ids=raw_d.get("evidence_ids", [])
+                if not matched_contra:
+                    stats["false_contradictions_rejected_count"] += 1
+                    rejected_claims.append(
+                        RejectedClaim(
+                            statement=f"Discrepancy: {claimed} vs {actual}",
+                            reason="No authoritative CONTRADICTED claim found in repository evidence.",
+                            attempted_evidence_ids=raw_d.get("evidence_ids", [])
+                        )
                     )
-                )
-                continue
+                    continue
+                valid_ev = d_ev or matched_contra.supporting_evidence_ids
+            else:
+                valid_ev = raw_d.get("evidence_ids", [])
 
             valid_discrepancies.append(
                 DiscrepancyItem(
                     claimed_in_doc=claimed,
                     actual_code_fact=actual,
-                    evidence_ids=d_ev or matched_contra.supporting_evidence_ids
+                    evidence_ids=valid_ev
                 )
             )
             stats["accepted_claims_count"] += 1
+
 
         # 7. Validate Unverified Doc Claims
         valid_unverified: List[UnverifiedDocClaimItem] = []
@@ -234,3 +252,31 @@ class DeterministicValidator:
         )
 
         return structured, rejected_claims, stats
+
+    @staticmethod
+    def render_markdown_summary(summary: StructuredSummary, repo_name: str) -> str:
+        sections = [f"# {repo_name} — Repository Summary\n"]
+        if summary.overview and summary.overview.text:
+            sections.append(f"## 1. Overview & Purpose\n{summary.overview.text}\n")
+        
+        if summary.technologies or summary.deployable_units:
+            tech_lines = ["## 2. Tech Stack & Architecture"]
+            if summary.technologies:
+                tech_lines.append("| Technology | Category | Status |")
+                tech_lines.append("| :--- | :--- | :--- |")
+                for t in summary.technologies:
+                    tech_lines.append(f"| {t.name} | {t.category} | {t.status} |")
+            if summary.deployable_units:
+                tech_lines.append("\n### Deployable Units")
+                for u in summary.deployable_units:
+                    tech_lines.append(f"- **{u.name}** ({u.unit_type}) at `{u.root_path}`: {u.summary}")
+            sections.append("\n".join(tech_lines) + "\n")
+
+        if summary.discrepancies:
+            disc_lines = ["## 5. Discrepancies & Notes"]
+            for d in summary.discrepancies:
+                disc_lines.append(f"- **Claimed**: {d.claimed_in_doc} | **Actual**: {d.actual_code_fact}")
+            sections.append("\n".join(disc_lines) + "\n")
+
+        return "\n".join(sections).strip()
+

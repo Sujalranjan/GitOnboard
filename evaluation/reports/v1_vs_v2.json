@@ -1,0 +1,129 @@
+{
+  "v1_ucr": 0.0,
+  "v2_ucr": 0.0,
+  "contradiction_recall": 100.0,
+  "total_v1_claims": 75,
+  "total_v2_claims": 58,
+  "results": [
+    {
+      "repo_id": "01_minimal_python_cli",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 2,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "02_fastapi_backend",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 5,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "03_flask_monolith",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 5,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "04_express_api",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 4,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "05_django_rest",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 4,
+      "v2_unsupported": 0,
+      "contradictions_detected": 1
+    },
+    {
+      "repo_id": "06_go_microservice",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 3,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "07_nextjs_frontend",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 4,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "08_rust_cli_utility",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 3,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "09_java_spring_boot",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 4,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "10_python_data_pipeline",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 4,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "11_ruby_rails_app",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 3,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "12_multiservice_monorepo",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 5,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "13_legacy_php_portal",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 3,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "14_serverless_functions",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 3,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    },
+    {
+      "repo_id": "15_fullstack_ai_agent",
+      "v1_claims": 5,
+      "v1_unsupported": 0,
+      "v2_claims": 6,
+      "v2_unsupported": 0,
+      "contradictions_detected": 0
+    }
+  ]
+}

@@ -112,12 +112,55 @@ class FrameworkDetector:
                     if "fastapi" in dep: frameworks.add("FastAPI")
                     if "flask" in dep: frameworks.add("Flask")
                     if "django" in dep: frameworks.add("Django")
-                    
-                content_lower = content.lower()
-                if "fastapi" in content_lower: frameworks.add("FastAPI")
-                if "flask" in content_lower: frameworks.add("Flask")
-                if "django" in content_lower: frameworks.add("Django")
             except Exception:
                 pass
+                    
+        # Check package.json
+
+        pkg_file = target / "package.json"
+        if pkg_file.exists():
+            try:
+                import json
+                pkg_data = json.loads(pkg_file.read_text(encoding="utf-8"))
+                deps = {}
+                if isinstance(pkg_data.get("dependencies"), dict):
+                    deps.update(pkg_data["dependencies"])
+                if isinstance(pkg_data.get("devDependencies"), dict):
+                    deps.update(pkg_data["devDependencies"])
+                if isinstance(pkg_data.get("peerDependencies"), dict):
+                    deps.update(pkg_data["peerDependencies"])
                 
+                js_framework_map = {
+                    "react": "React",
+                    "react-dom": "React",
+                    "next": "Next.js",
+                    "vue": "Vue",
+                    "nuxt": "Nuxt",
+                    "@angular/core": "Angular",
+                    "svelte": "Svelte",
+                    "@sveltejs/kit": "SvelteKit",
+                    "express": "Express",
+                    "nestjs": "NestJS",
+                    "@nestjs/core": "NestJS",
+                    "fastify": "Fastify",
+                    "vite": "Vite",
+                    "tailwindcss": "Tailwind CSS",
+                    "redux": "Redux",
+                    "@reduxjs/toolkit": "Redux",
+                    "zustand": "Zustand",
+                    "@tanstack/react-query": "TanStack Query",
+                    "react-router": "React Router",
+                    "react-router-dom": "React Router",
+                    "remix": "Remix",
+                    "@remix-run/react": "Remix",
+                    "gatsby": "Gatsby",
+                }
+                for dep_name in deps.keys():
+                    dep_lower = dep_name.lower()
+                    if dep_lower in js_framework_map:
+                        frameworks.add(js_framework_map[dep_lower])
+            except Exception:
+                pass
+
         return sorted(list(frameworks))
+

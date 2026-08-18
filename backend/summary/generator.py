@@ -63,13 +63,23 @@ class SummaryGenerator:
 
         # Section 1: Verified Code Evidence
         repo_info = metadata.get("repository", {})
+        # Resolve modules from metadata or fallback to largest_modules
+        resolved_modules = metadata.get("modules", [])
+        if not resolved_modules:
+            largest = metrics.get("largest_modules", [])
+            resolved_modules = [
+                {"name": m.get("module", ""), "function_count": m.get("count", 0)}
+                for m in largest[:6]
+            ]
+
+
         code_summary = {
             "name": repo_info.get("name", "Unknown"),
             "primary_language": repo_info.get("primary_language", "Unknown"),
             "languages": repo_info.get("languages", {}),
-            "frameworks": repo_info.get("frameworks", []),
+            "frameworks": metadata.get("frameworks") or repo_info.get("frameworks", []),
             "entrypoints": metadata.get("entrypoints", []),
-            "modules": metadata.get("modules", [])[:6],
+            "modules": resolved_modules[:6],
             "metrics": {
                 "total_files": metrics.get("total_files", "unknown"),
                 "lines_of_code": metrics.get("lines_of_code", "unknown"),
@@ -78,6 +88,7 @@ class SummaryGenerator:
                 "largest_modules": metrics.get("largest_modules", [])[:5],
             }
         }
+
         sections.append(
             "=== SECTION 1: VERIFIED CODE EVIDENCE (STATIC ANALYSIS) ===\n"
             f"{json.dumps(code_summary, indent=2)}"

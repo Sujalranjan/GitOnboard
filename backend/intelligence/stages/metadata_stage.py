@@ -13,8 +13,21 @@ KNOWN_FRAMEWORKS = {
     "django": "Django",
     "sqlalchemy": "SQLAlchemy",
     "react": "React",
+    "react-dom": "React",
     "next": "Next.js",
+    "vue": "Vue",
+    "nuxt": "Nuxt",
+    "angular": "Angular",
+    "svelte": "Svelte",
     "express": "Express",
+    "nestjs": "NestJS",
+    "fastify": "Fastify",
+    "vite": "Vite",
+    "tailwindcss": "Tailwind CSS",
+    "redux": "Redux",
+    "zustand": "Zustand",
+    "remix": "Remix",
+    "gatsby": "Gatsby",
     "celery": "Celery",
     "redis": "Redis",
     "tensorflow": "TensorFlow",
@@ -22,7 +35,16 @@ KNOWN_FRAMEWORKS = {
     "pydantic": "Pydantic"
 }
 
-ENTRYPOINT_PATTERNS = ["main.py", "app.py", "server.py", "manage.py", "run.py", "index.js", "index.ts"]
+ENTRYPOINT_PATTERNS = [
+    "main.py", "app.py", "server.py", "manage.py", "run.py",
+    "index.js", "index.ts", "index.jsx", "index.tsx",
+    "main.js", "main.ts", "main.jsx", "main.tsx",
+    "app.js", "app.ts", "app.jsx", "app.tsx",
+    "App.jsx", "App.tsx",
+    "vite.config.js", "vite.config.ts",
+    "next.config.js", "next.config.ts", "next.config.mjs"
+]
+
 
 class RepositoryMetadataStage:
     def __init__(self, target_dir: str):
