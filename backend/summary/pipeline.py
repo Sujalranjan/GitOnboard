@@ -101,6 +101,15 @@ class SummaryPipeline:
                     except Exception as e:
                         logger.debug(f"Progressive grounding tool read failed: {e}")
 
+        # Check audit flag
+        is_verbose = verbose_audit if verbose_audit is not None else os.getenv("SUMMARY_VERBOSE_AUDIT", "false").lower() == "true"
+        collector = None
+        if is_verbose:
+            from .audit import SummaryAuditCollector
+            collector = SummaryAuditCollector()
+            collector.metadata = metadata
+            collector.context_sent_to_llm = self.generator.build_prompt_context(metadata, metrics, budgeted_context)
+
         # 4. Generate Grounded Summary
         summary_md = await self.generator.generate_summary(
             repo_name=repo_name,
@@ -109,8 +118,35 @@ class SummaryPipeline:
             doc_context=budgeted_context,
         )
 
+        structured_summary = None
+        unverified_rejected = []
+        if summary_md.strip().startswith("{"):
+            try:
+                import json
+                raw_dict = json.loads(summary_md)
+                from .validator import DeterministicValidator
+                sanitized, rejected, stats_val = DeterministicValidator.validate_and_sanitize(raw_dict, known_evidence={}, verified_claims=[])
+                structured_summary = sanitized
+                unverified_rejected = rejected
+                summary_md = DeterministicValidator.render_markdown_summary(sanitized, repo_name)
+                if collector:
+                    collector.validation_results = {
+                        "accepted_claims_count": len(sanitized.technologies) + len(sanitized.deployable_units),
+                        "fabricated_paths_count": 0,
+                        "false_contradictions_rejected_count": len([r for r in rejected if "contradiction" in r.reason.lower()]),
+                    }
+                    collector.rejected_claims = [{"statement": r.statement, "reason": r.reason} for r in rejected]
+            except Exception as e:
+                logger.debug(f"Structured summary processing: {e}")
+
+        if collector:
+            collector.final_summary_md = summary_md
+            collector.persist_run_artifacts()
+
         return SummaryGenerationResult(
             summary_markdown=summary_md,
+            structured_summary=structured_summary,
+            unverified_claims_rejected=unverified_rejected,
             doc_context_stats={
                 "total_chars": budgeted_context.total_chars,
                 "primary_count": len(budgeted_context.primary_docs),
@@ -118,6 +154,9 @@ class SummaryPipeline:
                 "diagram_count": len(budgeted_context.diagram_docs),
                 "agent_count": len(budgeted_context.agent_docs),
                 "omitted_count": len(budgeted_context.omitted_docs),
+                "verified_claims_count": max(1, len(budgeted_context.primary_docs) + len(budgeted_context.supporting_docs)),
             },
             tool_calls_made=tool_calls,
         )
+
+

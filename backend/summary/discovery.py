@@ -107,7 +107,20 @@ class DocDiscovery:
 
         docs: List[DiscoveredDoc] = []
         for r in records:
-            doc_type, priority = self.classifier.classify(r.path, "")
+            content = ""
+            if r.blob_name:
+                try:
+                    from backend.storage import get_storage
+                    storage = get_storage()
+                    raw_text = storage.get_object_text(r.blob_name)
+                    if raw_text:
+                        content = raw_text[:MAX_DISCOVERY_FILE_SIZE]
+                except Exception as e:
+                    logger.debug(f"Could not load doc text from storage for {r.path}: {e}")
+
+            lines = content.splitlines() if content else []
+            headings = [line.strip()[:100] for line in lines if line.strip().startswith("#")][:20]
+            doc_type, priority = self.classifier.classify(r.path, content)
             if priority == DocPriority.EXCLUDE:
                 continue
             docs.append(
@@ -116,13 +129,14 @@ class DocDiscovery:
                     filename=os.path.basename(r.path),
                     doc_type=doc_type,
                     priority=priority,
-                    raw_size=r.size or 0,
-                    line_count=0,
-                    headings=[],
-                    content="",
-                    token_estimate=0,
+                    raw_size=r.size or len(content),
+                    line_count=len(lines),
+                    headings=headings,
+                    content=content,
+                    token_estimate=len(content) // 4,
                 )
             )
 
         docs.sort(key=lambda d: (-d.priority.value, d.path))
         return docs
+

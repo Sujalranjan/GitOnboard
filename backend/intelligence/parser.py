@@ -54,10 +54,24 @@ class LanguageParser:
             # Imports
             if node.type in ['import_statement', 'import_from_statement', 'import_declaration']:
                 text = get_text(node)
-                entities["imports"].append({
-                    "module_name": text.split()[1] if len(text.split()) > 1 else text,
-                    "alias": ""
-                })
+                module_name = ""
+                source_node = node.child_by_field_name('source')
+                if source_node:
+                    module_name = get_text(source_node).strip("'\"")
+                else:
+                    import re
+                    match = re.search(r'''from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]|from\s+([a-zA-Z0-9_\.]+)|import\s+([a-zA-Z0-9_\.]+)''', text)
+                    if match:
+                        module_name = match.group(1) or match.group(2) or match.group(3) or match.group(4) or ""
+                    else:
+                        module_name = text.split()[1] if len(text.split()) > 1 else text
+                
+                if module_name:
+                    entities["imports"].append({
+                        "module_name": module_name.strip("'\""),
+                        "alias": ""
+                    })
+
 
             # Classes
             elif node.type in ['class_definition', 'class_declaration']:
