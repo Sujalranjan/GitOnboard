@@ -5,8 +5,6 @@ from unittest.mock import MagicMock
 
 import jwt
 
-os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
-
 from backend.config import settings
 from backend.main import app
 from backend.routers import auth as auth_router
