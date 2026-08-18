@@ -111,6 +111,12 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     logger.info("Shutting down application...")
+    try:
+        from backend.routers.sandbox import sandbox_manager
+        await sandbox_manager.close_all_sessions()
+    except Exception as e:
+        logger.debug(f"Error during sandbox cleanup: {e}")
+
 
 app = FastAPI(
     title=settings.app_name,

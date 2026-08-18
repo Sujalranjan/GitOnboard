@@ -344,39 +344,80 @@ This document provides a complete, machine-readable inventory of all active and 
 
 ---
 
-## 5. Worktree Sandbox Command Execution (`/api/v1/sandbox`)
+---
+
+## 5. Worktree Sandbox Command Execution & Persistent Shell Sessions (`/api/v1/sandbox`)
+
+### `POST /api/v1/sandbox/{run_id}/session`
+- **Handler**: `backend/routers/sandbox.py::create_sandbox_session`
+- **Auth Required**: No (scoped by server-side `run_id` worktree resolution)
+- **Purpose**: Creates or retrieves a persistent interactive shell/PTY session tied to the run's authorized worktree directory.
+- **Request Schema**:
+  ```json
+  {
+    "session_id": "optional_custom_session_id"
+  }
+  ```
+- **Response Schema (200 OK)**:
+  ```json
+  {
+    "session_id": "session_a1b2c3d4e5",
+    "run_id": "task-1718000000",
+    "worktree_path": "data/worktrees/task-1718000000",
+    "created_at": 1718000000.0,
+    "cwd": "data/worktrees/task-1718000000"
+  }
+  ```
+
+### `DELETE /api/v1/sandbox/{run_id}/session/{session_id}`
+- **Handler**: `backend/routers/sandbox.py::close_sandbox_session`
+- **Purpose**: Closes and terminates the persistent shell process group and cleans up temporary log files.
+- **Response Schema (200 OK)**:
+  ```json
+  {
+    "status": "CLOSED",
+    "session_id": "session_a1b2c3d4e5",
+    "run_id": "task-1718000000"
+  }
+  ```
 
 ### `POST /api/v1/sandbox/{run_id}/exec`
 - **Handler**: `backend/routers/sandbox.py::exec_sandbox_command`
 - **Auth Required**: No (scoped by server-side `run_id` worktree resolution)
 - **Security Boundary**:
-  - Controlled host subprocess execution with validated worktree directory as `cwd`.
+  - Controlled host subprocess execution with persistent shell/PTY session scoped to the validated worktree.
   - Path validation verifies `run_id` worktree path resides within `data/worktrees/`.
+  - Directory changes (`cd`) and environment exports (`export`) persist across sequential commands in the same session.
   - Sensitive backend environment variables (`JWT_SECRET`, `GITHUB_CLIENT_SECRET`, `AZURE_STORAGE_ACCOUNT_KEY`, `DATABASE_URL`) are stripped.
   - Streaming stdout/stderr limit enforced at 1MB per stream; process group is terminated immediately on overage.
-  - Execution timeout enforced (1-120 seconds, default 30s) with process-group kill.
+  - Execution timeout enforced (1-120 seconds, default 30s) with process-group kill and session recovery.
+  - Separate sessions (`run_A` vs `run_B`) are strictly isolated with no state leakage.
   - *Note*: This is controlled host subprocess execution and does not provide container/kernel namespace isolation.
 - **Request Schema**:
   ```json
   {
-    "command": "pytest -v",
-    "timeout_sec": 30
+    "command": "cd src && pwd",
+    "timeout_sec": 30,
+    "session_id": "optional_session_id"
   }
   ```
 - **Response Schema (200 OK)**:
   ```json
   {
     "run_id": "task-1718000000",
-    "command": "pytest -v",
-    "stdout": "================ test session starts ================\n...",
+    "command": "cd src && pwd",
+    "stdout": "/worktree/src\n",
     "stderr": "",
     "exit_code": 0,
     "timed_out": false,
     "output_truncated": false,
-    "duration_ms": 145.2
+    "duration_ms": 45.2,
+    "session_id": "session_a1b2c3d4e5",
+    "cwd": "/worktree/src"
   }
   ```
 - **Error Codes**:
   - `400 Bad Request`: Empty command or invalid `run_id` format
   - `404 Not Found`: Run worktree does not exist on disk
   - `500 Internal Server Error`: Subprocess spawn or runtime failure
+
