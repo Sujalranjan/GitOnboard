@@ -209,3 +209,64 @@ def test_sandbox_environment_secret_stripping(client: TestClient, sandbox_run_fi
     stdout = data["stdout"]
     assert "super_secret_jwt_key_123" not in stdout
     assert "CLEAN" in stdout
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 8. Recovery After Failure
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_sandbox_recovery_after_failure(client: TestClient, sandbox_run_fixture):
+    """
+    Verifies that a subsequent command executes cleanly and succeeds after a failure.
+    """
+    run_id = sandbox_run_fixture["run_id"]
+
+    # 1. First command fails
+    res_fail = client.post(
+        f"/api/v1/sandbox/{run_id}/exec",
+        json={"command": 'python -c "import sys; sys.exit(1)"'},
+    )
+    assert res_fail.status_code == 200
+    assert res_fail.json()["exit_code"] == 1
+
+    # 2. Second command succeeds and returns exit code 0
+    res_success = client.post(
+        f"/api/v1/sandbox/{run_id}/exec",
+        json={"command": 'python -c "print(\'recovered_state\')"', "timeout_sec": 30},
+    )
+    assert res_success.status_code == 200
+    assert res_success.json()["exit_code"] == 0
+    assert "recovered_state" in res_success.json()["stdout"]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9. Timeout Range and Empty Command Validation
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_sandbox_timeout_and_empty_command_validation(client: TestClient, sandbox_run_fixture):
+    """
+    Verifies that empty commands and out-of-range timeouts (<=0 or >120) are rejected.
+    """
+    run_id = sandbox_run_fixture["run_id"]
+
+    # Empty command
+    res_empty = client.post(
+        f"/api/v1/sandbox/{run_id}/exec",
+        json={"command": "   "},
+    )
+    assert res_empty.status_code in [400, 422]
+
+    # Timeout > 120
+    res_too_long = client.post(
+        f"/api/v1/sandbox/{run_id}/exec",
+        json={"command": "pwd", "timeout_sec": 121},
+    )
+    assert res_too_long.status_code == 422
+
+    # Timeout <= 0
+    res_zero = client.post(
+        f"/api/v1/sandbox/{run_id}/exec",
+        json={"command": "pwd", "timeout_sec": 0},
+    )
+    assert res_zero.status_code == 422
+
