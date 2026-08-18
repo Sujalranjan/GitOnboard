@@ -60,6 +60,42 @@ Tracks granular sub-task progress (e.g. `summary`, `semantic_index`).
 
 ---
 
+## 1.5 AI Implementation Agent Execution Models (`backend/models/implementation.py`)
+
+Builds on the pre-existing `implementations` / `implementation_contracts` / `implementation_plans` tables. Records the Coding Agent's execution history — one `AgentRun` per attempt, an append-only event trail, and the structured per-file diff — so progress can be streamed live and reviewed after the fact instead of only existing as one synchronous HTTP response.
+
+### `agent_runs` (`AgentRun`)
+One execution of the agent (code generation, verification, and bounded repair) against a worktree.
+- `id` (String UUID, PK)
+- `implementation_id` (String, FK ──► `implementations.id`, cascade delete, nullable — the pipeline can run ad-hoc via `task_id` alone)
+- `task_id` (String, index) — matches the `task_id` used throughout `/api/v1/pipeline/*`
+- `status` (Enum: `QUEUED`, `RUNNING`, `VERIFYING`, `REPAIRING`, `COMPLETED`, `FAILED`)
+- `iteration` (Integer, default 1) — repair attempt number, capped at 3
+- `worktree_path` (String, nullable)
+- `error_message` (Text, nullable)
+- `started_at` / `completed_at` (DateTime with timezone)
+
+### `agent_events` (`AgentEvent`)
+Append-only progress event emitted during an `AgentRun`, streamed live over SSE (`GET /api/v1/pipeline/task/{task_id}/events/stream`).
+- `id` (String UUID, PK)
+- `agent_run_id` (String, FK ──► `agent_runs.id`, cascade delete, index)
+- `event_type` (Enum: `STARTED`, `CONTRACT_GENERATED`, `CODE_GENERATING`, `FILE_WRITTEN`, `DIFF_CAPTURED`, `VERIFICATION_STARTED`, `VERIFICATION_COMPLETED`, `REPAIR_STARTED`, `FINISHED`, `FAILED`)
+- `message` (Text)
+- `payload` (JSONType / JSONB)
+- `created_at` (DateTime with timezone, index)
+
+### `file_changes` (`FileChange`)
+A single file's change, parsed from an `AgentRun`'s captured git diff (`backend/services/diff_parser.py`). Exposed via `GET /api/v1/pipeline/task/{task_id}/changes`.
+- `id` (String UUID, PK)
+- `agent_run_id` (String, FK ──► `agent_runs.id`, cascade delete, index)
+- `file_path` (String)
+- `change_type` (Enum: `ADDED`, `MODIFIED`, `DELETED`)
+- `lines_added` / `lines_removed` (Integer)
+- `diff_patch` (Text, nullable) — the file's own unified-diff hunk
+- `created_at` (DateTime with timezone)
+
+---
+
 ## 2. Layer 4 Relational Fact Store (`backend/models/fact_store.py`)
 
 All Fact Store tables use analysis-scoped composite IDs (`id = f"{analysis_id}:{entity_id}"`) ensuring complete database isolation across multiple re-analysis runs.

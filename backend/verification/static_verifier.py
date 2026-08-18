@@ -9,9 +9,10 @@ import logging
 import os
 import re
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Set, Tuple
 
+from backend.utils.repo_paths import has_traversal, to_posix
 from .schemas import Defect, DefectCategory, DefectSeverity, ExecutionState, VerificationResult
 
 logger = logging.getLogger(__name__)
@@ -71,8 +72,19 @@ class StaticVerifier:
         declared_py_deps = self._get_declared_python_deps(wt_path)
         declared_js_deps = self._get_declared_js_deps(wt_path)
 
-        # 2. Inspect modified files
-        target_files = modified_files if modified_files else self._find_all_code_files(wt_path)
+        # 2. Inspect modified files. Repository-relative paths are always
+        # canonicalized to POSIX "/" here — a caller-supplied `modified_files`
+        # entry could in principle carry "\" (e.g. a caller that hasn't gone
+        # through GitManager's normalization) or a ".." traversal attempt, and
+        # both must be handled the same way regardless of the host OS.
+        raw_target_files = modified_files if modified_files else self._find_all_code_files(wt_path)
+        target_files: List[str] = []
+        for raw in raw_target_files:
+            rel = to_posix(raw)
+            if has_traversal(rel):
+                logger.warning(f"StaticVerifier: skipping out-of-root path '{raw}'")
+                continue
+            target_files.append(rel)
 
         for rel_file in target_files:
             file_full = wt_path / rel_file
@@ -267,7 +279,12 @@ class StaticVerifier:
         node: ast.ImportFrom,
         defects: List[Defect],
     ) -> None:
-        dir_parts = Path(rel_file).parent.parts
+        # PurePosixPath, not the platform Path: rel_file is a repository-relative
+        # path (already canonicalized to POSIX by verify()) and must be parsed
+        # with POSIX semantics regardless of the host OS — WindowsPath would
+        # split incorrectly if a component happened to contain no "/" hints
+        # and would render segments with "\" if reconstructed downstream.
+        dir_parts = PurePosixPath(rel_file).parent.parts
         level = node.level or 1
         if len(dir_parts) >= level - 1:
             base_parts = dir_parts[: len(dir_parts) - level + 1]
@@ -395,5 +412,5 @@ class StaticVerifier:
             for file in files:
                 if file.endswith((".py", ".ts", ".tsx", ".js", ".jsx")):
                     full = Path(root) / file
-                    results.append(str(full.relative_to(wt_path)).replace("\\", "/"))
+                    results.append(to_posix(str(full.relative_to(wt_path))))
         return results

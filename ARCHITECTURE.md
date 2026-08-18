@@ -107,7 +107,36 @@ When a repository is imported via `POST /api/import` or reanalyzed via `POST /ap
 
 ---
 
-## 4. Team Ownership Boundaries
+## 4. AI Implementation Agent & Sandboxed Verification (`backend/verification/`, `backend/services/`)
+
+Isolation is deliberately split by step, matching the frozen `docs/contracts/agent.md` / `implementation-contract.md` (worktree-only) vs. `docs/contracts/verification.md` (container sandbox):
+
+- **Agent code-writing** (`VerificationOrchestrator.run_agent`/`judge_and_repair`) and the **human-facing terminal** (`SandboxManager`) both run as plain host subprocess execution scoped to a `GitManager`-created git worktree under `data/worktrees/`. No Docker. This step only writes files / runs `git`; there's no reason to run arbitrary AI-generated code here.
+- **Verification's dynamic checks** (`DynamicVerifier` — build/test/lint execution) run inside an ephemeral, resource-capped Docker container (`DockerVerificationRunner`, image built from `docker/verification.Dockerfile`) with the worktree bind-mounted read-write. This is the step that actually *executes* code the agent (or a repair iteration) just wrote, so it gets the stronger isolation: non-root, `cap_drop: ALL`, `no-new-privileges`, CPU/memory/PID limits, and a hard timeout. Falls back to host subprocess execution (`settings.verification_use_docker=False`, or automatically if the Docker daemon is unreachable) — never a hard failure.
+- **`StaticVerifier`** and **`ContractVerifier`** never execute anything (pure AST/manifest/contract inspection), so neither needs sandboxing.
+
+```text
+Requirement ──► Contract ──► run_agent (worktree, host)  ──► git diff
+                                                                │
+                                                                ▼
+                                          verify_run: Static (host) + Dynamic (Docker) + Contract (host)
+                                                                │
+                                                    FAIL ───────┴─────── PASS ──► AgentRun COMPLETED
+                                                     │
+                                                     ▼
+                                     judge_and_repair (worktree, host, max 3 iterations)
+                                                     │
+                                                     ▼
+                                                verify_run (repeats)
+```
+
+**Docker-outside-of-Docker note**: `backend` itself runs containerized (`backend/Dockerfile`, `docker-compose.yml`). For it to spawn sibling verification containers, `docker-compose.yml` mounts the host's `/var/run/docker.sock` into the `backend` service — a trusted-service-only mount, never exposed to the browser or to agent-generated code. Because a bind-mount path handed to the *host* Docker daemon must resolve on the *host* filesystem (not inside the `backend` container's own filesystem), `docker-compose.yml` also mounts `./data:/app/data` and passes `HOST_DATA_DIR=${PWD}/data`; `DockerVerificationRunner._translate_to_host_path` rebases container-visible worktree paths onto that host path before requesting the mount. This translation is a no-op (paths already match) when the backend runs directly on the host instead of via Compose.
+
+Every AI Implementation Agent execution persists an `AgentRun` with an append-only `AgentEvent` trail and structured `FileChange` diff records (`DATA_MODEL.md` §1.5), streamed live over SSE (`API.md` §8) via the same `TaskManager` pub/sub `backend/task_manager.py` already used for repository analysis progress.
+
+---
+
+## 5. Team Ownership Boundaries
 
 | Role | Directory Ownership | Responsibilities |
 |---|---|---|

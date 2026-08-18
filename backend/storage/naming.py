@@ -2,35 +2,29 @@
 Deterministic, secure blob naming utilities for repository storage.
 """
 from __future__ import annotations
-import posixpath
 import re
+
+from backend.utils.repo_paths import PathTraversalError, normalize_relative
 
 
 def sanitize_relative_path(path: str) -> str:
     """
-    Normalizes a repository-relative path and guards against directory traversal (../).
+    Normalizes a repository-relative path and guards against directory
+    traversal (`../`), Windows drive-qualified paths, and UNC paths.
+
+    Delegates to backend.utils.repo_paths for the canonicalization/traversal
+    logic shared with the rest of the codebase; raises ValueError (this
+    module's existing contract) rather than PathTraversalError.
     """
-    normalized = path.replace("\\\\", "/").replace("\\", "/").strip()
-    
-    while normalized.startswith("./") or normalized.startswith("/"):
-        if normalized.startswith("./"):
-            normalized = normalized[2:]
-        elif normalized.startswith("/"):
-            normalized = normalized[1:]
+    try:
+        clean = normalize_relative(path.strip())
+    except PathTraversalError as err:
+        raise ValueError(f"Path traversal detected in relative path: {path!r}") from err
 
-    parts = []
-    for part in normalized.split("/"):
-        part = part.strip()
-        if not part or part == ".":
-            continue
-        if part == "..":
-            raise ValueError(f"Path traversal detected in relative path: {path!r}")
-        parts.append(part)
-
-    if not parts:
+    if not clean:
         raise ValueError(f"Invalid empty repository relative path: {path!r}")
 
-    return "/".join(parts)
+    return clean
 
 
 def build_blob_key(repository_id: int, snapshot_id: str, relative_path: str) -> str:

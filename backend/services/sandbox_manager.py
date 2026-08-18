@@ -14,6 +14,7 @@ Security Boundary Specification:
 from __future__ import annotations
 
 import asyncio
+import enum
 import logging
 import os
 import shutil
@@ -24,10 +25,11 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from backend.config import settings
 from backend.logger import emit_execution_log, sanitize_log_data
+from backend.services.env_sanitizer import SENSITIVE_ENV_KEYS, get_sanitized_env
 from backend.services.worktree_provisioner import WorktreeProvisioner
 
 logger = logging.getLogger(__name__)
@@ -37,19 +39,6 @@ DEFAULT_TIMEOUT_SEC = 30
 MIN_TIMEOUT_SEC = 1
 MAX_TIMEOUT_SEC = 120
 SESSION_IDLE_TIMEOUT_SEC = 1800  # 30 minutes
-
-
-# Environment variable keys that must be stripped before spawning subprocesses
-SENSITIVE_ENV_KEYS = {
-    "JWT_SECRET",
-    "GITHUB_CLIENT_SECRET",
-    "AZURE_STORAGE_ACCOUNT_KEY",
-    "AZURE_STORAGE_CONNECTION_STRING",
-    "LOCAL_DATABASE_URL",
-    "PROD_DATABASE_URL",
-    "DATABASE_URL",
-    "GITHUB_ACCESS_TOKEN",
-}
 
 
 class SandboxError(Exception):
@@ -67,6 +56,25 @@ class InvalidRunError(SandboxError):
     pass
 
 
+class UnsupportedShellError(SandboxError):
+    """
+    Raised when no POSIX-capable shell (bash/sh, e.g. Git Bash on Windows) is
+    available. The command wrapper this session relies on (`{ command; } >
+    out 2> err`, `$?`, `pwd`) is POSIX shell syntax; silently handing it to
+    cmd.exe would produce garbage output and a meaningless exit code instead
+    of a clear failure, so this is raised explicitly instead.
+    """
+    pass
+
+
+class ShellKind(enum.Enum):
+    """Distinguishes the shell dialect a resolved shell executable speaks, so the
+    command wrapper can be built explicitly for it rather than assuming POSIX
+    syntax works everywhere it happens to get piped."""
+    POSIX = "posix"
+    CMD = "cmd"
+
+
 @dataclass
 class SandboxExecResult:
     run_id: str
@@ -81,25 +89,35 @@ class SandboxExecResult:
     cwd: Optional[str] = None
 
 
-def find_shell_command() -> List[str]:
-    """Resolves the best available interactive shell command across platforms."""
+def find_shell_command() -> Tuple[List[str], ShellKind]:
+    """
+    Resolves the best available interactive shell across platforms, returning
+    both the argv to launch it and which command dialect (POSIX vs cmd.exe)
+    it speaks. The command wrapper in `PersistentShellSession.execute_command`
+    is built per-dialect from this — it must never assume POSIX syntax works
+    just because *some* shell process was found.
+    """
     if sys.platform != "win32":
         for sh in ["/bin/bash", "/bin/sh", "bash", "sh"]:
             if shutil.which(sh):
-                return [sh, "-s"]
-        return ["/bin/sh", "-s"]
+                return [sh, "-s"], ShellKind.POSIX
+        return ["/bin/sh", "-s"], ShellKind.POSIX
     for git_sh in [
         r"C:\Program Files\Git\bin\sh.exe",
         r"C:\Program Files\Git\bin\bash.exe",
         r"C:\Program Files (x86)\Git\bin\sh.exe",
     ]:
         if os.path.exists(git_sh):
-            return [git_sh, "-s"]
+            return [git_sh, "-s"], ShellKind.POSIX
     if shutil.which("bash"):
-        return ["bash", "-s"]
+        return ["bash", "-s"], ShellKind.POSIX
     if shutil.which("sh"):
-        return ["sh", "-s"]
-    return ["cmd.exe"]
+        return ["sh", "-s"], ShellKind.POSIX
+    # No POSIX-capable shell found. Returning cmd.exe here does NOT mean it's
+    # safe to use with the POSIX command wrapper — PersistentShellSession
+    # checks `shell_kind` and raises UnsupportedShellError before ever
+    # starting this process. See UnsupportedShellError docstring.
+    return ["cmd.exe"], ShellKind.CMD
 
 
 class PersistentShellSession:
@@ -126,10 +144,20 @@ class PersistentShellSession:
         self.proc: Optional[asyncio.subprocess.Process] = None
         self.is_closed = False
         self._current_cwd = str(self.worktree_path)
+        self.shell_kind: ShellKind = ShellKind.POSIX
 
     async def initialize(self) -> None:
         """Starts the persistent shell subprocess inside the worktree directory."""
-        shell_cmd = find_shell_command()
+        shell_cmd, shell_kind = find_shell_command()
+        if shell_kind is not ShellKind.POSIX:
+            raise UnsupportedShellError(
+                "No POSIX-capable shell (bash/sh) was found on this host. The sandbox "
+                "terminal's command wrapper requires POSIX shell syntax and will not run "
+                "correctly under cmd.exe, so execution is refused rather than silently "
+                "producing garbage output. Install Git for Windows (which bundles Git "
+                "Bash) to enable the sandbox terminal — see DEVELOPMENT.md."
+            )
+        self.shell_kind = shell_kind
         kwargs = {
             "cwd": str(self.worktree_path),
             "env": self.env,
@@ -395,12 +423,7 @@ class SandboxManager:
 
     def _get_sanitized_env(self) -> Dict[str, str]:
         """Returns a copy of os.environ with sensitive secrets stripped."""
-        clean_env = {}
-        for k, v in os.environ.items():
-            if k.upper() not in SENSITIVE_ENV_KEYS:
-                clean_env[k] = v
-        clean_env["GITONBOARD_SANDBOX"] = "1"
-        return clean_env
+        return get_sanitized_env(extra={"GITONBOARD_SANDBOX": "1"})
 
     async def get_or_create_session(
         self,

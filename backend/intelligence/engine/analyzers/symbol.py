@@ -13,6 +13,7 @@ from ...rim.relationship import Relationship
 from ...rim.enums import EntityType, RelationshipType
 from ...rim.location import SourceLocation
 from ...rim.identity import generate_entity_id, generate_relationship_id
+from backend.utils.repo_paths import ancestor_dirs, posix_name
 
 
 # --------------------------------------------------------------------------- #
@@ -198,15 +199,18 @@ class SymbolAnalyzer(BaseAnalyzer):
                     metadata={"size": len(parsed.source), "is_supported": True}
                 )
 
-            # Ensure DIRECTORY entities
-            dir_path = str(Path(file_path).parent).replace("\\", "/")
-            if dir_path and dir_path != ".":
+            # Ensure DIRECTORY entities for every ancestor directory, not just
+            # the immediate parent — otherwise a deeply nested file whose
+            # intermediate directories contain no other files directly would
+            # leave those intermediate DIRECTORY entities never created,
+            # breaking the parent chain the /scan tree builder relies on.
+            for dir_path in ancestor_dirs(file_path):
                 dir_id = generate_entity_id(EntityType.DIRECTORY, dir_path, dir_path)
                 if dir_id not in repository.entities:
                     repository.entities[dir_id] = Entity(
                         id=dir_id,
                         type=EntityType.DIRECTORY,
-                        name=Path(dir_path).name,
+                        name=posix_name(dir_path),
                         qualified_name=dir_path,
                         location=SourceLocation(
                             repository_path=dir_path,

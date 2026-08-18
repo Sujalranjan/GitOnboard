@@ -85,6 +85,21 @@ uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
 ---
 
+## 3.0 Sandboxed Verification (Docker)
+
+`DynamicVerifier` runs the AI Implementation Agent's build/test checks inside an ephemeral, resource-capped Docker container rather than on the host — see `ARCHITECTURE.md` §4. This requires a one-time image build:
+```bash
+docker build -f docker/verification.Dockerfile -t gitonboard-verification:latest .
+```
+
+**Option A (Docker Compose)**: `docker-compose.yml` already mounts `/var/run/docker.sock` into the `backend` container (a trusted-service-only mount — never exposed to the browser or to agent-generated code) so it can spawn sibling verification containers, and mounts `./data:/app/data` + sets `HOST_DATA_DIR=${PWD}/data` so those containers can bind-mount the worktree at a path the **host** Docker daemon can actually resolve. On Linux this "just works" out of the box. On **Windows + Docker Desktop**, the container-to-host path translation `DockerVerificationRunner` performs is a straightforward string rebase and does not itself talk to Docker Desktop's WSL2/Hyper-V path-mapping layer — if bind mounts don't resolve, prefer Option B below rather than hand-tuning `HOST_DATA_DIR`.
+
+**Option B (backend on host)**: run the backend directly (`uv run uvicorn ...`, per §3 above) rather than via Compose. `DockerVerificationRunner` then talks to Docker Desktop directly from a host-native Python process, so worktree paths are already host paths — no translation needed, `HOST_DATA_DIR` stays unset. This is the simplest way to exercise the Docker-verification path locally on Windows.
+
+If the Docker daemon isn't running at all, `DynamicVerifier` logs a warning and transparently falls back to host subprocess execution (`settings.verification_use_docker=True` is the default either way) — this is expected in environments without Docker Desktop running, not an error to chase down.
+
+---
+
 ## 3.1 Verifying & Testing Storage (Azurite)
 
 See [docs/STORAGE_ARCHITECTURE_AND_AZURITE.md](docs/STORAGE_ARCHITECTURE_AND_AZURITE.md) for full testing workflows with Azure CLI, PowerShell, and Python.

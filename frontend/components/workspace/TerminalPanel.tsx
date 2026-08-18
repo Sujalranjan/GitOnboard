@@ -52,6 +52,10 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
   const [currentCwd, setCurrentCwd] = useState<string>("");
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
+  // cwd the session started in — the baseline the first command's "did the
+  // directory change" comparison is made against. Real state from the API,
+  // never fabricated.
+  const sessionStartCwdRef = useRef<string>("");
 
   const report = runState?.report;
   const dynamicDetails = report?.dynamic_result?.details || {};
@@ -68,6 +72,7 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
         if (isMounted) {
           setSessionId(session.session_id);
           setCurrentCwd(session.cwd || "");
+          sessionStartCwdRef.current = session.cwd || "";
         }
       } catch (e) {
         console.warn("Failed to initialize sandbox session:", e);
@@ -99,6 +104,7 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
       const newSession = await createSandboxSession(activeRunId);
       setSessionId(newSession.session_id);
       setCurrentCwd(newSession.cwd || "");
+      sessionStartCwdRef.current = newSession.cwd || "";
       setTerminalEntries((prev) => [
         ...prev,
         {
@@ -272,7 +278,12 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
             )}
 
             {/* Real Interactive Terminal Log Entries */}
-            {terminalEntries.map((entry, idx) => (
+            {terminalEntries.map((entry, idx) => {
+              const prevCwd = idx === 0 ? sessionStartCwdRef.current : terminalEntries[idx - 1].cwd;
+              const cwdChanged = !!entry.cwd && entry.cwd !== prevCwd;
+              const hasNoOutput = !entry.stdout && !entry.stderr && !entry.error;
+
+              return (
               <div key={idx} className="space-y-1 border-t border-[#2F343A]/40 pt-1.5">
                 {/* Command Line */}
                 <div className="flex items-center gap-2 text-purple-300 font-bold">
@@ -292,6 +303,21 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
                   <pre className="whitespace-pre-wrap text-rose-300 font-mono text-[11px] leading-relaxed bg-rose-950/20 p-1.5 rounded border border-rose-500/30">
                     <code>{entry.stderr}</code>
                   </pre>
+                )}
+
+                {/* Silent success indicator: a command like `cd` or `export` can exit
+                    0 with empty stdout/stderr, which otherwise looks indistinguishable
+                    from a hang or a no-op. Surface the real post-command cwd (never
+                    fabricated stdout) so the state change is visible. */}
+                {hasNoOutput && entry.exitCode === 0 && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/80 italic">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>
+                      {cwdChanged
+                        ? `Directory changed → ${entry.cwd}`
+                        : "Command completed with no output"}
+                    </span>
+                  </div>
                 )}
 
                 {/* Truncation & Timeout Badges */}
@@ -324,7 +350,8 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {isExecuting && (
               <div className="flex items-center gap-2 text-purple-400 text-[11px] italic pt-1">

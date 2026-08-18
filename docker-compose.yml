@@ -51,6 +51,13 @@ services:
       - ./logs:/app/logs
       # Mount ChromaDB embedding model cache to preserve ONNX downloads
       - chroma_cache:/root/.cache/chroma
+      # Mount data/ (worktrees, repo cache) to the host so it survives container
+      # restarts AND so its path is resolvable by the host Docker daemon below.
+      - ./data:/app/data
+      # Docker socket: lets the backend spawn ephemeral sibling containers for
+      # sandboxed verification execution (DockerVerificationRunner). Trusted-service-only —
+      # never expose this socket to the browser or to agent-generated code.
+      - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env
     environment:
@@ -60,6 +67,15 @@ services:
       - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
       - AZURE_STORAGE_ENDPOINT=http://azurite:10000/devstoreaccount1
       - AZURE_STORAGE_CONTAINER=gitonboard-repos
+      # Host-side path of ./data, so DockerVerificationRunner can translate
+      # container-visible worktree paths (/app/data/...) into paths the HOST
+      # Docker daemon can actually bind-mount (see docker_runner.py).
+      - HOST_DATA_DIR=${PWD}/data
+      # Explicit counterpart to HOST_DATA_DIR: where that same ./data lives
+      # INSIDE this (backend) container, matching the `./data:/app/data`
+      # mount above. Kept explicit rather than inferred from storage_path so
+      # DooD path translation doesn't silently depend on WORKDIR coincidence.
+      - BACKEND_CONTAINER_DATA_DIR=/app/data
       # Other variables will be loaded from .env if present
     depends_on:
       postgres:
