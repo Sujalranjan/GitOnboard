@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "meta-llama/llama-3.1-8b-instruct:free"
+DEFAULT_MODEL = "openrouter/free"
 
 
 class OpenRouterProvider:
@@ -21,9 +21,10 @@ class OpenRouterProvider:
 
     provider_name = "openrouter"
 
-    def __init__(self, api_key: str, model: str = DEFAULT_MODEL, timeout: float = 60.0):
+    def __init__(self, api_key: str, model: Optional[str] = None, timeout: float = 60.0):
+        import os
         self.api_key = api_key
-        self.default_model = model
+        self.default_model = model or os.environ.get("OPENROUTER_MODEL", DEFAULT_MODEL)
         self.timeout = timeout
 
     def _headers(self) -> Dict[str, str]:
@@ -58,6 +59,8 @@ class OpenRouterProvider:
 
         if resp.status_code in (401, 403):
             raise NonRetriableError(f"OpenRouter auth error {resp.status_code}: {resp.text}", resp.status_code)
+        if resp.status_code == 404:
+            raise RetriableError(f"OpenRouter model not found or unavailable ({resp.status_code}): {resp.text}", resp.status_code)
         if resp.status_code == 400:
             raise NonRetriableError(f"OpenRouter bad request: {resp.text}", resp.status_code)
         if resp.status_code == 429:
@@ -66,6 +69,7 @@ class OpenRouterProvider:
             raise RetriableError(f"OpenRouter server error {resp.status_code}", resp.status_code)
         if resp.status_code != 200:
             raise NonRetriableError(f"OpenRouter unexpected status {resp.status_code}: {resp.text}", resp.status_code)
+
 
         data = resp.json()
         usage_data = data.get("usage", {})
