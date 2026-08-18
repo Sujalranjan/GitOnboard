@@ -16,7 +16,12 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { RunState } from "@/types/workspace";
-import { execSandboxCommand, SandboxExecResponse } from "@/services/sandboxApi";
+import {
+  execSandboxCommand,
+  createSandboxSession,
+  closeSandboxSession,
+  SandboxExecResponse,
+} from "@/services/sandboxApi";
 
 interface TerminalPanelProps {
   isOpen: boolean;
@@ -33,21 +38,48 @@ interface TerminalEntry {
   timedOut?: boolean;
   outputTruncated?: boolean;
   durationMs?: number;
+  cwd?: string;
   error?: string;
 }
 
 export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: TerminalPanelProps) {
   const [activeTab, setActiveTab] = useState<"TERMINAL" | "VERIFICATION" | "PROBLEMS">("TERMINAL");
-  const [selectedShell, setSelectedShell] = useState("bash (isolated sandbox)");
+  const [selectedShell, setSelectedShell] = useState("bash (persistent sandbox)");
   const [commandInput, setCommandInput] = useState("");
   const [isExecuting, setIsExecuting] = useState(false);
   const [terminalEntries, setTerminalEntries] = useState<TerminalEntry[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [currentCwd, setCurrentCwd] = useState<string>("");
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
   const report = runState?.report;
   const dynamicDetails = report?.dynamic_result?.details || {};
   const defects = report?.defects || [];
+
+  const activeRunId = runState?.runId || runState?.repoId || "default";
+
+  // Initialize or connect to persistent session
+  useEffect(() => {
+    let isMounted = true;
+    async function initSession() {
+      try {
+        const session = await createSandboxSession(activeRunId);
+        if (isMounted) {
+          setSessionId(session.session_id);
+          setCurrentCwd(session.cwd || "");
+        }
+      } catch (e) {
+        console.warn("Failed to initialize sandbox session:", e);
+      }
+    }
+    if (isOpen) {
+      initSession();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, activeRunId]);
 
   // Scroll to bottom when new terminal entries arrive
   useEffect(() => {
@@ -58,6 +90,31 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
 
   if (!isOpen) return null;
 
+  const handleRestartSession = async () => {
+    setIsExecuting(true);
+    try {
+      if (sessionId) {
+        await closeSandboxSession(activeRunId, sessionId).catch(() => {});
+      }
+      const newSession = await createSandboxSession(activeRunId);
+      setSessionId(newSession.session_id);
+      setCurrentCwd(newSession.cwd || "");
+      setTerminalEntries((prev) => [
+        ...prev,
+        {
+          command: "# Session restarted",
+          stdout: `[Shell session reset in worktree: ${newSession.worktree_path}]`,
+          stderr: "",
+          exitCode: 0,
+        },
+      ]);
+    } catch (err: any) {
+      console.error("Failed to restart session:", err);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
   const handleCommandSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commandInput.trim() || isExecuting) return;
@@ -66,10 +123,14 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
     setCommandInput("");
     setIsExecuting(true);
 
-    const activeRunId = runState?.runId || runState?.repoId || "default";
-
     try {
-      const res = await execSandboxCommand(activeRunId, cmd);
+      const res = await execSandboxCommand(activeRunId, cmd, 30, sessionId || undefined);
+      if (res.session_id) {
+        setSessionId(res.session_id);
+      }
+      if (res.cwd) {
+        setCurrentCwd(res.cwd);
+      }
       setTerminalEntries((prev) => [
         ...prev,
         {
@@ -80,6 +141,7 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
           timedOut: res.timed_out,
           outputTruncated: res.output_truncated,
           durationMs: res.duration_ms,
+          cwd: res.cwd,
         },
       ]);
     } catch (err: any) {
@@ -96,6 +158,15 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
     } finally {
       setIsExecuting(false);
     }
+  };
+
+  // Helper to format short display path
+  const formatShortCwd = (fullPath: string) => {
+    if (!fullPath) return "";
+    const normalized = fullPath.replace(/\\/g, "/");
+    const segments = normalized.split("/").filter(Boolean);
+    if (segments.length <= 2) return `/${segments.join("/")}`;
+    return `.../${segments.slice(-2).join("/")}`;
   };
 
   return (
@@ -151,7 +222,20 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
 
         {/* Right Shell Controls */}
         <div className="flex items-center gap-2">
+          {currentCwd && (
+            <span className="text-[10px] font-mono text-purple-300/80 bg-purple-950/30 px-1.5 py-0.5 rounded border border-purple-500/20 max-w-[180px] truncate" title={currentCwd}>
+              {formatShortCwd(currentCwd)}
+            </span>
+          )}
           <span className="text-[10px] font-mono text-[#8B949E]">{selectedShell}</span>
+          <button
+            onClick={handleRestartSession}
+            disabled={isExecuting}
+            className="p-1 text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors"
+            title="Restart Sandbox Shell Session"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isExecuting ? 'animate-spin' : ''}`} />
+          </button>
           <button
             onClick={() => setTerminalEntries([])}
             className="p-1 text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A] rounded transition-colors"
@@ -169,12 +253,16 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
       <div className="flex-1 overflow-y-auto p-3 font-mono text-xs text-[#E6EDF3] bg-[#0A0D10] leading-relaxed scrollbar-thin">
         {activeTab === "TERMINAL" && (
           <div className="space-y-2">
-            <div className="text-purple-400 font-semibold">
-              GitOnBoard Worktree Sandbox Terminal [{runState?.repoId || "default"}]
+            <div className="text-purple-400 font-semibold flex items-center justify-between">
+              <span>GitOnBoard Persistent Sandbox Terminal [{runState?.repoId || "default"}]</span>
+              {sessionId && (
+                <span className="text-[10px] text-slate-500 font-normal">Session: {sessionId}</span>
+              )}
             </div>
             <div className="text-slate-500 text-[11px]">
-              Commands execute inside the isolated run worktree directory on the host. Real stdout, stderr, and exit codes are captured.
+              Persistent interactive shell session. Working directory (`cd`) and environment exports (`export`) are maintained across commands.
             </div>
+
 
             {/* Render Verification Progress Summary if present */}
             {runState?.statusMessage && (
@@ -319,17 +407,24 @@ export function TerminalPanel({ isOpen, onClose, runState, height = 224 }: Termi
       {/* Terminal Input Bar at Bottom */}
       {activeTab === "TERMINAL" && (
         <form onSubmit={handleCommandSubmit} className="h-8 bg-[#14181E] border-t border-[#2F343A] flex items-center px-3 gap-2 flex-shrink-0">
-          <span className="text-purple-400 font-bold text-xs">$</span>
+          {currentCwd ? (
+            <span className="text-purple-400 font-bold text-xs flex-shrink-0">
+              [{formatShortCwd(currentCwd)}] $
+            </span>
+          ) : (
+            <span className="text-purple-400 font-bold text-xs flex-shrink-0">$</span>
+          )}
           <input
             type="text"
             value={commandInput}
             onChange={(e) => setCommandInput(e.target.value)}
             disabled={isExecuting}
-            placeholder={isExecuting ? "Command executing..." : "Type command and press Enter (e.g. ls, pwd, git status)..."}
+            placeholder={isExecuting ? "Command executing..." : "Type command and press Enter (e.g. pwd, cd src, export FOO=bar)..."}
             className="flex-1 bg-transparent text-xs font-mono text-[#E6EDF3] placeholder-[#8B949E] focus:outline-none disabled:opacity-50"
           />
         </form>
       )}
+
     </div>
   );
 }

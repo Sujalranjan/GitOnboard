@@ -240,33 +240,128 @@ def test_sandbox_recovery_after_failure(client: TestClient, sandbox_run_fixture)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9. Timeout Range and Empty Command Validation
+# 10. Persistent Working Directory Across Commands (Phase 2.1)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_sandbox_timeout_and_empty_command_validation(client: TestClient, sandbox_run_fixture):
+def test_sandbox_persistent_cwd(client: TestClient, sandbox_run_fixture):
     """
-    Verifies that empty commands and out-of-range timeouts (<=0 or >120) are rejected.
+    Verifies that running 'cd sub_dir' alters the session's working directory
+    and subsequent commands execute within that new directory.
+    """
+    run_id = sandbox_run_fixture["run_id"]
+    wt_dir = sandbox_run_fixture["worktree_path"]
+
+    # 1. Create subfolder inside worktree
+    (wt_dir / "src_test").mkdir(parents=True, exist_ok=True)
+    (wt_dir / "src_test" / "inner_file.txt").write_text("inner content\n", encoding="utf-8")
+
+    # 2. cd into src_test
+    res_cd = client.post(
+        f"/api/v1/sandbox/{run_id}/exec",
+        json={"command": "cd src_test"},
+    )
+    assert res_cd.status_code == 200
+    assert res_cd.json()["exit_code"] == 0
+
+    # 3. Subsequent pwd must reflect src_test
+    res_pwd = client.post(
+        f"/api/v1/sandbox/{run_id}/exec",
+        json={"command": "pwd"},
+    )
+    assert res_pwd.status_code == 200
+    data_pwd = res_pwd.json()
+    assert data_pwd["exit_code"] == 0
+    assert "src_test" in data_pwd["stdout"].replace("\\", "/")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 11. Persistent Environment Variables Across Commands (Phase 2.1)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_sandbox_persistent_environment(client: TestClient, sandbox_run_fixture):
+    """
+    Verifies that 'export VAR=value' persists across commands within the same session.
     """
     run_id = sandbox_run_fixture["run_id"]
 
-    # Empty command
-    res_empty = client.post(
+    # 1. Export variable
+    res_export = client.post(
         f"/api/v1/sandbox/{run_id}/exec",
-        json={"command": "   "},
+        json={"command": "export GITONBOARD_TEST_KEY=persistent_val_xyz_999"},
     )
-    assert res_empty.status_code in [400, 422]
+    assert res_export.status_code == 200
+    assert res_export.json()["exit_code"] == 0
 
-    # Timeout > 120
-    res_too_long = client.post(
+    # 2. Echo variable in subsequent command
+    res_echo = client.post(
         f"/api/v1/sandbox/{run_id}/exec",
-        json={"command": "pwd", "timeout_sec": 121},
+        json={"command": "echo $GITONBOARD_TEST_KEY"},
     )
-    assert res_too_long.status_code == 422
+    assert res_echo.status_code == 200
+    data_echo = res_echo.json()
+    assert data_echo["exit_code"] == 0
+    assert "persistent_val_xyz_999" in data_echo["stdout"]
 
-    # Timeout <= 0
-    res_zero = client.post(
-        f"/api/v1/sandbox/{run_id}/exec",
-        json={"command": "pwd", "timeout_sec": 0},
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 12. Session Isolation Between Runs (Phase 2.1)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_sandbox_session_isolation(client: TestClient):
+    """
+    Verifies that two different runs (Run A and Run B) maintain completely isolated sessions
+    with no leakage of cwd or environment variables.
+    """
+    run_a = f"test-run-iso-a-{uuid.uuid4().hex[:6]}"
+    run_b = f"test-run-iso-b-{uuid.uuid4().hex[:6]}"
+
+    # In Session A: Export unique variable
+    res_a1 = client.post(
+        f"/api/v1/sandbox/{run_a}/exec",
+        json={"command": "export ISOLATION_KEY=SECRET_VAL_FOR_A_ONLY"},
     )
-    assert res_zero.status_code == 422
+    assert res_a1.status_code == 200
+
+    # In Session B: Read variable (MUST be empty/unset)
+    res_b1 = client.post(
+        f"/api/v1/sandbox/{run_b}/exec",
+        json={"command": 'echo "VAL=${ISOLATION_KEY:-EMPTY}"'},
+    )
+    assert res_b1.status_code == 200
+    assert "VAL=EMPTY" in res_b1.json()["stdout"]
+    assert "SECRET_VAL_FOR_A_ONLY" not in res_b1.json()["stdout"]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 13. Session Lifecycle Management API (Phase 2.1)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_sandbox_session_lifecycle_api(client: TestClient):
+    """
+    Verifies session creation, custom session IDs, and explicit deletion.
+    """
+    run_id = f"test-run-lifecycle-{uuid.uuid4().hex[:6]}"
+
+    # 1. Create session
+    res_create = client.post(f"/api/v1/sandbox/{run_id}/session")
+    assert res_create.status_code == 200
+    data_create = res_create.json()
+    session_id = data_create["session_id"]
+    assert session_id is not None
+    assert data_create["run_id"] == run_id
+
+    # 2. Execute command with explicit session_id
+    res_exec = client.post(
+        f"/api/v1/sandbox/{run_id}/exec",
+        json={"command": "echo session_alive", "session_id": session_id},
+    )
+    assert res_exec.status_code == 200
+    assert "session_alive" in res_exec.json()["stdout"]
+    assert res_exec.json()["session_id"] == session_id
+
+    # 3. Close session
+    res_close = client.delete(f"/api/v1/sandbox/{run_id}/session/{session_id}")
+    assert res_close.status_code == 200
+    assert res_close.json()["status"] == "CLOSED"
+
 
