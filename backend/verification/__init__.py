@@ -13,6 +13,7 @@ from .schemas import (
     DefectSeverity,
     DefectCategory,
     Defect,
+    ExecutionState,
     VerificationResult,
     VerificationReport,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "DefectSeverity",
     "DefectCategory",
     "Defect",
+    "ExecutionState",
     "VerificationResult",
     "VerificationReport",
     "StaticVerifier",

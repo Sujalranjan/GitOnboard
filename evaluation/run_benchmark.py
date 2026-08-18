@@ -9,6 +9,7 @@ CLI Arguments:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 import sys
@@ -102,7 +103,7 @@ class BenchmarkRunner:
             execution_time_sec=exec_time,
         )
 
-    def evaluate_condition_b_gitonboard(self, task: BenchmarkTaskSchema) -> TaskConditionResult:
+    async def evaluate_condition_b_gitonboard(self, task: BenchmarkTaskSchema) -> TaskConditionResult:
         """
         Condition B: GitOnBoard Multi-Vector Verification Mesh & Bounded Repair Loop.
         Executes Contract Generation, Worktree Sandbox, Multi-Vector Verification, and Self-Repair (max 3 cycles).
@@ -113,10 +114,10 @@ class BenchmarkRunner:
         wt_path = None
         try:
             # 1. Generate Implementation Contract
-            contract_data = self.orchestrator.generate_contract(task.repository_target, task.prompt)
+            contract_data = await self.orchestrator.generate_contract(task.repository_target, task.prompt)
 
             # 2. Initialize Worktree Sandbox & Initial Code Generation
-            wt_path, raw_diff, mod_files = self.orchestrator.run_agent(task.repository_target, contract_data, task.task_id)
+            wt_path, raw_diff, mod_files = await self.orchestrator.run_agent(task.repository_target, contract_data, task.task_id)
 
             # 3. Execute Initial Multi-Vector Verification
             report: VerificationReport = self.orchestrator.verify_run(
@@ -136,7 +137,7 @@ class BenchmarkRunner:
                 for it in range(2, 4):
                     iterations = it
                     logger.info(f"[Condition B: GitOnBoard] Executing Repair Pass {it}/3 for task '{task.task_id}'")
-                    report, status_str, repaired_diff = self.orchestrator.judge_and_repair(
+                    report, status_str, repaired_diff = await self.orchestrator.judge_and_repair(
                         task_id=task.task_id,
                         repo_id=task.repository_target,
                         worktree_path=wt_path,
@@ -181,7 +182,7 @@ class BenchmarkRunner:
                 if self.runs_per_task > 1:
                     logger.info(f"--- Task '{task.task_id}' Run {run_num}/{self.runs_per_task} ---")
                 res_a = self.evaluate_condition_a_baseline(task)
-                res_b = self.evaluate_condition_b_gitonboard(task)
+                res_b = asyncio.run(self.evaluate_condition_b_gitonboard(task))
 
                 results_list.append({
                     "task_id": task.task_id,

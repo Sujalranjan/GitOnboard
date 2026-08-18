@@ -22,7 +22,7 @@ def semantic_status_repo(repo_name: str, db: Session = Depends(get_db), current_
     repos_dir = CHROMA_BASE_DIR
     target_dir = repos_dir / f"{current_user.id}_{repo_name}"
     if not target_dir.exists() or not target_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Repository not found")
+        return {"has_index": False}
         
     state_file = target_dir / "semantic_index_state.json"
     return {"has_index": state_file.exists()}

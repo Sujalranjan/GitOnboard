@@ -30,81 +30,54 @@ export async function getRepositoryStructure(repoName: string): Promise<FileTree
     // Graceful fallback for initial unscanned states
   }
 
-  // Fallback directory hierarchy
+  // Empty tree — no real scan data available yet
   return {
     name: repoName,
     type: 'directory',
     path: '',
-    children: [
-      {
-        name: 'src',
-        type: 'directory',
-        path: 'src',
-        children: [
-          {
-            name: 'pages',
-            type: 'directory',
-            path: 'src/pages',
-            children: [
-              {
-                name: 'api',
-                type: 'directory',
-                path: 'src/pages/api',
-                children: [
-                  { name: 'index.tsx', type: 'file', path: 'src/pages/api/index.tsx' },
-                  { name: 'todos.ts', type: 'file', path: 'src/pages/api/todos.ts' },
-                ],
-              },
-            ],
-          },
-          {
-            name: 'components',
-            type: 'directory',
-            path: 'src/components',
-            children: [
-              { name: 'TodoItem.tsx', type: 'file', path: 'src/components/TodoItem.tsx' },
-            ],
-          },
-        ],
-      },
-      { name: 'package.json', type: 'file', path: 'package.json' },
-      { name: 'pyproject.toml', type: 'file', path: 'pyproject.toml' },
-      { name: 'README.md', type: 'file', path: 'README.md' },
-    ],
+    children: [],
   };
 }
 
 /**
  * 2. Streams real file content from Azurite Blob Storage via backend.
+ * Explicitly surfaces 401, 404, 403, 500 without fabricating placeholder content.
  */
 export async function getFileContent(
   repoName: string,
   filePath: string
 ): Promise<{ content: string; language?: string }> {
-  try {
-    const res = await fetch(`${API_BASE}/${encodeURIComponent(repoName)}/file?path=${encodeURIComponent(filePath)}`);
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        content: data.content ?? data.source_code ?? '',
-        language: data.language,
-      };
-    }
-
-    // Secondary fallback parse route
-    const parseRes = await fetch(`${API_BASE}/${encodeURIComponent(repoName)}/parse?file_path=${encodeURIComponent(filePath)}`);
-    if (parseRes.ok) {
-      const parseData = await parseRes.json();
-      return {
-        content: parseData.source_code || parseData.content || '',
-      };
-    }
-  } catch (error) {
-    console.warn(`[repositoryApi] getFileContent error for ${filePath}:`, error);
+  if (!filePath || !filePath.trim()) {
+    throw new Error('No file selected');
   }
 
+  const res = await fetch(
+    `${API_BASE}/${encodeURIComponent(repoName)}/file?path=${encodeURIComponent(filePath)}`
+  );
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error('Authentication Required (401). Please log in to view repository files.');
+    }
+    if (res.status === 404) {
+      throw new Error(`File Not Found (404): '${filePath}' is not present in storage.`);
+    }
+    if (res.status === 403) {
+      throw new Error(`Access Denied (403): You do not have permission to view '${filePath}'.`);
+    }
+    if (res.status === 408 || res.status === 504) {
+      throw new Error(`Storage Timeout: Request to stream '${filePath}' timed out.`);
+    }
+    if (res.status >= 500) {
+      throw new Error(`Storage Service Error (${res.status}): Azurite blob read failed for '${filePath}'.`);
+    }
+    throw new Error(`Failed to load file (${res.status}): ${filePath}`);
+  }
+
+  const data = await res.json();
   return {
-    content: `// Content for ${filePath}\n`,
+    content: data.content ?? data.source_code ?? '',
+    language: data.language,
   };
 }
 

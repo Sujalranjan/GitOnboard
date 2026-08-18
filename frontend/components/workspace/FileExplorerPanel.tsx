@@ -143,6 +143,21 @@ export function FileExplorerPanel({
   const [loadingStructure, setLoadingStructure] = useState(true);
   const [isOutlineExpanded, setIsOutlineExpanded] = useState(true);
 
+  // Recursively finds the first real file in the scanned hierarchy
+  const findFirstValidFile = (node: FileTreeNode | null): string | null => {
+    if (!node) return null;
+    if (node.type === "file" && node.path) {
+      return node.path;
+    }
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        const found = findFirstValidFile(child);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   // Fetch real directory structure on mount or repo change
   useEffect(() => {
     let isMounted = true;
@@ -153,6 +168,14 @@ export function FileExplorerPanel({
         if (isMounted) {
           setTreeHierarchy(tree);
           setLoadingStructure(false);
+
+          // Automatically select the first valid file if none is active
+          if (!activeFile && tree) {
+            const firstFile = findFirstValidFile(tree);
+            if (firstFile) {
+              onSelectFile(firstFile);
+            }
+          }
         }
       })
       .catch(() => {
@@ -162,7 +185,7 @@ export function FileExplorerPanel({
     return () => {
       isMounted = false;
     };
-  }, [repoName]);
+  }, [repoName, activeFile, onSelectFile]);
 
   // Fetch real AST symbols for active file
   useEffect(() => {

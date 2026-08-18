@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from .schemas import Defect, DefectCategory, DefectSeverity, VerificationResult
+from .schemas import Defect, DefectCategory, DefectSeverity, ExecutionState, VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +28,17 @@ class ContractVerifier:
     ) -> VerificationResult:
         start_time = time.time()
         defects: List[Defect] = []
+        evidence_manifest: List[Dict[str, Any]] = []
 
         if not contract:
             return VerificationResult(
                 vector_name="contract",
-                status="PASS",
-                passed=True,
+                status=ExecutionState.UNVERIFIED.value,
+                passed=False,
+                execution_state=ExecutionState.UNVERIFIED.value,
                 defects=[],
-                details={"message": "No contract provided for verification"},
+                evidence_manifest=[],
+                details={"message": "No contract provided for verification; marked UNVERIFIED"},
                 execution_time_ms=0.0,
             )
 
@@ -104,19 +107,50 @@ class ContractVerifier:
                         )
                     )
 
+        # Build evidence items
+        if affected_components:
+            evidence_manifest.append({
+                "type": "affected_components_checked",
+                "count": len(affected_components),
+                "items": [c.get("file") for c in affected_components if isinstance(c, dict)],
+            })
+        if tests_required:
+            evidence_manifest.append({
+                "type": "tests_required_checked",
+                "count": len(tests_required),
+                "items": tests_required,
+            })
+        if acceptance_criteria:
+            evidence_manifest.append({
+                "type": "acceptance_criteria_checked",
+                "count": len(acceptance_criteria),
+            })
+
         elapsed_ms = (time.time() - start_time) * 1000
-        passed = len(defects) == 0
-        status = "PASS" if passed else "FAIL"
+        has_evidence = len(evidence_manifest) > 0 or bool(git_diff)
+        passed = (len(defects) == 0) and has_evidence
+        
+        if not has_evidence and len(defects) == 0:
+            exec_state = ExecutionState.UNVERIFIED.value
+        elif passed:
+            exec_state = ExecutionState.PASS.value
+        else:
+            exec_state = ExecutionState.FAIL.value
+
+        status = exec_state
 
         logger.info(f"ContractVerifier finished: status={status}, defects={len(defects)}, time={elapsed_ms:.1f}ms")
         return VerificationResult(
             vector_name="contract",
             status=status,
             passed=passed,
+            execution_state=exec_state,
             defects=defects,
+            evidence_manifest=evidence_manifest,
             details={
                 "affected_components_checked": len(affected_components),
                 "tests_required_checked": len(tests_required),
+                "evidence_count": len(evidence_manifest),
             },
             execution_time_ms=elapsed_ms,
         )
