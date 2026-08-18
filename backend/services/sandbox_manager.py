@@ -28,6 +28,7 @@ from typing import Dict, List, Optional
 
 from backend.config import settings
 from backend.logger import emit_execution_log, sanitize_log_data
+from backend.services.worktree_provisioner import WorktreeProvisioner
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ DEFAULT_TIMEOUT_SEC = 30
 MIN_TIMEOUT_SEC = 1
 MAX_TIMEOUT_SEC = 120
 SESSION_IDLE_TIMEOUT_SEC = 1800  # 30 minutes
+
 
 # Environment variable keys that must be stripped before spawning subprocesses
 SENSITIVE_ENV_KEYS = {
@@ -347,6 +349,7 @@ class SandboxManager:
     def __init__(self, base_worktree_dir: Optional[Path] = None):
         self.base_dir = (base_worktree_dir or Path(settings.worktrees_dir)).resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.provisioner = WorktreeProvisioner(self.base_dir)
         self._sessions: Dict[str, PersistentShellSession] = {}
         self._run_to_session: Dict[str, str] = {}
         self._lock = asyncio.Lock()
@@ -355,6 +358,7 @@ class SandboxManager:
         """
         Resolves and validates the worktree directory for a run_id server-side.
         Prevents path traversal and verifies the canonical path is within base_dir.
+        Auto-provisions real repository source files if the worktree is unpopulated.
         """
         if not run_id or not run_id.strip() or ".." in run_id or "/" in run_id or "\\" in run_id:
             raise InvalidRunError(f"Invalid run identifier: '{run_id}'")
@@ -381,6 +385,11 @@ class SandboxManager:
 
         if not target.exists() or not target.is_dir():
             target.mkdir(parents=True, exist_ok=True)
+
+        # Auto-provision repository contents if unpopulated
+        if not self.provisioner.is_worktree_populated(target):
+            repo_id = clean_run_id.split("_")[0] if "_" in clean_run_id else clean_run_id
+            self.provisioner.provision(repo_identifier=repo_id, worktree_path=target)
 
         return target
 
