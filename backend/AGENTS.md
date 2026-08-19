@@ -7,7 +7,7 @@ This document governs AI agent behavior when working in the `backend/` directory
 - **ORM & Database**: SQLAlchemy 2.0 with PostgreSQL (`psycopg`), SQLite for fast unit testing
 - **Code Parsing**: Tree-sitter multi-language parsers (`tree-sitter`, `tree-sitter-python`, `tree-sitter-javascript`, `tree-sitter-typescript`, `tree-sitter-java`, `tree-sitter-c`, `tree-sitter-cpp`, `tree-sitter-go`, `tree-sitter-ruby`)
 - **Vector Search**: ChromaDB (`chromadb`) with persistent model cache
-- **LLM Integration**: Local Ollama service (`backend/llm_service.py`) targeting `qwen2.5-coder:7b`
+- **LLM Integration**: Shared multi-provider LLM service (`backend/ai/`) supporting Ollama in `LOCAL` mode, and Gemini/OpenRouter in `PROD` mode with deterministic fallback
 - **Background Queue**: In-memory worker queue (`backend/services/queue.py`, `backend/services/worker.py`)
 - **Real-Time Streaming**: Server-Sent Events (`sse-starlette`, `backend/task_manager.py`)
 - **Package Manager**: `uv` (managed with `pyproject.toml`, `uv.lock`)
