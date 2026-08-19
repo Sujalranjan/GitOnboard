@@ -1,0 +1,69 @@
+{
+  "overview": {
+    "text": "15_fullstack_ai_agent summarized with verified evidence.",
+    "evidence_ids": []
+  },
+  "deployable_units": [
+    {
+      "name": "ai_agent_service",
+      "unit_type": "ai_agent_service",
+      "root_path": "/",
+      "summary": "ai_agent_service component",
+      "evidence_ids": []
+    }
+  ],
+  "technologies": [
+    {
+      "name": "Python",
+      "category": "Language",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "FastAPI",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "LangChain",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "ChromaDB",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "ChromaDB",
+      "category": "Database",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "PostgreSQL",
+      "category": "Database",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    }
+  ],
+  "data_and_storage": {},
+  "operations_and_deployment": {},
+  "discrepancies": [],
+  "unverified_doc_claims": []
+}

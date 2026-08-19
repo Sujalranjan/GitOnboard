@@ -1,0 +1,12 @@
+{
+  "rejected_claims": [],
+  "stats": {
+    "total_chars": 89,
+    "primary_count": 1,
+    "supporting_count": 0,
+    "diagram_count": 0,
+    "agent_count": 0,
+    "omitted_count": 0,
+    "verified_claims_count": 1
+  }
+}

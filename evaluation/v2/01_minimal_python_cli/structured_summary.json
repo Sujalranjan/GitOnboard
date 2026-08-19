@@ -1,0 +1,37 @@
+{
+  "overview": {
+    "text": "01_minimal_python_cli summarized with verified evidence.",
+    "evidence_ids": []
+  },
+  "deployable_units": [
+    {
+      "name": "cli",
+      "unit_type": "cli",
+      "root_path": "/",
+      "summary": "cli component",
+      "evidence_ids": []
+    }
+  ],
+  "technologies": [
+    {
+      "name": "Python",
+      "category": "Language",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "click",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    }
+  ],
+  "data_and_storage": {},
+  "operations_and_deployment": {},
+  "discrepancies": [],
+  "unverified_doc_claims": []
+}

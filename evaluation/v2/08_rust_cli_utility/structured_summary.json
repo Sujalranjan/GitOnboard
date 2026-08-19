@@ -1,0 +1,45 @@
+{
+  "overview": {
+    "text": "08_rust_cli_utility summarized with verified evidence.",
+    "evidence_ids": []
+  },
+  "deployable_units": [
+    {
+      "name": "cli",
+      "unit_type": "cli",
+      "root_path": "/",
+      "summary": "cli component",
+      "evidence_ids": []
+    }
+  ],
+  "technologies": [
+    {
+      "name": "Rust",
+      "category": "Language",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "Tokio",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "Clap",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    }
+  ],
+  "data_and_storage": {},
+  "operations_and_deployment": {},
+  "discrepancies": [],
+  "unverified_doc_claims": []
+}

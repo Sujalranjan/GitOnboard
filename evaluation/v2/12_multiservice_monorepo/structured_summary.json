@@ -1,0 +1,68 @@
+{
+  "overview": {
+    "text": "12_multiservice_monorepo summarized with verified evidence.",
+    "evidence_ids": []
+  },
+  "deployable_units": [
+    {
+      "name": "services/api",
+      "unit_type": "services/api",
+      "root_path": "/",
+      "summary": "services/api component",
+      "evidence_ids": []
+    },
+    {
+      "name": "services/web",
+      "unit_type": "services/web",
+      "root_path": "/",
+      "summary": "services/web component",
+      "evidence_ids": []
+    }
+  ],
+  "technologies": [
+    {
+      "name": "Python",
+      "category": "Language",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "JavaScript",
+      "category": "Language",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "FastAPI",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "React",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "Docker Compose",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    }
+  ],
+  "data_and_storage": {},
+  "operations_and_deployment": {},
+  "discrepancies": [],
+  "unverified_doc_claims": []
+}
