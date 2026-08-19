@@ -28,6 +28,7 @@ dependencies = [
     "azure-storage-blob>=12.19.0",
     "pytest-asyncio>=1.4.0",
     "docker>=7.1.0",
+    "pywinpty>=2.0 ; sys_platform == 'win32'",
 ]
 
 [tool.ruff]

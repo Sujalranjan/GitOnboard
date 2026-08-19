@@ -30,6 +30,7 @@ from typing import Dict, List, Optional, Tuple
 from backend.config import settings
 from backend.logger import emit_execution_log, sanitize_log_data
 from backend.services.env_sanitizer import SENSITIVE_ENV_KEYS, get_sanitized_env
+from backend.services.pty_session import PtySession, PtyUnavailableError
 from backend.services.worktree_provisioner import WorktreeProvisioner
 
 logger = logging.getLogger(__name__)
@@ -174,6 +175,20 @@ class PersistentShellSession:
 
         self.proc = await asyncio.create_subprocess_exec(*shell_cmd, **kwargs)
         self.last_accessed_at = time.time()
+
+        # Send standard interactive shell configuration (aliases and formatting)
+        try:
+            init_payload = (
+                b"shopt -s expand_aliases 2>/dev/null || true\n"
+                b"alias ls='ls -C --color=never' 2>/dev/null || true\n"
+                b"alias ll='ls -la --color=never' 2>/dev/null || true\n"
+                b"alias la='ls -A --color=never' 2>/dev/null || true\n"
+                b"export COLUMNS=80 LINES=24 2>/dev/null || true\n"
+            )
+            self.proc.stdin.write(init_payload)
+            await self.proc.stdin.drain()
+        except Exception:
+            pass
 
     def _kill_process_tree(self) -> None:
         """Terminates the shell process and all spawned child processes."""
@@ -382,6 +397,12 @@ class SandboxManager:
         self._run_to_session: Dict[str, str] = {}
         self._lock = asyncio.Lock()
 
+        # Real interactive PTY sessions backing the terminal UI. Kept separate
+        # from the REST /exec sessions above (see class docstring) — one live
+        # interactive shell per run_id, independent of REST-side session_ids.
+        self._pty_sessions: Dict[str, PtySession] = {}
+        self._pty_lock = asyncio.Lock()
+
     def resolve_worktree(self, run_id: str) -> Path:
         """
         Resolves and validates the worktree directory for a run_id server-side.
@@ -495,7 +516,7 @@ class SandboxManager:
                 await session.close()
 
     async def close_all_sessions(self) -> None:
-        """Closes all active shell sessions."""
+        """Closes all active shell sessions (both REST /exec sessions and interactive PTY sessions)."""
         async with self._lock:
             for session in list(self._sessions.values()):
                 try:
@@ -504,4 +525,62 @@ class SandboxManager:
                     logger.debug(f"Error closing session {session.session_id}: {e}")
             self._sessions.clear()
             self._run_to_session.clear()
+
+        async with self._pty_lock:
+            for pty_session in list(self._pty_sessions.values()):
+                try:
+                    await pty_session.close()
+                except Exception as e:
+                    logger.debug(f"Error closing pty session {pty_session.session_id}: {e}")
+            self._pty_sessions.clear()
+
+    # ------------------------------------------------------------------
+    # Interactive PTY sessions (real terminal, backs the terminal UI websocket)
+    # ------------------------------------------------------------------
+
+    async def get_or_create_pty_session(self, run_id: str) -> PtySession:
+        """
+        Retrieves the live interactive PTY session for a run_id, or creates one.
+        One PTY session is kept alive per run_id across websocket reconnects —
+        a browser refresh or component remount reattaches to the same shell
+        rather than starting a new one, as long as it is still alive.
+        """
+        # resolve_worktree() can run first-time provisioning (copying the whole
+        # repo, git init/commit) which is blocking, synchronous I/O — offload it
+        # to a thread so it doesn't stall the single asyncio event loop. Left
+        # in place, that starves uvicorn's websocket handshake response (queued
+        # right after accept()) until provisioning finishes, so the client's
+        # connect() times out well before the shell ever starts.
+        worktree_path = await asyncio.to_thread(self.resolve_worktree, run_id)
+
+        async with self._pty_lock:
+            existing = self._pty_sessions.get(run_id)
+            if existing is not None and existing.is_alive():
+                return existing
+            if existing is not None:
+                await existing.close()
+
+            session = PtySession(
+                session_id=f"pty_{uuid.uuid4().hex[:10]}",
+                run_id=run_id,
+                worktree_path=worktree_path,
+                env=self._get_sanitized_env(),
+            )
+            await session.start()
+            self._pty_sessions[run_id] = session
+            return session
+
+    async def reset_pty_session(self, run_id: str) -> PtySession:
+        """Terminates the run's interactive PTY session (if any) and starts a fresh one."""
+        async with self._pty_lock:
+            existing = self._pty_sessions.pop(run_id, None)
+        if existing is not None:
+            await existing.close()
+        return await self.get_or_create_pty_session(run_id)
+
+    async def close_pty_session(self, run_id: str) -> None:
+        async with self._pty_lock:
+            existing = self._pty_sessions.pop(run_id, None)
+        if existing is not None:
+            await existing.close()
 
