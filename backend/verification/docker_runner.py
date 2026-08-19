@@ -55,7 +55,12 @@ class DockerVerificationRunner:
 
     def is_available(self) -> bool:
         try:
-            self._get_client().ping()
+            client = self._get_client()
+            client.ping()
+            try:
+                client.images.get(self.image)
+            except Exception:
+                return False
             return True
         except Exception as err:
             logger.warning(f"DockerVerificationRunner: Docker daemon unavailable: {err}")
