@@ -105,6 +105,21 @@ export function InteractiveTerminal({ runId }: InteractiveTerminalProps) {
 
       const fit = new XFitAddon();
       term.loadAddon(fit);
+
+      // Prevent browser default tab navigation so Tab triggers shell autocompletion
+      term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+        if (event.key === "Tab") {
+          if (event.type === "keydown") {
+            event.preventDefault();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send("\t");
+            }
+          }
+          return false;
+        }
+        return true;
+      });
+
       term.open(container);
 
       // Guard: Check if unmounted while open() was executing
