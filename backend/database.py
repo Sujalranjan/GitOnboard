@@ -31,7 +31,10 @@ elif "postgresql" in SQLALCHEMY_DATABASE_URL:
 
 engine_args = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    from sqlalchemy.pool import StaticPool
     engine_args["connect_args"] = {"check_same_thread": False}
+    if ":memory:" in SQLALCHEMY_DATABASE_URL:
+        engine_args["poolclass"] = StaticPool
 else:
     engine_args["pool_pre_ping"] = True
 

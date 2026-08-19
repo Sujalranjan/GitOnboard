@@ -15,8 +15,11 @@ from backend.verification.docker_runner import DockerVerificationError, DockerVe
 def _docker_daemon_available() -> bool:
     try:
         import docker
+        from backend.config import settings
 
-        docker.from_env().ping()
+        client = docker.from_env()
+        client.ping()
+        client.images.get(settings.verification_docker_image)
         return True
     except Exception:
         return False
