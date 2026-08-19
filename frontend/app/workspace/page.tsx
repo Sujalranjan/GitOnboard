@@ -22,11 +22,13 @@ function RootWorkspaceContent() {
       try {
         const res = await fetch("/api/repos");
         if (res.ok) {
-          const repos = await res.json();
-          if (Array.isArray(repos) && repos.length > 0) {
-            const firstRepo = repos[0].name || repos[0].url?.split("/").pop() || "default";
+          const data = await res.json();
+          const repoList = Array.isArray(data) ? data : (data?.repositories || []);
+          if (repoList.length > 0) {
+            const first = repoList[0];
+            const firstRepo = first.project_name || first.name || (first.url ? first.url.split("/").pop().replace(".git", "") : "default");
             setTargetRepo(firstRepo);
-            router.replace(`/repository/${encodeURIComponent(firstRepo)}/workspace`);
+            setLoading(false);
             return;
           }
         }

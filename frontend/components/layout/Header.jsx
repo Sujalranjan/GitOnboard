@@ -23,7 +23,7 @@ export function Header() {
       .catch(() => setUser(null));
   }, []);
 
-  if (pathname === '/workspace') {
+  if (pathname === '/workspace' || pathname?.endsWith('/workspace') || pathname?.includes('/workspace')) {
     return null;
   }
 

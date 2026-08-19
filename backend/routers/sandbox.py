@@ -3,11 +3,14 @@ Sandbox Router: Endpoints for executing commands and managing persistent shell s
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from backend.services.pty_session import PtyUnavailableError
 from backend.services.sandbox_manager import (
     SandboxManager,
     SandboxError,
@@ -142,4 +145,133 @@ async def exec_sandbox_command(
     except Exception as e:
         logger.error(f"Unexpected sandbox error for run_id '{run_id}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal sandbox execution error: {str(e)}")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Interactive PTY terminal: a real bidirectional terminal session, distinct from
+# the request/response /exec endpoint above. See PtySession for the platform
+# backends (POSIX pty vs Windows ConPTY via pywinpty).
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TerminalResetResponse(BaseModel):
+    status: str
+    run_id: str
+    session_id: str
+    cwd: str
+
+
+@router.post("/{run_id}/terminal/reset", response_model=TerminalResetResponse)
+async def reset_sandbox_terminal(run_id: str) -> TerminalResetResponse:
+    """
+    Terminates the run's interactive PTY shell (killing its process tree) and
+    starts a fresh one in the same worktree. Any websocket still attached to the
+    old session will see it exit; the frontend is expected to reconnect after
+    calling this.
+    """
+    try:
+        session = await sandbox_manager.reset_pty_session(run_id)
+        return TerminalResetResponse(
+            status="RESET",
+            run_id=run_id,
+            session_id=session.session_id,
+            cwd=str(session.worktree_path),
+        )
+    except InvalidRunError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PtyUnavailableError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error resetting terminal for run_id '{run_id}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to reset terminal: {str(e)}")
+
+
+@router.websocket("/{run_id}/terminal")
+async def sandbox_terminal_ws(websocket: WebSocket, run_id: str) -> None:
+    """
+    Bidirectional terminal stream. Binary frames carry raw keystroke/output bytes
+    in both directions (written straight through to the pty — Ctrl+C, Ctrl+D,
+    arrow keys, etc. all pass through unmodified for the shell's tty layer to
+    interpret). Text frames are JSON control messages; currently only
+    `{"type": "resize", "rows": N, "cols": N}` from the client.
+
+    The underlying PtySession is NOT closed when this socket disconnects — the
+    shell keeps running so a reconnect (page refresh, panel close/reopen) can
+    reattach to the same session. Recent output is replayed on (re)connect so a
+    reattach doesn't drop straight into a blank screen.
+    """
+    await websocket.accept()
+
+    try:
+        session = await sandbox_manager.get_or_create_pty_session(run_id)
+    except InvalidRunError as e:
+        await websocket.send_text(json.dumps({"type": "error", "message": str(e)}))
+        await websocket.close(code=4400)
+        return
+    except PtyUnavailableError as e:
+        await websocket.send_text(json.dumps({"type": "error", "message": str(e)}))
+        await websocket.close(code=4500)
+        return
+    except Exception as e:
+        logger.error(f"Error starting pty session for run_id '{run_id}': {e}", exc_info=True)
+        await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start terminal session"}))
+        await websocket.close(code=1011)
+        return
+
+    output_queue = session.subscribe()
+
+    scrollback = session.get_scrollback()
+    if scrollback:
+        await websocket.send_bytes(scrollback)
+
+    async def pump_output() -> None:
+        try:
+            while True:
+                chunk = await output_queue.get()
+                if chunk is None:
+                    await websocket.send_text(json.dumps({"type": "exit"}))
+                    return
+                await websocket.send_bytes(chunk)
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+
+    reader_task = asyncio.create_task(pump_output())
+
+    try:
+        while True:
+            message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                break
+
+            raw_bytes = message.get("bytes")
+            if raw_bytes is not None:
+                session.write(raw_bytes)
+                continue
+
+            raw_text = message.get("text")
+            if raw_text is not None:
+                # Check for JSON control message (e.g. resize)
+                if raw_text.strip().startswith("{"):
+                    try:
+                        control = json.loads(raw_text)
+                        if isinstance(control, dict) and control.get("type") == "resize":
+                            try:
+                                session.resize(int(control.get("rows", 24)), int(control.get("cols", 80)))
+                            except (TypeError, ValueError):
+                                pass
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+
+                # If not a resize control, write text directly as UTF-8 input bytes
+                session.write(raw_text.encode("utf-8"))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        session.unsubscribe(output_queue)
+        reader_task.cancel()
+        try:
+            await reader_task
+        except (asyncio.CancelledError, Exception):
+            pass
 

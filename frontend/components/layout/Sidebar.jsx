@@ -30,12 +30,17 @@ export function Sidebar({ repoName }) {
       <div className="flex-grow py-6 overflow-y-auto overflow-x-hidden">
         <nav className="space-y-1 px-3">
           {navItems.map((item) => {
-            const itemPath = item.directPath ? item.directPath : `/repository/${repoName}${item.path}`;
-            const isActive = item.directPath
-              ? pathname === item.directPath
+            const itemPath = item.id === 'workspace'
+              ? `/workspace?repo=${encodeURIComponent(repoName || '')}`
+              : item.path === ''
+                ? `/repository/${repoName}`
+                : `/repository/${repoName}${item.path}`;
+
+            const isActive = item.id === 'workspace'
+              ? pathname === '/workspace' || pathname?.includes('/workspace')
               : item.path === ''
                 ? pathname === `/repository/${repoName}`
-                : pathname.startsWith(itemPath);
+                : pathname.startsWith(`/repository/${repoName}${item.path}`);
 
             return (
               <Link 

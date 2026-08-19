@@ -6,6 +6,7 @@ import ExplorerView from '@/components/repository/ExplorerView';
 import ArchitectureExplorer from '@/components/ArchitectureExplorer';
 import SemanticSearch from '@/components/SemanticSearch';
 import RepositorySummary from '@/components/RepositorySummary';
+import { WorkspaceLayout } from '@/components/workspace/WorkspaceLayout';
 
 export default function TabPage() {
   const params = useParams();
@@ -14,6 +15,8 @@ export default function TabPage() {
 
   const renderContent = () => {
     switch (tab) {
+      case 'workspace':
+        return <WorkspaceLayout initialRepoName={repoName} />;
       case 'explorer':
         return <ExplorerView repoName={repoName} />;
       case 'architecture':

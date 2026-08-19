@@ -90,7 +90,7 @@ export function HeaderGlobal({
   const handleSelectProject = (projName: string) => {
     setSelectedProject(projName);
     setIsProjectDropdownOpen(false);
-    router.push(`/repository/${encodeURIComponent(projName)}/workspace`);
+    router.push(`/workspace?repo=${encodeURIComponent(projName)}`);
   };
 
   // Perform live symbol / semantic search on input

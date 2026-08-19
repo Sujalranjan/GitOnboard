@@ -54,15 +54,27 @@ class WorktreeProvisioner:
     def is_worktree_populated(self, worktree_path: Path) -> bool:
         """
         Returns True if the worktree contains actual repository files (not just empty .git or logs).
+        Checks recursively for non-hidden, non-temporary regular files.
         """
         if not worktree_path.exists() or not worktree_path.is_dir():
             return False
 
-        entries = [
-            e for e in worktree_path.iterdir()
-            if e.name != ".git" and not e.name.startswith("gitonboard_session_") and not e.name.startswith(".")
-        ]
-        return len(entries) > 0
+        for root, dirs, files in os.walk(worktree_path):
+            dirs[:] = [
+                d for d in dirs
+                if d not in EXCLUDED_COPY_DIRS
+                and not d.startswith("gitonboard_session_")
+                and not d.startswith(".")
+            ]
+            non_hidden_files = [
+                f for f in files
+                if not f.startswith(".")
+                and not f.endswith(".tmp")
+                and not f.endswith(".pyc")
+            ]
+            if non_hidden_files:
+                return True
+        return False
 
     def _copy_directory_contents(self, source_dir: Path, target_dir: Path) -> int:
         """
@@ -196,7 +208,15 @@ class WorktreeProvisioner:
                 clean_name = repo_identifier.lower().replace("-", "").replace("_", "")
                 ws_name = workspace_dir.name.lower().replace("-", "").replace("_", "")
 
-                if clean_name in ws_name or ws_name in clean_name or repo_identifier == "default":
+                is_active_ws = (
+                    clean_name in ws_name
+                    or ws_name in clean_name
+                    or ws_name == "app"
+                    or (workspace_dir / "backend").exists()
+                    or repo_identifier.lower() in ("default", "gitonboard")
+                )
+
+                if is_active_ws and workspace_dir != worktree_path:
                     files_populated = self._copy_directory_contents(workspace_dir, worktree_path)
                     if files_populated > 0:
                         logger.info(f"Provisioned {files_populated} files from active workspace: {workspace_dir}")
