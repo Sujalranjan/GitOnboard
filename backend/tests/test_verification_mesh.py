@@ -78,9 +78,9 @@ def test_contract_verifier_omission():
 def test_judge_aggregation():
     judge = Judge()
 
-    static_pass = VerificationResult(vector_name="static", status="PASS", passed=True, defects=[])
-    dynamic_pass = VerificationResult(vector_name="dynamic", status="PASS", passed=True, defects=[])
-    contract_pass = VerificationResult(vector_name="contract", status="PASS", passed=True, defects=[])
+    static_pass = VerificationResult(vector_name="static", status="PASS", execution_state="PASS", passed=True, defects=[], evidence_manifest=[{"type": "ast_symbol_check", "status": "ok"}])
+    dynamic_pass = VerificationResult(vector_name="dynamic", status="PASS", execution_state="PASS", passed=True, defects=[], evidence_manifest=[{"type": "test_run", "status": "ok"}])
+    contract_pass = VerificationResult(vector_name="contract", status="PASS", execution_state="PASS", passed=True, defects=[], evidence_manifest=[{"type": "contract_check", "status": "ok"}])
 
     report_pass = judge.aggregate("run_001", static_pass, dynamic_pass, contract_pass)
     assert report_pass.passed is True
