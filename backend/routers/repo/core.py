@@ -217,7 +217,10 @@ def delete_repo(repo_name: str, db: Session = Depends(get_db), current_user: Use
             
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
-    
+
+    from backend.services.repo_cleanup import delete_repository_state
+    delete_repository_state(repo, repo_name)
+
     db.delete(repo)
     db.commit()
     return {"message": "Repository deleted successfully"}
