@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "@xterm/xterm/css/xterm.css";
 
 @variant dark (.dark &);
 @custom-variant dark (&:where(.dark, .dark *));
