@@ -1,0 +1,45 @@
+{
+  "overview": {
+    "text": "13_legacy_php_portal summarized with verified evidence.",
+    "evidence_ids": []
+  },
+  "deployable_units": [
+    {
+      "name": "web_portal",
+      "unit_type": "web_portal",
+      "root_path": "/",
+      "summary": "web_portal component",
+      "evidence_ids": []
+    }
+  ],
+  "technologies": [
+    {
+      "name": "PHP",
+      "category": "Language",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "Twig",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "MySQL",
+      "category": "Database",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    }
+  ],
+  "data_and_storage": {},
+  "operations_and_deployment": {},
+  "discrepancies": [],
+  "unverified_doc_claims": []
+}

@@ -1,0 +1,45 @@
+{
+  "overview": {
+    "text": "11_ruby_rails_app summarized with verified evidence.",
+    "evidence_ids": []
+  },
+  "deployable_units": [
+    {
+      "name": "web_app",
+      "unit_type": "web_app",
+      "root_path": "/",
+      "summary": "web_app component",
+      "evidence_ids": []
+    }
+  ],
+  "technologies": [
+    {
+      "name": "Ruby",
+      "category": "Language",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "Rails",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "PostgreSQL",
+      "category": "Database",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    }
+  ],
+  "data_and_storage": {},
+  "operations_and_deployment": {},
+  "discrepancies": [],
+  "unverified_doc_claims": []
+}

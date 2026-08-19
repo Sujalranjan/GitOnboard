@@ -1,0 +1,53 @@
+{
+  "overview": {
+    "text": "10_python_data_pipeline summarized with verified evidence.",
+    "evidence_ids": []
+  },
+  "deployable_units": [
+    {
+      "name": "data_pipeline",
+      "unit_type": "data_pipeline",
+      "root_path": "/",
+      "summary": "data_pipeline component",
+      "evidence_ids": []
+    }
+  ],
+  "technologies": [
+    {
+      "name": "Python",
+      "category": "Language",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "Pandas",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "PyArrow",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "ClickHouse",
+      "category": "Database",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    }
+  ],
+  "data_and_storage": {},
+  "operations_and_deployment": {},
+  "discrepancies": [],
+  "unverified_doc_claims": []
+}

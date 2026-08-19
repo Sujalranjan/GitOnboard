@@ -1,0 +1,53 @@
+{
+  "overview": {
+    "text": "09_java_spring_boot summarized with verified evidence.",
+    "evidence_ids": []
+  },
+  "deployable_units": [
+    {
+      "name": "backend_service",
+      "unit_type": "backend_service",
+      "root_path": "/",
+      "summary": "backend_service component",
+      "evidence_ids": []
+    }
+  ],
+  "technologies": [
+    {
+      "name": "Java",
+      "category": "Language",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "Spring Boot",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "Maven",
+      "category": "Framework",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    },
+    {
+      "name": "MySQL",
+      "category": "Database",
+      "status": "strongly_supported",
+      "evidence_ids": [
+        "ev_0001"
+      ]
+    }
+  ],
+  "data_and_storage": {},
+  "operations_and_deployment": {},
+  "discrepancies": [],
+  "unverified_doc_claims": []
+}
