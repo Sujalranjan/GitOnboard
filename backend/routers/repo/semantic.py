@@ -202,21 +202,69 @@ def get_chroma_collection(repo_name: str, current_user: User, db: Session):
 def semantic_search_repo(repo_name: str, q: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not q or len(q.strip()) == 0:
         return {"results": []}
-        
-    collection = get_chroma_collection(repo_name, current_user, db)
-        
+
     try:
-        query_results = collection.query(query_texts=[q], n_results=10)
+        # Load Chroma collection
+        collection = None
+        try:
+            collection = get_chroma_collection(repo_name, current_user, db)
+        except Exception as e:
+            logger.warning(f"Could not load Chroma collection for hybrid search: {e}")
+
+        # Fetch latest analysis for Fact Store integration
+        from backend.routers.repo.services.analysis import get_latest_analysis
+        analysis_id = None
+        try:
+            _, latest = get_latest_analysis(repo_name, db, current_user)
+            if latest:
+                analysis_id = latest.id
+        except Exception:
+            pass
+
+        # Execute Hybrid Retrieval (Lexical + Semantic + Fact Store + RRF + Structural Expansion)
+        from backend.intelligence.retrieval import HybridRetriever
+        retriever = HybridRetriever(
+            db=db,
+            analysis_id=analysis_id,
+            chroma_collection=collection,
+            rrf_k=60,
+            lexical_weight=1.0,
+            semantic_weight=1.0,
+            exact_weight=1.2
+        )
+
+        retrieved_items = retriever.retrieve(query=q, top_k=15, expand_with_fact_store=True)
+
         results = []
-        if query_results and query_results["metadatas"] and len(query_results["metadatas"]) > 0:
-            for idx, meta in enumerate(query_results["metadatas"][0]):
-                results.append({
-                    "file_path": meta["file_path"],
-                    "match_type": meta["type"],
-                    "match_name": meta["name"],
-                    "distance": query_results["distances"][0][idx] if query_results["distances"] else 0
-                })
+        for item in retrieved_items:
+            results.append({
+                "file_path": item.get("file_path", ""),
+                "match_type": item.get("match_type", item.get("type", "symbol")),
+                "match_name": item.get("match_name", item.get("name", "")),
+                "distance": item.get("distance", 0.0),
+                "rrf_score": item.get("_rrf_score", 0.0),
+                "route": item.get("route"),
+                "capability": item.get("capability"),
+                "expansion_reason": item.get("expansion_reason"),
+            })
+
         return {"results": results}
     except Exception as e:
-        logger.error(f"Failed to search: {e}")
-        raise HTTPException(status_code=500, detail="Failed to search")
+        logger.error(f"Failed to execute hybrid search: {e}", exc_info=True)
+        # Fallback to direct collection query if available
+        try:
+            collection = get_chroma_collection(repo_name, current_user, db)
+            query_results = collection.query(query_texts=[q], n_results=10)
+            results = []
+            if query_results and query_results.get("metadatas") and len(query_results["metadatas"]) > 0:
+                for idx, meta in enumerate(query_results["metadatas"][0]):
+                    results.append({
+                        "file_path": meta.get("file_path", ""),
+                        "match_type": meta.get("type", "symbol"),
+                        "match_name": meta.get("name", ""),
+                        "distance": query_results["distances"][0][idx] if query_results.get("distances") else 0
+                    })
+            return {"results": results}
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to search")
+

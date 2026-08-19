@@ -33,10 +33,32 @@ def trace_feature(
     search_q = search_q.strip()
 
     try:
-        collection = get_chroma_collection(repo_name, current_user, db)
-        query_results = collection.query(query_texts=[search_q], n_results=5)
+        collection = None
+        try:
+            collection = get_chroma_collection(repo_name, current_user, db)
+        except Exception:
+            pass
+
+        from backend.routers.repo.services.analysis import get_latest_analysis
+        analysis_id = None
+        try:
+            _, latest = get_latest_analysis(repo_name, db, current_user)
+            if latest:
+                analysis_id = latest.id
+        except Exception:
+            pass
+
+        from backend.intelligence.retrieval import HybridRetriever
+        retriever = HybridRetriever(
+            db=db,
+            analysis_id=analysis_id,
+            chroma_collection=collection,
+            rrf_k=60
+        )
+        retrieved_items = retriever.retrieve(query=search_q, top_k=10, expand_with_fact_store=False)
+
         seed_nodes = []
-        if query_results and query_results.get("metadatas") and len(query_results["metadatas"]) > 0:
+        if retrieved_items:
             try:
                 query_layer = get_or_build_model(repo_name, db, current_user)
             except Exception as e:
@@ -44,23 +66,30 @@ def trace_feature(
                 return {"trace": None, "flow": []}
 
             from backend.intelligence.rim.enums import EntityType
-            for item in query_results["metadatas"][0]:
+            for item in retrieved_items:
                 fp = item.get("file_path")
-                name = item.get("name")
-                typ = item.get("type")
+                name = item.get("match_name", item.get("name"))
+                typ = item.get("match_type", item.get("type"))
                 ent_id = None
 
                 for e in query_layer.model.entities.values():
-                    if e.name == name and e.metadata.get("file_id") == fp:
-                        if (typ == "function" and e.type == EntityType.FUNCTION) or (typ == "class" and e.type == EntityType.CLASS):
+                    if e.name == name or (name and e.name.lower() == name.lower()):
+                        if not fp or e.metadata.get("file_id") == fp or e.location.repository_path == fp or fp in e.location.repository_path or not e.location.repository_path:
+                            ent_id = e.id
+                            break
+
+                if not ent_id:
+                    for e in query_layer.model.entities.values():
+                        if e.name.lower() == str(name).lower():
                             ent_id = e.id
                             break
 
                 if ent_id:
-                    item["id"] = ent_id
-                    seed_nodes.append(item)
+                    item_dict = dict(item)
+                    item_dict["id"] = ent_id
+                    seed_nodes.append(item_dict)
     except Exception as e:
-        logger.error(f"Semantic search failed for trace: {e}")
+        logger.error(f"Hybrid retrieval failed for trace: {e}")
         seed_nodes = []
 
     if not seed_nodes:

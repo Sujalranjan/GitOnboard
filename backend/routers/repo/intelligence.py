@@ -1,6 +1,7 @@
 import logging
+from typing import Optional, Dict, Any
 from collections import Counter
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, Body
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models.user import User
@@ -131,8 +132,20 @@ def search_symbols(repo_name: str, q: str, db: Session = Depends(get_db), curren
                 results.append({"id": e.id, "type": "Function", "name": e.name, "file_path": e.metadata.get("file_id", e.location.repository_path), "line_number": e.location.start_line})
     return {"results": results}
 
-@intelligence_router.get("/{repo_name}/context", include_in_schema=False)
-def build_context_pack(repo_name: str, q: str = "", db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@intelligence_router.api_route("/{repo_name}/context", methods=["GET", "POST"], include_in_schema=False)
+def build_context_pack(
+    repo_name: str,
+    q: Optional[str] = None,
+    body: Optional[Dict[str, Any]] = Body(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    query_str = q
+    if not query_str and body and isinstance(body, dict):
+        query_str = body.get("query") or body.get("q") or body.get("feature_query")
+    if query_str is None:
+        query_str = ""
+
     try:
         query_layer = get_or_build_model(repo_name, db, current_user)
     except Exception as e:
@@ -164,14 +177,14 @@ def build_context_pack(repo_name: str, q: str = "", db: Session = Depends(get_db
     graph = {"nodes": [], "edges": []}
     query_service = GraphQueryService(query_layer.model)
 
-    if q and q.strip():
-        symbols = query_service.search(q)[:5]
+    if query_str and query_str.strip():
+        symbols = query_service.search(query_str)[:5]
         if symbols:
             graph = query_service.traverse(symbols[0]["id"], direction="both", depth=1, max_nodes=20, relationship_type="calls")
 
     matched_features = []
-    if q and q.strip():
-        query_lower = q.lower()
+    if query_str and query_str.strip():
+        query_lower = query_str.lower()
         for feature in features:
             if query_lower in feature.name.lower() or query_lower in feature.description.lower():
                 matched_features.append({
@@ -210,7 +223,7 @@ def build_context_pack(repo_name: str, q: str = "", db: Session = Depends(get_db
 
     return {
         "context_pack": {
-            "query": q,
+            "query": query_str,
             "repository": {
                 "feature_count": len(features),
                 "symbol_count": sum(1 for e in query_layer.model.entities.values() if e.type in (EntityType.CLASS, EntityType.FUNCTION, EntityType.METHOD)),
