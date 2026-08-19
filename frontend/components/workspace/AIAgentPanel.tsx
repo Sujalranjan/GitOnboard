@@ -449,9 +449,28 @@ export function AIAgentPanel({
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               handleSendMessage();
+            } else if (e.key === "Tab") {
+              e.preventDefault();
+              const suggestions = [
+                "Add a new API route for managing user todos with GET and POST handlers.",
+                "Implement user authentication middleware with JWT tokens.",
+                "Create unit tests for verification and database models.",
+                "Refactor error handling to use standard HTTPException details.",
+              ];
+              if (!promptInput.trim()) {
+                setPromptInput(suggestions[0]);
+              } else {
+                const match = suggestions.find((s) => s.toLowerCase().startsWith(promptInput.toLowerCase().trim()));
+                if (match) {
+                  setPromptInput(match);
+                } else {
+                  const nextIndex = (suggestions.findIndex((s) => s === promptInput) + 1) % suggestions.length;
+                  setPromptInput(suggestions[nextIndex]);
+                }
+              }
             }
           }}
-          placeholder="Enter feature requirement (e.g. Add authentication middleware)..."
+          placeholder="Enter feature requirement (Press Tab to autocomplete)..."
           className="w-full bg-[#14181E] border border-[#2F343A] rounded-lg p-2 text-xs text-[#E6EDF3] placeholder-[#8B949E] focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 resize-none font-sans"
         />
 
