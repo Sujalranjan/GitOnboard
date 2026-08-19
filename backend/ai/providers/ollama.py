@@ -42,7 +42,7 @@ class OllamaProvider:
         model_name = request.model or self.default_model
         logger.info(f"OllamaProvider: Sending request to {self.base_url}/api/chat (model: {model_name})...")
         t0 = time.time()
-        timeout_config = httpx.Timeout(timeout=self.timeout, connect=10.0, read=self.timeout)
+        timeout_config = httpx.Timeout(timeout=self.timeout, connect=5.0, read=self.timeout)
         
         async with httpx.AsyncClient(timeout=timeout_config) as client:
             try:
@@ -51,7 +51,7 @@ class OllamaProvider:
                     json=self._build_body(request),
                 )
             except (httpx.TimeoutException, httpx.ConnectError) as e:
-                logger.error(f"OllamaProvider: Network error after {time.time() - t0:.2f}s: {e}")
+                logger.warning(f"OllamaProvider: Network error after {time.time() - t0:.2f}s: {e}")
                 raise RetriableError(f"Ollama connection/timeout failed: {e}")
 
         if resp.status_code == 400:

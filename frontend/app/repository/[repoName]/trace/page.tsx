@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
 import { Card, CardHeader } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { Badge } from '@/components/common/Badge';
-import { GitMerge, Search, Loader2, Sparkles, ArrowDown } from 'lucide-react';
+import { GitMerge, Search, Loader2, Sparkles, ArrowDown, Maximize2, X, RotateCcw, HelpCircle } from 'lucide-react';
 
 function FeatureTracingContent(props: any) {
   const [repoName, setRepoName] = useState<string>('');
@@ -19,6 +20,13 @@ function FeatureTracingContent(props: any) {
   
   const [isExplaining, setIsExplaining] = useState(false);
   const [explanation, setExplanation] = useState<string | null>(null);
+  const [explainMeta, setExplainMeta] = useState<{ provider?: string; ai_generated?: boolean } | null>(null);
+  const [lastSearchedQuery, setLastSearchedQuery] = useState<string>("");
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showRegenConfirm, setShowRegenConfirm] = useState(false);
+
+  // Cache helper key generator
+  const getCacheKey = (repo: string, feat: string) => `trace_explain_${repo}_${feat.trim().toLowerCase()}`;
 
   useEffect(() => {
     Promise.resolve(props.params).then((params) => {
@@ -33,22 +41,53 @@ function FeatureTracingContent(props: any) {
   }, [repoName, initialQuery]);
 
   const handleTraceSubmit = async (searchFeature: string) => {
-    if (!searchFeature.trim()) return;
+    const trimmed = searchFeature.trim();
+    if (!trimmed) return;
+
+    // If searching the same query and we already have results, keep the existing explanation
+    if (trimmed === lastSearchedQuery && traceResult) {
+      return;
+    }
+
     setIsTracing(true);
-    setTraceResult(null);
-    setExplanation(null);
+    
+    // Check cached explanation for this repo & feature query
+    if (repoName) {
+      try {
+        const cached = localStorage.getItem(getCacheKey(repoName, trimmed));
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setExplanation(parsed.explanation);
+          setExplainMeta({
+            provider: parsed.provider,
+            ai_generated: parsed.ai_generated,
+          });
+        } else if (trimmed !== lastSearchedQuery) {
+          setExplanation(null);
+          setExplainMeta(null);
+          setTraceResult(null);
+        }
+      } catch {
+        if (trimmed !== lastSearchedQuery) {
+          setExplanation(null);
+          setExplainMeta(null);
+          setTraceResult(null);
+        }
+      }
+    }
     
     try {
       const res = await fetch(`/api/repos/${repoName}/trace`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feature_query: searchFeature })
+        body: JSON.stringify({ feature_query: trimmed })
       });
       
       if (res.ok) {
         const data = await res.json();
         setTraceResult(data);
-        fetchContextPack(searchFeature);
+        setLastSearchedQuery(trimmed);
+        fetchContextPack(trimmed);
       } else {
         alert("Failed to trace feature.");
       }
@@ -81,9 +120,29 @@ function FeatureTracingContent(props: any) {
     handleTraceSubmit(query);
   };
 
-  const handleExplain = async () => {
+  const handleExplain = async (forceRegenerate = false) => {
     if (!traceResult) return;
+
+    // Check cache first unless explicitly regenerating
+    if (!forceRegenerate && repoName && query) {
+      try {
+        const cached = localStorage.getItem(getCacheKey(repoName, query));
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setExplanation(parsed.explanation);
+          setExplainMeta({
+            provider: parsed.provider,
+            ai_generated: parsed.ai_generated,
+          });
+          return;
+        }
+      } catch {
+        // Continue to fetch
+      }
+    }
+
     setIsExplaining(true);
+    setShowRegenConfirm(false);
     try {
       const res = await fetch(`/api/repos/${repoName}/trace/explain`, {
         method: 'POST',
@@ -96,8 +155,30 @@ function FeatureTracingContent(props: any) {
       if (res.ok) {
         const data = await res.json();
         setExplanation(data.explanation);
+        setExplainMeta({
+          provider: data.provider,
+          ai_generated: data.ai_generated
+        });
+
+        // Persist to cache for next time
+        if (repoName && query) {
+          try {
+            localStorage.setItem(
+              getCacheKey(repoName, query),
+              JSON.stringify({
+                explanation: data.explanation,
+                provider: data.provider,
+                ai_generated: data.ai_generated,
+                timestamp: Date.now(),
+              })
+            );
+          } catch {
+            // Storage quota exceeded or disabled
+          }
+        }
       } else {
-        alert("Failed to explain trace.");
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.detail || "Failed to explain trace.");
       }
     } catch (err) {
       console.error(err);
@@ -260,16 +341,74 @@ function FeatureTracingContent(props: any) {
                       </Button>
                     </div>
                   ) : (
-                    <div className="prose prose-sm prose-slate max-w-none">
-                      <div className="bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 border border-blue-100 dark:border-blue-900/60 p-4 rounded-lg text-sm leading-relaxed whitespace-pre-wrap">
-                        {explanation}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                        {explainMeta ? (
+                          <Badge variant={explainMeta.ai_generated ? "success" : "warning"}>
+                            {explainMeta.ai_generated
+                              ? `AI Generated (${explainMeta.provider || "ollama"})`
+                              : "Deterministic fallback — No AI used"}
+                          </Badge>
+                        ) : <span className="text-xs text-slate-500">AI Explanation</span>}
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setShowRegenConfirm(true)}
+                            disabled={isExplaining}
+                            className="flex items-center gap-1 p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded transition-colors cursor-pointer"
+                            title="Regenerate Explanation"
+                          >
+                            <RotateCcw className={`w-3.5 h-3.5 ${isExplaining ? 'animate-spin' : ''}`} />
+                          </button>
+                          <button
+                            onClick={() => setIsExpanded(true)}
+                            className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors cursor-pointer"
+                            title="Expand Full Explanation"
+                          >
+                            <Maximize2 className="w-3.5 h-3.5" />
+                            Expand
+                          </button>
+                        </div>
                       </div>
+
+                      {/* Normal Size Preview Container with Click-to-Expand */}
+                      <div 
+                        onClick={() => setIsExpanded(true)}
+                        className="relative max-h-[320px] overflow-hidden bg-blue-50/40 dark:bg-blue-950/30 border border-blue-100/80 dark:border-blue-900/40 p-4 rounded-lg text-slate-800 dark:text-slate-200 text-sm leading-relaxed cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 transition-all group"
+                      >
+                        <ReactMarkdown
+                          components={{
+                            h1: ({ node, ...props }) => <h1 className="text-sm font-bold text-blue-950 dark:text-blue-200 mb-1.5" {...props} />,
+                            h2: ({ node, ...props }) => <h2 className="text-xs font-bold text-blue-900 dark:text-blue-300 mt-2 mb-1" {...props} />,
+                            h3: ({ node, ...props }) => <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-1.5 mb-1 uppercase tracking-wide" {...props} />,
+                            p: ({ node, ...props }) => <p className="mb-1.5 text-xs leading-relaxed text-slate-700 dark:text-slate-300" {...props} />,
+                            ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-0.5 mb-1.5 text-xs text-slate-700 dark:text-slate-300" {...props} />,
+                            li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
+                            code: ({ node, className, children, ...props }) => (
+                              <code className="bg-slate-200/70 dark:bg-slate-800 px-1 py-0.5 rounded font-mono text-[11px] text-blue-800 dark:text-blue-300" {...props}>
+                                {children}
+                              </code>
+                            ),
+                          }}
+                        >
+                          {explanation}
+                        </ReactMarkdown>
+
+                        {/* Fade-out gradient indicator with click prompt */}
+                        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-50 dark:from-slate-900 to-transparent flex items-end justify-center pb-2">
+                          <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-white/90 dark:bg-slate-800/90 px-3 py-1 rounded-full shadow-sm border border-blue-200/50 dark:border-blue-800/50 group-hover:scale-105 transition-transform">
+                            Click to expand full explanation
+                          </span>
+                        </div>
+                      </div>
+
                       <Button 
                         variant="ghost" 
-                        onClick={handleExplain}
+                        onClick={() => setShowRegenConfirm(true)}
                         disabled={isExplaining}
-                        className="w-full mt-4 text-xs"
+                        className="w-full mt-2 text-xs flex items-center justify-center gap-1.5"
                       >
+                        <RotateCcw className="w-3 h-3" />
                         Regenerate
                       </Button>
                     </div>
@@ -284,6 +423,128 @@ function FeatureTracingContent(props: any) {
       {traceResult && (!traceResult.flow || traceResult.flow.length === 0) && (
         <div className="text-center py-20 text-slate-500 dark:text-slate-400">
           <p>No deterministic trace could be constructed for this feature.</p>
+        </div>
+      )}
+
+      {/* Expanded Modal Overlay with Cross Button */}
+      {isExpanded && explanation && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 md:p-10 animate-in fade-in duration-200"
+          onClick={() => setIsExpanded(false)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg">
+                  Feature Walkthrough: {query}
+                </h3>
+                {explainMeta && (
+                  <Badge variant={explainMeta.ai_generated ? "success" : "warning"}>
+                    {explainMeta.ai_generated
+                      ? `AI Generated (${explainMeta.provider || "ollama"})`
+                      : "Deterministic fallback — No AI used"}
+                  </Badge>
+                )}
+              </div>
+              <button
+                onClick={() => setIsExpanded(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Content */}
+            <div className="p-6 md:p-8 overflow-y-auto space-y-4 text-slate-800 dark:text-slate-200 leading-relaxed">
+              <ReactMarkdown
+                components={{
+                  h1: ({ node, ...props }) => <h1 className="text-xl font-bold text-blue-950 dark:text-blue-200 mb-3 border-b border-blue-100 dark:border-blue-900 pb-2" {...props} />,
+                  h2: ({ node, ...props }) => <h2 className="text-base font-bold text-blue-900 dark:text-blue-300 mt-5 mb-2" {...props} />,
+                  h3: ({ node, ...props }) => <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-4 mb-1.5 uppercase tracking-wide" {...props} />,
+                  p: ({ node, ...props }) => <p className="mb-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300" {...props} />,
+                  ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-1.5 mb-3 text-sm text-slate-700 dark:text-slate-300 pl-2" {...props} />,
+                  li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
+                  code: ({ node, className, children, ...props }) => (
+                    <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono text-xs text-blue-700 dark:text-blue-300 border border-slate-200 dark:border-slate-700" {...props}>
+                      {children}
+                    </code>
+                  ),
+                }}
+              >
+                {explanation}
+              </ReactMarkdown>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+              <Button 
+                variant="ghost" 
+                onClick={() => {
+                  setIsExpanded(false);
+                  setShowRegenConfirm(true);
+                }}
+                className="text-xs flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Regenerate Explanation
+              </Button>
+              <Button variant="secondary" onClick={() => setIsExpanded(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal Before Regenerating */}
+      {showRegenConfirm && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setShowRegenConfirm(false)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/80 border border-blue-200 dark:border-blue-800 flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
+                <HelpCircle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  Regenerate Explanation?
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  This will query the AI model again and replace the current cached walkthrough for <strong>"{query}"</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button 
+                variant="ghost" 
+                onClick={() => setShowRegenConfirm(false)}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="primary" 
+                onClick={() => handleExplain(true)}
+                disabled={isExplaining}
+                className="text-xs flex items-center gap-1.5"
+              >
+                {isExplaining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                Yes, Regenerate
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -22,31 +22,39 @@ MAX_PROVIDER_RETRIES = 1  # Each provider is tried at most once per request
 
 def build_default_service() -> "LLMService":
     """
-    Construct LLMService from environment variables.
-    Priority: OpenRouter -> NVIDIA -> Ollama
-    Only providers with valid API keys are added (Ollama is always added as fallback).
+    Construct LLMService strictly according to DEPLOYMENT_TYPE.
+    - DEPLOYMENT_TYPE=LOCAL: Ollama only -> deterministic fallback.
+    - DEPLOYMENT_TYPE=PROD: Gemini first -> OpenRouter -> deterministic fallback.
+    - Never cross-use providers between LOCAL and PROD.
     """
-    from .providers.openrouter import OpenRouterProvider
-    from .providers.nvidia import NvidiaProvider
-    from .providers.ollama import OllamaProvider
-
+    deployment_type = os.environ.get("DEPLOYMENT_TYPE", "LOCAL").strip().upper()
     providers: List[LLMProvider] = []
 
-    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
-    if openrouter_key:
-        providers.append(OpenRouterProvider(api_key=openrouter_key))
-        logger.info("LLMService: OpenRouter provider registered.")
+    if deployment_type == "PROD":
+        # 1. Gemini (Priority 1 in PROD)
+        gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        if gemini_key:
+            from .providers.gemini import GeminiProvider
+            providers.append(GeminiProvider(api_key=gemini_key))
+            logger.info("LLMService: PROD mode - GeminiProvider registered.")
 
-    nvidia_key = os.environ.get("NVIDIA_API_KEY", "")
-    if nvidia_key:
-        providers.append(NvidiaProvider(api_key=nvidia_key))
-        logger.info("LLMService: NVIDIA provider registered.")
+        # 2. OpenRouter (Priority 2 in PROD)
+        openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if openrouter_key:
+            from .providers.openrouter import OpenRouterProvider
+            providers.append(OpenRouterProvider(api_key=openrouter_key))
+            logger.info("LLMService: PROD mode - OpenRouterProvider registered.")
 
-    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-    ollama_model = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b")
-    ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "300.0"))
-    providers.append(OllamaProvider(base_url=ollama_url, model=ollama_model, timeout=ollama_timeout))
-    logger.info(f"LLMService: Ollama provider registered ({ollama_url}).")
+        if not providers:
+            logger.warning("LLMService: PROD mode specified but no cloud API keys (GEMINI_API_KEY, OPENROUTER_API_KEY) found.")
+    else:
+        # LOCAL Mode (Default): Ollama only
+        ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        ollama_model = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b")
+        ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "300.0"))
+        from .providers.ollama import OllamaProvider
+        providers.append(OllamaProvider(base_url=ollama_url, model=ollama_model, timeout=ollama_timeout))
+        logger.info(f"LLMService: LOCAL mode - OllamaProvider registered ({ollama_url}).")
 
     return LLMService(providers=providers)
 

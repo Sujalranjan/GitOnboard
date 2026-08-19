@@ -9,7 +9,7 @@ from backend.dependencies.auth import get_current_user
 from backend.routers.repo.schemas import ExplainTraceRequest, TraceRequest
 from backend.routers.repo.services.models import get_or_build_model
 from backend.routers.repo.semantic import get_chroma_collection
-from backend.llm_service import llm_service
+from backend.ai.orchestrator import LLMOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +114,35 @@ def trace_feature(
     return {"trace": trace_result, "flow": flow}
 
 @trace_router.post("/{repo_name}/trace/explain")
-def explain_trace(repo_name: str, req: ExplainTraceRequest):
-    prompt = f"Explain the following implementation trace for the feature '{req.feature_query}'. The trace was deterministically generated from the repository's semantic, dependency, and call graphs. Do not add any new nodes or hallucinate execution paths. Explain what each component does in the context of the flow.\n\nTrace Data: {json.dumps(req.trace_data, indent=2)}"
+async def explain_trace(
+    repo_name: str,
+    req: ExplainTraceRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    analysis_id = None
+    try:
+        from backend.routers.repo.services.analysis import get_latest_analysis
+        _, latest = get_latest_analysis(repo_name, db, current_user)
+        if latest:
+            analysis_id = latest.id
+    except Exception:
+        pass
+
+    orchestrator = LLMOrchestrator(
+        db=db,
+        analysis_id=analysis_id,
+        repo_name=repo_name,
+        user_id=current_user.id
+    )
 
     try:
-        explanation = llm_service.generate_explanation(prompt)
-        return {"explanation": explanation}
+        result = await orchestrator.explain_trace(
+            feature_query=req.feature_query,
+            trace_data=req.trace_data
+        )
+        return result
     except Exception as e:
-        logger.error(f"Explanation failed: {e}")
+        logger.error(f"Trace explanation failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate explanation")
+
