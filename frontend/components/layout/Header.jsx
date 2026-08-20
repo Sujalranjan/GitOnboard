@@ -15,6 +15,9 @@ export function Header() {
   const [user, setUser] = useState(null);
   const [query, setQuery] = useState(searchParams ? (searchParams.get('search') || '') : '');
   const [debounceTimeout, setDebounceTimeout] = useState(null);
+  const searchInputRef = React.useRef(null);
+
+  const isInsideRepository = Boolean(pathname?.startsWith('/repository'));
 
   useEffect(() => {
     fetch('/api/auth/github/me')
@@ -22,6 +25,20 @@ export function Header() {
       .then(data => setUser(data))
       .catch(() => setUser(null));
   }, []);
+
+  useEffect(() => {
+    if (isInsideRepository) return;
+
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isInsideRepository]);
 
   if (pathname === '/workspace' || pathname?.endsWith('/workspace') || pathname?.includes('/workspace')) {
     return null;
@@ -69,23 +86,26 @@ export function Header() {
         </Link>
       </div>
       
-      <div className="flex-1 max-w-xl px-8 hidden md:block">
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-          </div>
-          <input 
-            type="text" 
-            value={query}
-            onChange={handleSearchChange}
-            placeholder="Search repositories, files, symbols..." 
-            className="block w-full pl-10 pr-10 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors"
-          />
-          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-            <span className="text-xs text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 bg-white dark:bg-slate-800 font-mono">⌘ K</span>
+      {!isInsideRepository && (
+        <div className="flex-1 max-w-xl px-8 hidden md:block">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+            </div>
+            <input 
+              ref={searchInputRef}
+              type="text" 
+              value={query}
+              onChange={handleSearchChange}
+              placeholder="Search repositories, files, symbols..." 
+              className="block w-full pl-10 pr-10 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors"
+            />
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+              <span className="text-xs text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 bg-white dark:bg-slate-800 font-mono">⌘ K</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
       
       <div className="flex items-center gap-2 sm:gap-4">
         <ThemeToggle />
