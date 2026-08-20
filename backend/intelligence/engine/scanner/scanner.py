@@ -80,9 +80,6 @@ class RepositoryScanner:
                 manifest.packages.append(Package(path=rel_path if rel_path != "." else "/", name=root_path.name, type="maven"))
                 
             for file in files:
-                if file.startswith("."):
-                    continue
-                    
                 full_path = root_path / file
                 rel_path = str(full_path.relative_to(self.target_dir)).replace("\\", "/")
                 
