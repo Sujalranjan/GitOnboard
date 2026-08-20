@@ -117,8 +117,6 @@ class AnalysisWorker(WorkerInterface):
                     for root, dirs, files in os.walk(target_dir):
                         dirs[:] = [d for d in dirs if d not in ignored_dirs]
                         for f in files:
-                            if f.startswith("."):
-                                continue
                             full_p = Path(root) / f
                             if not full_p.is_file():
                                 continue

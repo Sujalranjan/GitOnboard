@@ -93,7 +93,7 @@ class WorktreeProvisioner:
             dest_root.mkdir(parents=True, exist_ok=True)
 
             for f in files:
-                if f.startswith(".git") or f.endswith(".pyc") or f.endswith(".tmp"):
+                if f.endswith(".pyc") or f.endswith(".tmp"):
                     continue
                 src_file = Path(root) / f
                 dest_file = dest_root / f
