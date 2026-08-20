@@ -57,18 +57,35 @@ async function handleProxy(request: NextRequest, { path }: { path: string[] }) {
   }
 
   try {
-    // Use AbortController with 300s timeout to allow local LLMs to finish
+    const isStreamRequest = request.headers.get("accept")?.includes("text/event-stream") ||
+                           targetPath.includes("/stream");
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 300000);
+    // Only apply timeout if not an infinite streaming request
+    let timeoutId: NodeJS.Timeout | null = null;
+    if (!isStreamRequest) {
+      timeoutId = setTimeout(() => controller.abort(), 300000);
+    }
     fetchOptions.signal = controller.signal;
 
     const response = await fetch(targetUrl, fetchOptions);
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
 
     const responseHeaders = new Headers();
     response.headers.forEach((value, key) => {
       responseHeaders.set(key, value);
     });
+
+    const contentType = response.headers.get("content-type") || "";
+
+    // For SSE streams (text/event-stream) or stream endpoints, return the body stream immediately
+    if (contentType.includes("text/event-stream") || isStreamRequest) {
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+      });
+    }
 
     const data = await response.blob();
     return new NextResponse(data, {
