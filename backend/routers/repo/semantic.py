@@ -238,9 +238,12 @@ def semantic_search_repo(repo_name: str, q: str, db: Session = Depends(get_db), 
         results = []
         for item in retrieved_items:
             results.append({
+                "symbol_id": item.get("symbol_id") or item.get("id"),
                 "file_path": item.get("file_path", ""),
                 "match_type": item.get("match_type", item.get("type", "symbol")),
                 "match_name": item.get("match_name", item.get("name", "")),
+                "line_start": item.get("line_start"),
+                "line_end": item.get("line_end"),
                 "distance": item.get("distance", 0.0),
                 "rrf_score": item.get("_rrf_score", 0.0),
                 "route": item.get("route"),

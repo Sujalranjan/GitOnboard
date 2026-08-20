@@ -8,6 +8,7 @@ from .semantic import semantic_router
 from .graph import graph_router
 from .trace import trace_router
 from .intelligence import intelligence_router
+from .symbols import symbols_router
 
 repo_router = APIRouter()
 repo_router.add_api_route("", list_repos, methods=["GET"], tags=["repositories"])
@@ -20,5 +21,6 @@ repo_router.include_router(semantic_router)
 repo_router.include_router(graph_router)
 repo_router.include_router(trace_router)
 repo_router.include_router(intelligence_router)
+repo_router.include_router(symbols_router)
 
 __all__ = ["repo_router", "import_router"]

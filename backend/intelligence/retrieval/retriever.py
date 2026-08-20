@@ -72,33 +72,56 @@ class HybridRetriever:
         # 2. Index Routes
         routes = self.db.query(FactRoute).filter(FactRoute.analysis_id == self.analysis_id).all()
         for r in routes:
-            search_text = f"route {r.method} {r.path}"
+            handler_id = r.handler_symbol_id or r.symbol_id
+            fpath = ""
+            l_start = None
+            l_end = None
+            if handler_id:
+                sym = self.db.query(FactSymbol).filter(FactSymbol.id == handler_id).first()
+                if sym:
+                    fpath = sym.file.path if sym.file else ""
+                    l_start = sym.line_start
+                    l_end = sym.line_end
+            search_text = f"route {r.method} {r.path} {fpath}"
             docs.append({
                 "id": r.id,
                 "name": f"{r.method} {r.path}",
                 "qualified_name": f"{r.method} {r.path}",
                 "type": "route",
-                "file_path": "",
+                "file_path": fpath,
                 "search_text": search_text,
                 "match_type": "route",
                 "match_name": f"{r.method} {r.path}",
-                "symbol_id": r.symbol_id,
+                "symbol_id": handler_id or r.symbol_id or r.id,
+                "line_start": l_start,
+                "line_end": l_end,
             })
 
         # 3. Index DB Objects
         db_objs = self.db.query(FactDatabaseObject).filter(FactDatabaseObject.analysis_id == self.analysis_id).all()
         for d in db_objs:
-            search_text = f"database table {d.name} {d.object_type}"
+            fpath = ""
+            l_start = None
+            l_end = None
+            if d.symbol_id:
+                sym = self.db.query(FactSymbol).filter(FactSymbol.id == d.symbol_id).first()
+                if sym:
+                    fpath = sym.file.path if sym.file else ""
+                    l_start = sym.line_start
+                    l_end = sym.line_end
+            search_text = f"database table {d.name} {d.object_type} {fpath}"
             docs.append({
                 "id": d.id,
                 "name": d.name,
                 "qualified_name": d.name,
                 "type": "database_table",
-                "file_path": "",
+                "file_path": fpath,
                 "search_text": search_text,
                 "match_type": "database_table",
                 "match_name": d.name,
-                "symbol_id": d.symbol_id,
+                "symbol_id": d.symbol_id or d.id,
+                "line_start": l_start,
+                "line_end": l_end,
             })
 
         self.bm25_index = BM25Index()
@@ -138,14 +161,26 @@ class HybridRetriever:
             (FactRoute.path.ilike(f"%{q_clean}%")) | (FactRoute.path == q_clean)
         ).all()
         for r in routes:
+            handler_id = r.handler_symbol_id or r.symbol_id
+            fpath = ""
+            l_start = None
+            l_end = None
+            if handler_id:
+                sym = self.db.query(FactSymbol).filter(FactSymbol.id == handler_id).first()
+                if sym:
+                    fpath = sym.file.path if sym.file else ""
+                    l_start = sym.line_start
+                    l_end = sym.line_end
             results.append({
                 "id": r.id,
-                "symbol_id": r.symbol_id,
+                "symbol_id": handler_id or r.symbol_id or r.id,
                 "name": f"{r.method} {r.path}",
                 "match_name": f"{r.method} {r.path}",
                 "type": "route",
                 "match_type": "route",
-                "file_path": "",
+                "file_path": fpath,
+                "line_start": l_start,
+                "line_end": l_end,
                 "score_type": "exact_fact"
             })
 
@@ -155,14 +190,25 @@ class HybridRetriever:
             (FactDatabaseObject.name.ilike(q_clean)) | (FactDatabaseObject.name == q_clean)
         ).all()
         for d in db_objs:
+            fpath = ""
+            l_start = None
+            l_end = None
+            if d.symbol_id:
+                sym = self.db.query(FactSymbol).filter(FactSymbol.id == d.symbol_id).first()
+                if sym:
+                    fpath = sym.file.path if sym.file else ""
+                    l_start = sym.line_start
+                    l_end = sym.line_end
             results.append({
                 "id": d.id,
-                "symbol_id": d.symbol_id,
+                "symbol_id": d.symbol_id or d.id,
                 "name": d.name,
                 "match_name": d.name,
                 "type": "database_table",
                 "match_type": "database_table",
-                "file_path": "",
+                "file_path": fpath,
+                "line_start": l_start,
+                "line_end": l_end,
                 "score_type": "exact_fact"
             })
 
