@@ -19,9 +19,19 @@ from backend.agent.planning import (
     PlanValidator,
     PlanningOrchestrator,
 )
+from backend.agent.tasks import (
+    DefaultTaskExecutor,
+    DefaultVerificationDispatcher,
+    InvalidTaskStateTransitionError,
+    TaskExecutionContext,
+    TaskExecutionResult,
+    TaskExecutor,
+    TaskOrchestrator,
+    TaskOrchestratorError,
+    TaskStateMachine,
+    VerificationDispatcher,
+)
 from backend.agent.engineering_agent import (
-
-
     EngineeringAgent,
     EngineeringAgentError,
     RunNotFoundError,
@@ -93,6 +103,16 @@ __all__ = [
     "PlanValidationResult",
     "PlanValidator",
     "PlanningOrchestrator",
+    "TaskOrchestrator",
+    "TaskOrchestratorError",
+    "TaskStateMachine",
+    "InvalidTaskStateTransitionError",
+    "TaskExecutor",
+    "DefaultTaskExecutor",
+    "VerificationDispatcher",
+    "DefaultVerificationDispatcher",
+    "TaskExecutionContext",
+    "TaskExecutionResult",
 ]
 
 
