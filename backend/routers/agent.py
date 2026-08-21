@@ -354,6 +354,93 @@ def reject_run_plan(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
 
 
+@router.post("/runs/{run_id}/execute", response_model=AgentRunResponse)
+def execute_approved_plan(
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> AgentRunResponse:
+    """
+    Starts controlled execution of the approved implementation plan.
+    Strict preconditions: Run must be in AWAITING_APPROVAL and Plan must be APPROVED.
+    """
+    try:
+        run = agent_service.start_plan_execution(db=db, run_id=run_id)
+        return _serialize_run(run)
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except InvalidStateTransitionError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
+    except EngineeringAgentError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+    except Exception as err:
+        logger.error(f"Plan execution start failed for run '{run_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+@router.post("/runs/{run_id}/tasks/next")
+def execute_next_plan_task(
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Executes the next eligible task deterministically according to DAG dependencies.
+    """
+    try:
+        task, exec_result = agent_service.execute_next_task(db=db, run_id=run_id)
+        if not task:
+            return {"message": "No eligible tasks ready for execution", "task": None, "result": None}
+        return {
+            "task": task.model_dump(mode="json"),
+            "result": exec_result.model_dump(mode="json") if exec_result else None,
+        }
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except EngineeringAgentError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+    except Exception as err:
+        logger.error(f"Execute next task failed for run '{run_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+@router.get("/runs/{run_id}/tasks")
+def get_run_tasks(
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    """
+    Returns all tasks and current lifecycle statuses for the run.
+    """
+    try:
+        tasks = agent_service.get_plan_tasks(db=db, run_id=run_id)
+        return [t.model_dump(mode="json") for t in tasks]
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except Exception as err:
+        logger.error(f"Get plan tasks failed for run '{run_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+@router.get("/runs/{run_id}/tasks/{task_id}")
+def get_run_task_detail(
+    run_id: str,
+    task_id: str,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Returns details of an individual task by task_id.
+    """
+    try:
+        task = agent_service.get_plan_task(db=db, run_id=run_id, task_id=task_id)
+        if not task:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task '{task_id}' not found")
+        return task.model_dump(mode="json")
+    except HTTPException:
+        raise
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except Exception as err:
+        logger.error(f"Get plan task detail failed for run '{run_id}', task '{task_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
 
 
 @router.get("/runs/{run_id}/events/stream")

@@ -25,8 +25,17 @@ from backend.agent.context.contracts import (
     ContextBudget,
     RepositoryContext,
 )
-from backend.agent.planning.contracts import Plan, PlanStatus
+from backend.agent.planning.contracts import Plan, PlanStatus, PlanTask, PlanTaskStatus
 from backend.agent.planning.orchestrator import PlanningOrchestrator
+from backend.agent.tasks import (
+    DefaultTaskExecutor,
+    DefaultVerificationDispatcher,
+    TaskExecutionContext,
+    TaskExecutionResult,
+    TaskExecutor,
+    TaskOrchestrator,
+    VerificationDispatcher,
+)
 
 from backend.agent.tools.contracts import (
     AgentToolContext,
@@ -68,11 +77,13 @@ class EngineeringAgent:
         event_coordinator: Optional[AgentEventCoordinator] = None,
         tool_registry: Optional[AgentToolRegistry] = None,
         llm_service: Optional[Any] = None,
+        task_orchestrator: Optional[TaskOrchestrator] = None,
     ):
         self.events = event_coordinator or AgentEventCoordinator()
         self.state_machine = AgentStateMachine()
         self.tools = tool_registry or create_default_tool_registry()
         self.llm_service = llm_service
+        self.task_orchestrator = task_orchestrator or TaskOrchestrator()
 
 
     def create_run(
@@ -218,6 +229,25 @@ class EngineeringAgent:
 
         cancel_msg = reason or "Run cancelled by user request"
         run.cancellation_reason = cancel_msg
+
+        # Update in-flight plan tasks to BLOCKED
+        meta = run.metadata_json or {}
+        plan_dict = meta.get("plan")
+        if plan_dict and isinstance(plan_dict, dict):
+            try:
+                plan = Plan.model_validate(plan_dict)
+                for t in plan.tasks:
+                    if t.status in (PlanTaskStatus.RUNNING, PlanTaskStatus.VERIFYING, PlanTaskStatus.READY, PlanTaskStatus.PENDING):
+                        t.status = PlanTaskStatus.BLOCKED
+                        t.blocked_reason = f"Run cancelled: {cancel_msg}"
+                        t.completed_at = datetime.now(timezone.utc)
+                meta["plan"] = plan.model_dump(mode="json")
+                run.metadata_json = meta
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(run, "metadata_json")
+            except Exception as err:
+                logger.warning(f"Failed to cancel plan tasks for run '{run.id}': {err}")
+
         db.add(run)
         db.commit()
 
@@ -238,6 +268,7 @@ class EngineeringAgent:
         )
 
         return run
+
 
     def execute_controlled_action(
         self,
@@ -750,12 +781,262 @@ class EngineeringAgent:
 
         return run
 
-    def recover_in_flight_runs(self, db: Session) -> List[str]:
+    def start_plan_execution(self, db: Session, run_id: str) -> AgentRun:
+        """
+        Initiates controlled execution of an approved implementation plan.
+        Strict preconditions:
+          - AgentRun.current_state == AgentState.AWAITING_APPROVAL
+          - Plan.status == PlanStatus.APPROVED
+          - Plan.validation.valid is True
+        Transitions run state from AWAITING_APPROVAL -> EXECUTING and marks initial eligible tasks READY.
+        """
+        run = self.get_run(db, run_id)
 
+        if run.current_state != AgentState.AWAITING_APPROVAL:
+            raise EngineeringAgentError(
+                f"Cannot start execution for run '{run_id}' in state '{run.current_state.value}'. "
+                f"Run must be in '{AgentState.AWAITING_APPROVAL.value}' state."
+            )
+
+        plan = self.get_plan(db, run_id)
+        if not plan:
+            raise EngineeringAgentError(f"No plan found for run '{run_id}'")
+
+        if plan.status != PlanStatus.APPROVED:
+            raise EngineeringAgentError(
+                f"Cannot execute unapproved plan '{plan.plan_id}' with status '{plan.status.value}'. "
+                f"Plan must be explicitly APPROVED before execution."
+            )
+
+        if not plan.validation or not plan.validation.valid:
+            raise EngineeringAgentError(f"Cannot execute invalid plan '{plan.plan_id}'.")
+
+        # Evaluate dependencies to unlock initial eligible tasks to READY
+        self.task_orchestrator.evaluate_dependencies(plan)
+
+        # Persist updated plan in run metadata
+        from sqlalchemy.orm.attributes import flag_modified
+        meta = run.metadata_json or {}
+        meta["plan"] = plan.model_dump(mode="json")
+        run.metadata_json = meta
+        flag_modified(run, "metadata_json")
+        db.add(run)
+        db.commit()
+
+        # Transition run state AWAITING_APPROVAL -> EXECUTING
+        self.transition_state(
+            db,
+            run.id,
+            to_state=AgentState.EXECUTING,
+            reason=f"Plan '{plan.plan_id}' approved; starting controlled execution of {len(plan.tasks)} tasks",
+        )
+
+        # Emit TASK_READY events for initial ready tasks
+        for task in plan.tasks:
+            if task.status == PlanTaskStatus.READY:
+                self.events.emit_event(
+                    db,
+                    run,
+                    AgentEventType.TASK_READY,
+                    f"Task '{task.task_id}' ('{task.title}') is READY for execution.",
+                    {"task_id": task.task_id, "step_number": task.step_number},
+                )
+
+        return run
+
+    def get_plan_tasks(self, db: Session, run_id: str) -> List[PlanTask]:
+        """
+        Returns all PlanTask items with current lifecycle statuses for the run.
+        """
+        plan = self.get_plan(db, run_id)
+        if not plan:
+            return []
+        # Keep dependencies evaluated
+        self.task_orchestrator.evaluate_dependencies(plan)
+        return plan.tasks
+
+    def get_plan_task(self, db: Session, run_id: str, task_id: str) -> Optional[PlanTask]:
+        """
+        Retrieves a single PlanTask by task_id.
+        """
+        plan = self.get_plan(db, run_id)
+        if not plan:
+            return None
+        return next((t for t in plan.tasks if t.task_id == task_id), None)
+
+    def get_next_task(self, db: Session, run_id: str) -> Optional[PlanTask]:
+        """
+        Deterministically selects the next eligible task to execute according to DAG dependencies.
+        """
+        run = self.get_run(db, run_id)
+        plan = self.get_plan(db, run_id)
+        if not plan:
+            return None
+        return self.task_orchestrator.select_next_task(plan)
+
+    def execute_next_task(
+        self,
+        db: Session,
+        run_id: str,
+    ) -> Tuple[Optional[PlanTask], Optional[TaskExecutionResult]]:
+        """
+        Executes the next eligible task sequentially:
+          1. Selects next READY task deterministically: (step_number, task_id)
+          2. Transitions task READY -> RUNNING
+          3. Executes task via TaskExecutor boundary
+          4. Transitions task RUNNING -> VERIFYING (or FAILED)
+          5. Evaluates verification criteria via VerificationDispatcher
+          6. Transitions task VERIFYING -> PASSED (or FAILED)
+          7. Unlocks downstream dependencies or marks downstream BLOCKED
+          8. Persists plan state in run metadata and emits audit events
+        """
+        run = self.get_run(db, run_id)
+        if run.current_state != AgentState.EXECUTING:
+            raise EngineeringAgentError(
+                f"Cannot execute tasks for run '{run_id}' in state '{run.current_state.value}'. "
+                f"Run must be in '{AgentState.EXECUTING.value}' state."
+            )
+
+        plan = self.get_plan(db, run_id)
+        if not plan or plan.status != PlanStatus.APPROVED:
+            raise EngineeringAgentError(f"No approved plan found for run '{run_id}'")
+
+        next_task = self.task_orchestrator.select_next_task(plan)
+        if not next_task:
+            return None, None
+
+        task_id = next_task.task_id
+
+        # Emit NEXT_TASK_SELECTED event
+        self.events.emit_event(
+            db,
+            run,
+            AgentEventType.NEXT_TASK_SELECTED,
+            f"Selected next eligible task '{task_id}': '{next_task.title}'",
+            {"task_id": task_id, "step_number": next_task.step_number},
+        )
+
+        # 1. Start task (READY -> RUNNING)
+        self.task_orchestrator.start_task(plan, task_id)
+        self.events.emit_event(
+            db,
+            run,
+            AgentEventType.TASK_STARTED,
+            f"Started executing task '{task_id}': '{next_task.title}'",
+            {"task_id": task_id, "step_number": next_task.step_number},
+        )
+
+        # Build execution context
+        repo_ctx = (run.metadata_json or {}).get("repository_context", {})
+        exec_ctx = TaskExecutionContext(
+            agent_run_id=run.id,
+            plan_id=plan.plan_id,
+            task_id=task_id,
+            repository_id=run.repository_id,
+            worktree_path=run.worktree_path,
+            task_definition=next_task,
+            repository_context_summary=repo_ctx,
+            execution_config=(run.metadata_json or {}).get("config", {}),
+        )
+
+        # 2. Execute task via TaskExecutor boundary
+        exec_result = self.task_orchestrator.executor.execute(exec_ctx)
+        self.task_orchestrator.complete_task_execution(plan, task_id, exec_result)
+
+        if exec_result.success:
+            self.events.emit_event(
+                db,
+                run,
+                AgentEventType.TASK_EXECUTION_COMPLETED,
+                f"Task '{task_id}' execution completed in {exec_result.duration_ms:.1f}ms: {exec_result.summary}",
+                {"task_id": task_id, "duration_ms": exec_result.duration_ms, "changed_files": exec_result.changed_files},
+            )
+
+            # 3. Verification Handoff
+            self.events.emit_event(
+                db,
+                run,
+                AgentEventType.TASK_VERIFYING,
+                f"Verifying task '{task_id}' criteria ({next_task.verification_strategy})...",
+                {"task_id": task_id, "verification_strategy": next_task.verification_strategy},
+            )
+            passed, v_err = self.task_orchestrator.verifier.verify_task(exec_ctx, exec_result)
+            self.task_orchestrator.record_verification_result(plan, task_id, passed, v_err)
+
+            if passed:
+                self.events.emit_event(
+                    db,
+                    run,
+                    AgentEventType.TASK_PASSED,
+                    f"Task '{task_id}' passed verification criteria.",
+                    {"task_id": task_id},
+                )
+            else:
+                self.events.emit_event(
+                    db,
+                    run,
+                    AgentEventType.TASK_FAILED,
+                    f"Task '{task_id}' failed verification: {v_err}",
+                    {"task_id": task_id, "failure_reason": v_err},
+                )
+        else:
+            self.events.emit_event(
+                db,
+                run,
+                AgentEventType.TASK_EXECUTION_FAILED,
+                f"Task '{task_id}' execution failed: {exec_result.error}",
+                {"task_id": task_id, "error": exec_result.error},
+            )
+            self.events.emit_event(
+                db,
+                run,
+                AgentEventType.TASK_FAILED,
+                f"Task '{task_id}' failed: {exec_result.error}",
+                {"task_id": task_id, "failure_reason": exec_result.error},
+            )
+
+        # Emit events for any newly blocked or ready tasks
+        for t in plan.tasks:
+            if t.task_id != task_id:
+                if t.status == PlanTaskStatus.BLOCKED and not t.metadata.get("blocked_event_emitted"):
+                    t.metadata["blocked_event_emitted"] = True
+                    self.events.emit_event(
+                        db,
+                        run,
+                        AgentEventType.TASK_BLOCKED,
+                        f"Task '{t.task_id}' is BLOCKED: {t.blocked_reason}",
+                        {"task_id": t.task_id, "blocked_reason": t.blocked_reason},
+                    )
+                elif t.status == PlanTaskStatus.READY and not t.metadata.get("ready_event_emitted"):
+                    t.metadata["ready_event_emitted"] = True
+                    self.events.emit_event(
+                        db,
+                        run,
+                        AgentEventType.TASK_READY,
+                        f"Task '{t.task_id}' ('{t.title}') is now READY.",
+                        {"task_id": t.task_id},
+                    )
+
+        # Persist updated plan
+        from sqlalchemy.orm.attributes import flag_modified
+        meta = run.metadata_json or {}
+        meta["plan"] = plan.model_dump(mode="json")
+        run.metadata_json = meta
+        flag_modified(run, "metadata_json")
+        db.add(run)
+        db.commit()
+
+        if self.task_orchestrator.all_tasks_passed(plan):
+            logger.info(f"All {len(plan.tasks)} tasks in plan '{plan.plan_id}' passed! Ready for Phase 7 final verification.")
+
+        return self.task_orchestrator._find_task(plan, task_id), exec_result
+
+    def recover_in_flight_runs(self, db: Session) -> List[str]:
         """
         Restart recovery: Detects non-terminal runs interrupted by a server reboot
         and transitions them safely to FAILED with explicit failure reason,
         preventing orphaned or false-positive active states.
+        Preserves truthful task states by marking active in-flight tasks as BLOCKED/FAILED.
         """
         active_states = [
             AgentState.IDLE,
@@ -771,6 +1052,25 @@ class EngineeringAgent:
 
         for run in orphaned:
             logger.warning(f"EngineeringAgent recovery: Terminating interrupted run '{run.id}' (state: {run.current_state.value})")
+            
+            # Inspect plan tasks and mark any RUNNING / VERIFYING task as BLOCKED
+            meta = run.metadata_json or {}
+            plan_dict = meta.get("plan")
+            if plan_dict and isinstance(plan_dict, dict):
+                try:
+                    plan = Plan.model_validate(plan_dict)
+                    for t in plan.tasks:
+                        if t.status in (PlanTaskStatus.RUNNING, PlanTaskStatus.VERIFYING):
+                            t.status = PlanTaskStatus.BLOCKED
+                            t.blocked_reason = "Server restart interrupted active task execution"
+                            t.completed_at = datetime.now(timezone.utc)
+                    meta["plan"] = plan.model_dump(mode="json")
+                    run.metadata_json = meta
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(run, "metadata_json")
+                except Exception as err:
+                    logger.warning(f"Recovery: failed to update plan tasks for run '{run.id}': {err}")
+
             run.error_message = "Server restart interrupted active execution"
             run.completed_at = datetime.now(timezone.utc)
             run.current_state = AgentState.FAILED
@@ -793,3 +1093,4 @@ class EngineeringAgent:
             logger.info(f"EngineeringAgent recovery: Successfully recovered {len(recovered_ids)} interrupted run(s)")
 
         return recovered_ids
+

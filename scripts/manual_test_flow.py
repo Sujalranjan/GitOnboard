@@ -1,5 +1,5 @@
 """
-Manual Verification Script: Comprehensive End-to-End Test for Phase 1, Phase 2, Phase 3 & Phase 4.
+Manual Verification Script: Comprehensive End-to-End Test for Phase 1, Phase 2, Phase 3, Phase 4 & Phase 5.
 
 This script executes and logs every stage of the Engineering Agent lifecycle:
   1. AgentRun Creation & Lifecycle State (Phase 1)
@@ -7,15 +7,17 @@ This script executes and logs every stage of the Engineering Agent lifecycle:
   3. Planning Orchestration & Validation (Phase 4: Plan, PlanTask DAG, PlanValidator -> AWAITING_APPROVAL)
   4. Human Plan Rejection & Revision (Phase 4: Plan v1 -> Plan v2 revision)
   5. Explicit Human Approval Boundary (Phase 4: Plan v2 APPROVED; Invariant: Zero execution during approval!)
-  6. Transition to EXECUTING (Phase 1 State Machine)
-  7. Repository Tools (read_file with bounded lines)
-  8. Workspace Isolated File & Patch Tools (create_file, modify_file, get_diff)
-  9. Terminal Tools (detect_commands via sandbox)
-  10. Verification Mesh Tools (verify_static AST integrity)
-  11. Git Tools (create_checkpoint, git_status)
-  12. Tool Policy Safety Enforcement (BLOCKED policy blocks handler execution)
-  13. Database Event Audit & History (AgentEvent log inspection)
-  14. Terminal State Locking (COMPLETED state locks execution)
+  6. Start Plan Execution (Phase 5: AWAITING_APPROVAL -> EXECUTING, unlock initial tasks to READY)
+  7. Sequential Task Orchestration & Execution (Phase 5: TaskOrchestrator -> TaskExecutor -> VerificationDispatcher -> PASSED)
+  8. Inspect Task DAG & Statuses (Phase 5: get_plan_tasks query)
+  9. Repository Tools (read_file with bounded lines)
+  10. Workspace Isolated File & Patch Tools (create_file, modify_file, get_diff)
+  11. Terminal Tools (detect_commands via sandbox)
+  12. Verification Mesh Tools (verify_static AST integrity)
+  13. Git Tools (create_checkpoint, git_status)
+  14. Tool Policy Safety Enforcement (BLOCKED policy blocks handler execution)
+  15. Database Event Audit & History (AgentEvent log inspection)
+  16. Terminal State Locking (COMPLETED state locks execution)
 
 Run via uv:
   uv run python scripts/manual_test_flow.py
@@ -33,7 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.agent.engineering_agent import EngineeringAgent, EngineeringAgentError
-from backend.agent.planning.contracts import PlanStatus
+from backend.agent.planning.contracts import PlanStatus, PlanTaskStatus
 from backend.agent.tools.policy import PolicyAction
 from backend.agent.tools import create_default_tool_registry
 from backend.database import Base, SessionLocal, engine
@@ -63,7 +65,7 @@ def print_kv(key: str, value: any, indent: int = 4):
 def main():
     print_banner(
         "GITONBOARD ENGINEERING AGENT -- COMPLETE SYSTEM VERIFICATION\n"
-        "  COVERS: PHASE 1 (LIFECYCLE) + PHASE 2 (TOOLS) + PHASE 3 (CONTEXT) + PHASE 4 (PLANNING & APPROVAL)"
+        "  COVERS: PHASE 1 (LIFECYCLE) + PHASE 2 (TOOLS) + PHASE 3 (CONTEXT) + PHASE 4 (PLANNING) + PHASE 5 (TASK ORCHESTRATOR)"
     )
 
     # 0. Initialize Database
@@ -166,14 +168,44 @@ def main():
         assert git_check.stdout.strip() == ""
         print_kv("Non-Execution Invariant", "PASSED -> Git working tree is 100% clean. Zero code executed during planning/approval.")
 
-        # 6. State Machine Transitions to EXECUTING (Phase 1)
-        print_step_header(6, "State Machine Transition (AWAITING_APPROVAL -> EXECUTING)")
-        agent.transition_state(db, run.id, to_state=AgentState.EXECUTING, reason="User approved plan; starting tool executions")
+        # 6. Start Plan Execution (Phase 5: TaskOrchestrator Initiation)
+        print_step_header(6, "Start Plan Execution (Phase 5: AWAITING_APPROVAL -> EXECUTING)")
+        agent.start_plan_execution(db, run_id=run.id)
         print_kv("Current State", run.current_state.value)
         assert run.current_state == AgentState.EXECUTING
 
-        # 7. Repository Tools (Phase 2)
-        print_step_header(7, "Invoke Repository Tools (read_file with bounded range)")
+        # 7. Sequential Task Orchestration & Verification (Phase 5)
+        print_step_header(7, "Sequential Task Orchestration & Verification (Phase 5)")
+        tasks = agent.get_plan_tasks(db, run_id=run.id)
+        print_kv("Total Tasks to Orchestrate", len(tasks))
+        
+        executed_tasks = []
+        while True:
+            next_task = agent.get_next_task(db, run_id=run.id)
+            if not next_task:
+                print("      * No more tasks ready for execution (DAG complete).")
+                break
+            
+            print(f"\n      --> Executing eligible task: [{next_task.task_id}] '{next_task.title}' (step {next_task.step_number})")
+            task_result, exec_result = agent.execute_next_task(db, run_id=run.id)
+            print_kv("Task Execution Status", task_result.status.value, indent=10)
+            print_kv("Execution Summary", exec_result.summary, indent=10)
+            print_kv("Elapsed Time", f"{exec_result.duration_ms:.1f} ms", indent=10)
+            assert task_result.status == PlanTaskStatus.PASSED
+            executed_tasks.append(task_result)
+
+        assert len(executed_tasks) == len(tasks)
+        print_kv("All Tasks Passed", "PASSED -> Every task completed through TaskExecutor and VerificationDispatcher.")
+
+        # 8. Query Task Graph & Detail (Phase 5)
+        print_step_header(8, "Query Task Graph & Detail (Phase 5)")
+        final_tasks = agent.get_plan_tasks(db, run_id=run.id)
+        for t in final_tasks:
+            print_kv(f"Task [{t.task_id}]", f"status={t.status.value} (deps={t.dependencies}, verif={t.verification_strategy})")
+            assert t.status == PlanTaskStatus.PASSED
+
+        # 9. Repository Tools (Phase 2)
+        print_step_header(9, "Invoke Repository Tools (read_file with bounded range)")
         res_read = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -186,10 +218,10 @@ def main():
         print_kv("Raw Content", "\n" + res_read.data.get("content", "").strip())
         assert res_read.success
 
-        # 8. Workspace Tools (Phase 2)
-        print_step_header(8, "Invoke Workspace Isolated Tools (create_file, modify_file, get_diff)")
+        # 10. Workspace Tools (Phase 2)
+        print_step_header(10, "Invoke Workspace Isolated Tools (create_file, modify_file, get_diff)")
         
-        # 8.1 create_file
+        # 10.1 create_file
         res_create = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -202,7 +234,7 @@ def main():
         assert res_create.success
         assert (wt_path / "calculator.py").exists()
 
-        # 8.2 modify_file
+        # 10.2 modify_file
         res_mod = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -213,22 +245,22 @@ def main():
         print_kv("Modified Bytes", res_mod.data.get("bytes_written"))
         assert res_mod.success
 
-        # 8.3 get_diff
+        # 10.3 get_diff
         res_diff = agent.invoke_tool(db, run_id=run.id, tool_name="get_diff", arguments={})
         print_kv("get_diff Status", "SUCCESS" if res_diff.success else "FAILED")
         print_kv("Modified Files", res_diff.data.get("modified_files"))
         print_kv("Unified Diff Output", "\n" + res_diff.data.get("diff", "(empty diff)"))
         assert res_diff.success
 
-        # 9. Terminal Tools (Phase 2)
-        print_step_header(9, "Invoke Terminal Tools (detect_commands in sandbox)")
+        # 11. Terminal Tools (Phase 2)
+        print_step_header(11, "Invoke Terminal Tools (detect_commands in sandbox)")
         res_detect = agent.invoke_tool(db, run_id=run.id, tool_name="detect_commands", arguments={})
         print_kv("detect_commands Status", "SUCCESS" if res_detect.success else "FAILED")
         print_kv("Detected Build/Test Tools", res_detect.data.get("detected_commands"))
         assert res_detect.success
 
-        # 10. Verification Tools (Phase 2)
-        print_step_header(10, "Invoke Verification Mesh (verify_static AST & Import Integrity)")
+        # 12. Verification Tools (Phase 2)
+        print_step_header(12, "Invoke Verification Mesh (verify_static AST & Import Integrity)")
         res_verify = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -240,13 +272,13 @@ def main():
         print_kv("Defects Detected", res_verify.data.get("defects"))
         assert res_verify.success
 
-        # 11. Git Tools (Phase 2)
-        print_step_header(11, "Invoke Git Tools (create_checkpoint, git_status)")
+        # 13. Git Tools (Phase 2)
+        print_step_header(13, "Invoke Git Tools (create_checkpoint, git_status)")
         res_cp = agent.invoke_tool(
             db,
             run_id=run.id,
             tool_name="create_checkpoint",
-            arguments={"message": "Phase 4 verification checkpoint"},
+            arguments={"message": "Phase 5 verification checkpoint"},
         )
         print_kv("create_checkpoint Status", "SUCCESS" if res_cp.success else "FAILED")
         print_kv("Commit SHA", res_cp.data.get("commit_sha"))
@@ -257,9 +289,8 @@ def main():
         print_kv("git status porcelain", res_status.data.get("porcelain_output", "(clean)"))
         assert res_status.success
 
-        # 12. Tool Policy Safety Enforcement (Phase 2 Invariant)
-        print_step_header(12, "Policy Safety Enforcement (BLOCKED Policy Invariant)")
-        # Dynamically set policy to BLOCKED for delete_file
+        # 14. Tool Policy Safety Enforcement (Phase 2 Invariant)
+        print_step_header(14, "Policy Safety Enforcement (BLOCKED Policy Invariant)")
         agent.tools.policy.set_policy("delete_file", PolicyAction.BLOCKED, reason="Deletion of files is forbidden in this environment")
         res_blocked = agent.invoke_tool(
             db,
@@ -272,12 +303,11 @@ def main():
         print_kv("Rejection Message", res_blocked.error.message)
         assert not res_blocked.success
         assert res_blocked.error.code == "POLICY_BLOCKED"
-        # Verify file still exists on disk (handler never executed)
         assert (wt_path / "calculator.py").exists()
         print_kv("Filesystem Safety Invariant", "PASSED -> 'calculator.py' remains intact on disk; handler NEVER ran.")
 
-        # 13. Inspect Persisted Agent Events (PostgreSQL Audit)
-        print_step_header(13, "Inspect Persisted Agent Events Audit Log")
+        # 15. Inspect Persisted Agent Events (PostgreSQL Audit)
+        print_step_header(15, "Inspect Persisted Agent Events Audit Log")
         events = db.query(AgentEvent).filter(AgentEvent.agent_run_id == run.id).order_by(AgentEvent.id).all()
         print_kv("Total Events Recorded in Database", len(events))
         print(f"\n    {'ID':<5} | {'EVENT TYPE':<28} | {'MESSAGE'}")
@@ -286,8 +316,8 @@ def main():
             evt_name = evt.event_type.value if hasattr(evt.event_type, "value") else str(evt.event_type)
             print(f"    {evt.id:<5} | {evt_name:<28} | {evt.message}")
 
-        # 14. Lifecycle Completion & Terminal State Locking (Phase 1)
-        print_step_header(14, "Lifecycle Completion (EXECUTING -> VERIFYING -> COMPLETED)")
+        # 16. Lifecycle Completion & Terminal State Locking (Phase 1)
+        print_step_header(16, "Lifecycle Completion (EXECUTING -> VERIFYING -> COMPLETED)")
         agent.transition_state(db, run.id, to_state=AgentState.VERIFYING, reason="Running automated verification suite")
         agent.transition_state(db, run.id, to_state=AgentState.COMPLETED, reason="All goals and tests verified successfully")
         print_kv("Final Lifecycle State", run.current_state.value)
@@ -304,7 +334,7 @@ def main():
 
     db.close()
 
-    print_banner("ALL FLOWS (PHASE 1, PHASE 2, PHASE 3 & PHASE 4) VERIFIED AND PASSED SUCCESSFULLY!")
+    print_banner("ALL FLOWS (PHASE 1, PHASE 2, PHASE 3, PHASE 4 & PHASE 5) VERIFIED AND PASSED SUCCESSFULLY!")
 
 
 if __name__ == "__main__":

@@ -59,6 +59,7 @@ class PlanTask(BaseModel):
     blocked_reason: Optional[str] = Field(default=None, description="Upstream failure explanation if task became blocked")
     started_at: Optional[datetime] = Field(default=None, description="Timestamp when task execution started")
     completed_at: Optional[datetime] = Field(default=None, description="Timestamp when task completed (PASSED, FAILED, BLOCKED, SKIPPED)")
+    updated_at: Optional[datetime] = Field(default=None, description="Timestamp of latest task state update")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Arbitrary task metadata")
 
 
