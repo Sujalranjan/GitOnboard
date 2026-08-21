@@ -19,6 +19,19 @@ from sqlalchemy.orm import Session
 
 from backend.agent.event_coordinator import AgentEventCoordinator
 from backend.agent.state_machine import AgentStateMachine, InvalidStateTransitionError
+from backend.agent.context.assembler import ContextAssembler
+from backend.agent.context.contracts import (
+    ContextAssemblyRequest,
+    ContextBudget,
+    RepositoryContext,
+)
+from backend.agent.tools.contracts import (
+    AgentToolContext,
+    ToolErrorCode,
+    ToolResult,
+)
+from backend.agent.tools.registry import AgentToolRegistry
+from backend.agent.tools import create_default_tool_registry
 from backend.models.implementation import (
     AgentEventType,
     AgentRun,
@@ -47,9 +60,14 @@ class EngineeringAgent:
     Controlled execution shell and orchestration boundary for EngineeringAgent sessions.
     """
 
-    def __init__(self, event_coordinator: Optional[AgentEventCoordinator] = None):
+    def __init__(
+        self,
+        event_coordinator: Optional[AgentEventCoordinator] = None,
+        tool_registry: Optional[AgentToolRegistry] = None,
+    ):
         self.events = event_coordinator or AgentEventCoordinator()
         self.state_machine = AgentStateMachine()
+        self.tools = tool_registry or create_default_tool_registry()
 
     def create_run(
         self,
@@ -324,6 +342,175 @@ class EngineeringAgent:
             "duration_ms": round(duration_ms, 2),
             "result": result_data,
         }
+
+    def invoke_tool(
+        self,
+        db: Session,
+        run_id: str,
+        tool_name: str,
+        arguments: Optional[Dict[str, Any]] = None,
+    ) -> ToolResult:
+        """
+        Executes a registered tool on behalf of the agent session.
+        Enforces run state, builds execution context, emits lifecycle events,
+        and logs tool call observation in run metadata.
+        """
+        run = self.get_run(db, run_id)
+
+        # Invariant: Terminal state check
+        if self.state_machine.is_terminal(run.current_state):
+            raise EngineeringAgentError(
+                f"Cannot invoke tool '{tool_name}' on run '{run_id}' in terminal state '{run.current_state.value}'"
+            )
+
+        args = arguments or {}
+
+        # 1. Build authenticated execution context
+        context = AgentToolContext(
+            agent_run_id=run.id,
+            repository_id=run.repository_id or "default",
+            task_id=run.task_id,
+            worktree_path=run.worktree_path,
+            db=db,
+            config=run.metadata_json or {},
+        )
+
+        # 2. Emit TOOL_CALL_STARTED
+        safe_args_meta = {k: v for k, v in args.items() if k not in ("content", "patch_text")}
+        self.events.emit_event(
+            db,
+            run,
+            AgentEventType.TOOL_CALL_STARTED,
+            f"Invoking tool '{tool_name}'",
+            {"tool_name": tool_name, "arguments": safe_args_meta},
+        )
+
+        # 3. Dispatch through central tool registry
+        result = self.tools.invoke(tool_name, args, context)
+
+        # 4. Map event type based on tool execution result
+        if result.error and result.error.code == ToolErrorCode.POLICY_BLOCKED.value:
+            event_type = AgentEventType.TOOL_CALL_BLOCKED
+            msg = f"Tool '{tool_name}' blocked: {result.error.message}"
+        elif result.error and result.error.code == ToolErrorCode.APPROVAL_REQUIRED.value:
+            event_type = AgentEventType.TOOL_CALL_APPROVAL_REQUIRED
+            msg = f"Tool '{tool_name}' requires approval: {result.error.message}"
+        elif not result.success:
+            event_type = AgentEventType.TOOL_CALL_FAILED
+            msg = f"Tool '{tool_name}' failed: {result.error.message if result.error else 'Unknown error'}"
+        else:
+            event_type = AgentEventType.TOOL_CALL_COMPLETED
+            msg = f"Tool '{tool_name}' completed in {result.metadata.get('duration_ms', 0):.1f}ms"
+
+        self.events.emit_event(
+            db,
+            run,
+            event_type,
+            msg,
+            {
+                "tool_name": tool_name,
+                "success": result.success,
+                "error_code": result.error.code if result.error else None,
+                "duration_ms": result.metadata.get("duration_ms", 0),
+            },
+        )
+
+        # 5. Record tool call in run metadata
+        meta = run.metadata_json or {}
+        tool_calls = meta.get("tool_calls", [])
+        tool_calls.append(
+            {
+                "tool_name": tool_name,
+                "success": result.success,
+                "error": result.error.model_dump() if result.error else None,
+                "duration_ms": result.metadata.get("duration_ms", 0),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        meta["tool_calls"] = tool_calls
+        run.metadata_json = meta
+        db.add(run)
+        db.commit()
+
+        return result
+
+    def assemble_repository_context(
+        self,
+        db: Session,
+        run_id: str,
+        budget: Optional[ContextBudget] = None,
+    ) -> RepositoryContext:
+        """
+        Assembles structured repository evidence for the run's requirement.
+        Emits lifecycle events and persists a bounded, versioned summary in run metadata.
+        """
+        run = self.get_run(db, run_id)
+
+        # Invariant: Terminal state check
+        if self.state_machine.is_terminal(run.current_state):
+            raise EngineeringAgentError(
+                f"Cannot assemble context on run '{run_id}' in terminal state '{run.current_state.value}'"
+            )
+
+        # 1. Emit CONTEXT_ASSEMBLY_STARTED
+        self.events.emit_event(
+            db,
+            run,
+            AgentEventType.CONTEXT_ASSEMBLY_STARTED,
+            f"Starting repository context assembly for requirement: '{run.user_requirement[:60]}...'",
+            {"repository_id": run.repository_id},
+        )
+
+        try:
+            # 2. Build assembly request
+            meta = run.metadata_json or {}
+            analysis_id = meta.get("analysis_id")
+            request = ContextAssemblyRequest(
+                repository_id=run.repository_id or "default",
+                requirement=run.user_requirement,
+                context_budget=budget,
+                analysis_id=analysis_id,
+                worktree_path=run.worktree_path,
+            )
+
+            # 3. Assemble context via ContextAssembler
+            assembler = ContextAssembler()
+            context = assembler.assemble(request, db=db)
+
+            # 4. Emit CONTEXT_ASSEMBLY_COMPLETED
+            self.events.emit_event(
+                db,
+                run,
+                AgentEventType.CONTEXT_ASSEMBLY_COMPLETED,
+                f"Repository context assembled ({context.contract.completeness.value}): "
+                f"{len(context.evidence)} evidence items, {len(context.relevant_files)} files, {len(context.unknowns)} unknowns",
+                {
+                    "completeness": context.contract.completeness.value,
+                    "evidence_count": len(context.evidence),
+                    "files_count": len(context.relevant_files),
+                    "symbols_count": len(context.relevant_symbols),
+                    "unknown_count": len(context.unknowns),
+                    "duration_ms": context.metadata.get("duration_ms", 0.0),
+                },
+            )
+
+            # 5. Persist bounded, versioned summary in run metadata (preserves long-term database performance)
+            meta["repository_context"] = context.to_bounded_summary()
+            run.metadata_json = meta
+            db.add(run)
+            db.commit()
+
+            return context
+        except Exception as err:
+            logger.error(f"Context assembly failed for run '{run_id}': {err}", exc_info=True)
+            self.events.emit_event(
+                db,
+                run,
+                AgentEventType.CONTEXT_ASSEMBLY_FAILED,
+                f"Context assembly failed: {err}",
+                {"error": str(err)},
+            )
+            raise EngineeringAgentError(f"Repository context assembly failed: {err}") from err
 
     def recover_in_flight_runs(self, db: Session) -> List[str]:
         """

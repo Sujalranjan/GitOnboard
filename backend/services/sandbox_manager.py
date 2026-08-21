@@ -584,3 +584,6 @@ class SandboxManager:
         if existing is not None:
             await existing.close()
 
+
+sandbox_manager = SandboxManager()
+
