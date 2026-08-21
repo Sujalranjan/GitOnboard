@@ -1,6 +1,15 @@
 """
-Engineering Agent Subsystem for GitOnBoard (Phase 1).
+Engineering Agent Subsystem for GitOnBoard (Phase 1, Phase 2 & Phase 3).
 """
+from backend.agent.context import (
+    CompletenessStatus,
+    ContextAssembler,
+    ContextAssemblyRequest,
+    ContextBudget,
+    ContextEvidence,
+    RepositoryContext,
+    RepositoryUnderstandingContract,
+)
 from backend.agent.engineering_agent import (
     EngineeringAgent,
     EngineeringAgentError,
@@ -12,6 +21,18 @@ from backend.agent.state_machine import (
     InvalidStateTransitionError,
     TERMINAL_STATES,
     VALID_TRANSITIONS,
+)
+from backend.agent.tools import (
+    AgentToolContext,
+    AgentToolRegistry,
+    PolicyAction,
+    PolicyDecision,
+    ToolDefinition,
+    ToolError,
+    ToolErrorCode,
+    ToolPolicy,
+    ToolResult,
+    create_default_tool_registry,
 )
 from backend.models.implementation import (
     AgentEventType,
@@ -37,4 +58,23 @@ __all__ = [
     "VALID_TRANSITIONS",
     "TERMINAL_STATES",
     "map_agent_state_to_legacy_status",
+    "AgentToolRegistry",
+    "ToolPolicy",
+    "PolicyAction",
+    "PolicyDecision",
+    "ToolDefinition",
+    "ToolResult",
+    "ToolError",
+    "ToolErrorCode",
+    "AgentToolContext",
+    "create_default_tool_registry",
+    "ContextAssembler",
+    "RepositoryContext",
+    "ContextEvidence",
+    "ContextBudget",
+    "ContextAssemblyRequest",
+    "RepositoryUnderstandingContract",
+    "CompletenessStatus",
 ]
+
+

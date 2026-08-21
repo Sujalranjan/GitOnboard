@@ -236,6 +236,27 @@ def get_agent_events(
     ]
 
 
+@router.post("/runs/{run_id}/context", response_model=Dict[str, Any])
+def assemble_run_context(
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Assembles and returns structured repository evidence for an active run.
+    """
+    try:
+        context = agent_service.assemble_repository_context(db=db, run_id=run_id)
+        return context.model_dump()
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except EngineeringAgentError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+    except Exception as err:
+        logger.error(f"Context assembly endpoint failed for run '{run_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+
 @router.get("/runs/{run_id}/events/stream")
 async def stream_agent_events(
     run_id: str,
@@ -285,6 +306,15 @@ async def stream_agent_events(
             task_manager.unsubscribe(_EVENT_CHANNEL_USER_ID, channel, queue)
 
     return EventSourceResponse(event_generator())
+
+
+@router.get("/tools", response_model=List[Dict[str, Any]])
+def list_agent_tools() -> List[Dict[str, Any]]:
+    """
+    Returns safe, serializable catalog of registered agent tool schemas and policy states.
+    Handlers are strictly internal and never exposed.
+    """
+    return agent_service.tools.list_catalog()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
