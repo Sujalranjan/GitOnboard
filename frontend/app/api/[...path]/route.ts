@@ -43,6 +43,7 @@ async function handleProxy(request: NextRequest, { path }: { path: string[] }) {
     method: request.method,
     headers: headers,
     cache: "no-store",
+    redirect: "manual",
   };
 
   if (request.method !== "GET" && request.method !== "HEAD") {
@@ -73,8 +74,17 @@ async function handleProxy(request: NextRequest, { path }: { path: string[] }) {
 
     const responseHeaders = new Headers();
     response.headers.forEach((value, key) => {
-      responseHeaders.set(key, value);
+      if (key.toLowerCase() !== "set-cookie") {
+        responseHeaders.set(key, value);
+      }
     });
+
+    if (typeof (response.headers as any).getSetCookie === "function") {
+      const cookies = (response.headers as any).getSetCookie();
+      cookies.forEach((cookie: string) => {
+        responseHeaders.append("set-cookie", cookie);
+      });
+    }
 
     const contentType = response.headers.get("content-type") || "";
 
