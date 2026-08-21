@@ -99,6 +99,11 @@ class CancelAgentRunRequest(BaseModel):
     reason: Optional[str] = Field(default=None, description="Reason for cancellation")
 
 
+class RejectPlanRequest(BaseModel):
+    reason: Optional[str] = Field(default=None, description="Reason for rejecting the plan")
+
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
@@ -254,6 +259,100 @@ def assemble_run_context(
     except Exception as err:
         logger.error(f"Context assembly endpoint failed for run '{run_id}': {err}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+@router.post("/runs/{run_id}/plan", response_model=Dict[str, Any])
+def create_run_plan(
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Synthesizes and validates an implementation plan for the run.
+    Transitions run to AWAITING_APPROVAL upon successful validation.
+    """
+    try:
+        plan = agent_service.create_plan(db=db, run_id=run_id)
+        return plan.model_dump(mode="json")
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except InvalidStateTransitionError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
+    except EngineeringAgentError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+    except Exception as err:
+        logger.error(f"Plan creation endpoint failed for run '{run_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+@router.get("/runs/{run_id}/plan", response_model=Dict[str, Any])
+def get_run_plan(
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Retrieves the current implementation plan for an agent run.
+    """
+    try:
+        plan = agent_service.get_plan(db=db, run_id=run_id)
+        if not plan:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No plan found for run '{run_id}'")
+        return plan.model_dump(mode="json")
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.error(f"Get plan endpoint failed for run '{run_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+@router.post("/runs/{run_id}/plan/approve", response_model=AgentRunResponse)
+def approve_run_plan(
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> AgentRunResponse:
+    """
+    Explicitly approves the synthesized plan.
+    CRITICAL INVARIANT: Approval does NOT execute tasks (PLAN_APPROVED != TASK_EXECUTION_STARTED).
+    """
+    try:
+        run = agent_service.approve_plan(db=db, run_id=run_id)
+        return _serialize_run(run)
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except InvalidStateTransitionError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
+    except EngineeringAgentError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+    except Exception as err:
+        logger.error(f"Plan approval endpoint failed for run '{run_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+@router.post("/runs/{run_id}/plan/reject", response_model=AgentRunResponse)
+def reject_run_plan(
+    run_id: str,
+    req: Optional[RejectPlanRequest] = None,
+    db: Session = Depends(get_db),
+) -> AgentRunResponse:
+    """
+    Explicitly rejects the plan and transitions run back to PLANNING for revision.
+    CRITICAL INVARIANT: Rejection NEVER triggers task implementation.
+    """
+    try:
+        reason = req.reason if req else None
+        run = agent_service.reject_plan(db=db, run_id=run_id, reason=reason)
+        return _serialize_run(run)
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except InvalidStateTransitionError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
+    except EngineeringAgentError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+    except Exception as err:
+        logger.error(f"Plan rejection endpoint failed for run '{run_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
 
 
 

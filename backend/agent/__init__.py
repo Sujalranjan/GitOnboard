@@ -10,7 +10,18 @@ from backend.agent.context import (
     RepositoryContext,
     RepositoryUnderstandingContract,
 )
+from backend.agent.planning import (
+    Plan,
+    PlanStatus,
+    PlanTask,
+    PlanTaskStatus,
+    PlanValidationResult,
+    PlanValidator,
+    PlanningOrchestrator,
+)
 from backend.agent.engineering_agent import (
+
+
     EngineeringAgent,
     EngineeringAgentError,
     RunNotFoundError,
@@ -75,6 +86,14 @@ __all__ = [
     "ContextAssemblyRequest",
     "RepositoryUnderstandingContract",
     "CompletenessStatus",
+    "Plan",
+    "PlanTask",
+    "PlanStatus",
+    "PlanTaskStatus",
+    "PlanValidationResult",
+    "PlanValidator",
+    "PlanningOrchestrator",
 ]
+
 
 
