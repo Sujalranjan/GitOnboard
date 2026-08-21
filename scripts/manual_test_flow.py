@@ -1,18 +1,21 @@
 """
-Manual Verification Script: Comprehensive End-to-End Test for Phase 1, Phase 2 & Phase 3.
+Manual Verification Script: Comprehensive End-to-End Test for Phase 1, Phase 2, Phase 3 & Phase 4.
 
 This script executes and logs every stage of the Engineering Agent lifecycle:
   1. AgentRun Creation & Lifecycle State (Phase 1)
   2. Repository Context Assembly (Phase 3: Requirement Analysis, Hybrid Retrieval, RIM, Budget, Understanding Contract)
-  3. State Machine Transitions (UNDERSTANDING -> PLANNING -> EXECUTING)
-  4. Repository Tools (read_file with bounded lines)
-  5. Workspace Isolated File & Patch Tools (create_file, modify_file, get_diff)
-  6. Terminal Tools (detect_commands via sandbox)
-  7. Verification Mesh Tools (verify_static AST integrity)
-  8. Git Tools (create_checkpoint, git_status)
-  9. Tool Policy Safety Enforcement (BLOCKED policy blocks handler execution)
-  10. Database Event Audit & History (AgentEvent log inspection)
-  11. Terminal State Locking (COMPLETED state locks execution)
+  3. Planning Orchestration & Validation (Phase 4: Plan, PlanTask DAG, PlanValidator -> AWAITING_APPROVAL)
+  4. Human Plan Rejection & Revision (Phase 4: Plan v1 -> Plan v2 revision)
+  5. Explicit Human Approval Boundary (Phase 4: Plan v2 APPROVED; Invariant: Zero execution during approval!)
+  6. Transition to EXECUTING (Phase 1 State Machine)
+  7. Repository Tools (read_file with bounded lines)
+  8. Workspace Isolated File & Patch Tools (create_file, modify_file, get_diff)
+  9. Terminal Tools (detect_commands via sandbox)
+  10. Verification Mesh Tools (verify_static AST integrity)
+  11. Git Tools (create_checkpoint, git_status)
+  12. Tool Policy Safety Enforcement (BLOCKED policy blocks handler execution)
+  13. Database Event Audit & History (AgentEvent log inspection)
+  14. Terminal State Locking (COMPLETED state locks execution)
 
 Run via uv:
   uv run python scripts/manual_test_flow.py
@@ -30,6 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.agent.engineering_agent import EngineeringAgent, EngineeringAgentError
+from backend.agent.planning.contracts import PlanStatus
 from backend.agent.tools.policy import PolicyAction
 from backend.agent.tools import create_default_tool_registry
 from backend.database import Base, SessionLocal, engine
@@ -56,9 +60,11 @@ def print_kv(key: str, value: any, indent: int = 4):
         print(f"{prefix}* {key:<30}: {value}")
 
 
-
 def main():
-    print_banner("GITONBOARD ENGINEERING AGENT — FULL END-TO-END VERIFICATION\n  COVERS: PHASE 1 (LIFECYCLE) + PHASE 2 (TOOLS) + PHASE 3 (CONTEXT ASSEMBLY)")
+    print_banner(
+        "GITONBOARD ENGINEERING AGENT -- COMPLETE SYSTEM VERIFICATION\n"
+        "  COVERS: PHASE 1 (LIFECYCLE) + PHASE 2 (TOOLS) + PHASE 3 (CONTEXT) + PHASE 4 (PLANNING & APPROVAL)"
+    )
 
     # 0. Initialize Database
     Base.metadata.create_all(bind=engine)
@@ -115,18 +121,59 @@ def main():
         print_kv("Bounded Summary in metadata_json", run.metadata_json.get("repository_context"))
         assert len(ctx.evidence) > 0
 
-        # 3. State Machine Transitions (Phase 1)
-        print_step_header(3, "State Machine Transitions (UNDERSTANDING -> PLANNING -> EXECUTING)")
-        t1 = agent.transition_state(db, run.id, to_state=AgentState.PLANNING, reason="Synthesizing plan from assembled context")
-        print_kv("Transition 1 Result", f"{t1.current_state.value} (reason: Synthesizing plan)")
+        # 3. Planning Orchestration & Plan Validation (Phase 4)
+        print_step_header(3, "Planning Orchestration & Plan Validation (Phase 4: PlanningOrchestrator)")
+        plan_v1 = agent.create_plan(db, run_id=run.id)
+        
+        print_kv("Plan ID", plan_v1.plan_id)
+        print_kv("Plan Version", plan_v1.version)
+        print_kv("Plan Status", plan_v1.status.value)
+        print_kv("Plan Valid", plan_v1.validation.valid if plan_v1.validation else False)
+        print_kv("Task Count", len(plan_v1.tasks))
+        for idx, t in enumerate(plan_v1.tasks, 1):
+            print(f"      [{idx}] {t.task_id}: '{t.title}' -> deps={t.dependencies}, verif='{t.verification_strategy}'")
+        
+        print_kv("Post-Planning Run State", run.current_state.value)
+        assert run.current_state == AgentState.AWAITING_APPROVAL
+        assert plan_v1.status == PlanStatus.READY_FOR_APPROVAL
+
+        # 4. Human Review Boundary: Plan Rejection & Revision (Phase 4)
+        print_step_header(4, "Human Review Boundary: Plan Rejection & Revision (Phase 4)")
+        agent.reject_plan(db, run_id=run.id, reason="Please refine calculator task acceptance criteria")
+        print_kv("Post-Rejection Run State", run.current_state.value)
         assert run.current_state == AgentState.PLANNING
 
-        t2 = agent.transition_state(db, run.id, to_state=AgentState.EXECUTING, reason="Executing plan tool steps")
-        print_kv("Transition 2 Result", f"{t2.current_state.value} (reason: Executing plan tool steps)")
+        # Create revised Plan v2
+        plan_v2 = agent.create_plan(db, run_id=run.id)
+        print_kv("Revised Plan ID", plan_v2.plan_id)
+        print_kv("Revised Plan Version", plan_v2.version)
+        print_kv("Revised Plan Status", plan_v2.status.value)
+        print_kv("Post-Revision Run State", run.current_state.value)
+        assert plan_v2.version == 2
+        assert run.current_state == AgentState.AWAITING_APPROVAL
+
+        # 5. Explicit Human Approval Boundary (Phase 4)
+        print_step_header(5, "Explicit Human Approval Boundary (Phase 4)")
+        agent.approve_plan(db, run_id=run.id)
+        approved_plan = agent.get_plan(db, run_id=run.id)
+        print_kv("Approved Plan Status", approved_plan.status.value)
+        print_kv("Run State Post-Approval", run.current_state.value)
+        assert approved_plan.status == PlanStatus.APPROVED
+        assert run.current_state == AgentState.AWAITING_APPROVAL
+
+        # CRITICAL SAFETY INVARIANT: Verify no workspace modification occurred during planning/approval
+        git_check = subprocess.run(["git", "status", "--porcelain"], cwd=wt_path, capture_output=True, text=True)
+        assert git_check.stdout.strip() == ""
+        print_kv("Non-Execution Invariant", "PASSED -> Git working tree is 100% clean. Zero code executed during planning/approval.")
+
+        # 6. State Machine Transitions to EXECUTING (Phase 1)
+        print_step_header(6, "State Machine Transition (AWAITING_APPROVAL -> EXECUTING)")
+        agent.transition_state(db, run.id, to_state=AgentState.EXECUTING, reason="User approved plan; starting tool executions")
+        print_kv("Current State", run.current_state.value)
         assert run.current_state == AgentState.EXECUTING
 
-        # 4. Repository Tools (Phase 2)
-        print_step_header(4, "Invoke Repository Tools (read_file with bounded range)")
+        # 7. Repository Tools (Phase 2)
+        print_step_header(7, "Invoke Repository Tools (read_file with bounded range)")
         res_read = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -139,10 +186,10 @@ def main():
         print_kv("Raw Content", "\n" + res_read.data.get("content", "").strip())
         assert res_read.success
 
-        # 5. Workspace Tools (Phase 2)
-        print_step_header(5, "Invoke Workspace Isolated Tools (create_file, modify_file, get_diff)")
+        # 8. Workspace Tools (Phase 2)
+        print_step_header(8, "Invoke Workspace Isolated Tools (create_file, modify_file, get_diff)")
         
-        # 5.1 create_file
+        # 8.1 create_file
         res_create = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -155,7 +202,7 @@ def main():
         assert res_create.success
         assert (wt_path / "calculator.py").exists()
 
-        # 5.2 modify_file
+        # 8.2 modify_file
         res_mod = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -166,22 +213,22 @@ def main():
         print_kv("Modified Bytes", res_mod.data.get("bytes_written"))
         assert res_mod.success
 
-        # 5.3 get_diff
+        # 8.3 get_diff
         res_diff = agent.invoke_tool(db, run_id=run.id, tool_name="get_diff", arguments={})
         print_kv("get_diff Status", "SUCCESS" if res_diff.success else "FAILED")
         print_kv("Modified Files", res_diff.data.get("modified_files"))
         print_kv("Unified Diff Output", "\n" + res_diff.data.get("diff", "(empty diff)"))
         assert res_diff.success
 
-        # 6. Terminal Tools (Phase 2)
-        print_step_header(6, "Invoke Terminal Tools (detect_commands in sandbox)")
+        # 9. Terminal Tools (Phase 2)
+        print_step_header(9, "Invoke Terminal Tools (detect_commands in sandbox)")
         res_detect = agent.invoke_tool(db, run_id=run.id, tool_name="detect_commands", arguments={})
         print_kv("detect_commands Status", "SUCCESS" if res_detect.success else "FAILED")
         print_kv("Detected Build/Test Tools", res_detect.data.get("detected_commands"))
         assert res_detect.success
 
-        # 7. Verification Tools (Phase 2)
-        print_step_header(7, "Invoke Verification Mesh (verify_static AST & Import Integrity)")
+        # 10. Verification Tools (Phase 2)
+        print_step_header(10, "Invoke Verification Mesh (verify_static AST & Import Integrity)")
         res_verify = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -193,13 +240,13 @@ def main():
         print_kv("Defects Detected", res_verify.data.get("defects"))
         assert res_verify.success
 
-        # 8. Git Tools (Phase 2)
-        print_step_header(8, "Invoke Git Tools (create_checkpoint, git_status)")
+        # 11. Git Tools (Phase 2)
+        print_step_header(11, "Invoke Git Tools (create_checkpoint, git_status)")
         res_cp = agent.invoke_tool(
             db,
             run_id=run.id,
             tool_name="create_checkpoint",
-            arguments={"message": "Phase 2 & 3 verification checkpoint"},
+            arguments={"message": "Phase 4 verification checkpoint"},
         )
         print_kv("create_checkpoint Status", "SUCCESS" if res_cp.success else "FAILED")
         print_kv("Commit SHA", res_cp.data.get("commit_sha"))
@@ -210,8 +257,8 @@ def main():
         print_kv("git status porcelain", res_status.data.get("porcelain_output", "(clean)"))
         assert res_status.success
 
-        # 9. Tool Policy Safety Enforcement (Phase 2 Invariant)
-        print_step_header(9, "Policy Safety Enforcement (BLOCKED Policy Invariant)")
+        # 12. Tool Policy Safety Enforcement (Phase 2 Invariant)
+        print_step_header(12, "Policy Safety Enforcement (BLOCKED Policy Invariant)")
         # Dynamically set policy to BLOCKED for delete_file
         agent.tools.policy.set_policy("delete_file", PolicyAction.BLOCKED, reason="Deletion of files is forbidden in this environment")
         res_blocked = agent.invoke_tool(
@@ -229,8 +276,8 @@ def main():
         assert (wt_path / "calculator.py").exists()
         print_kv("Filesystem Safety Invariant", "PASSED -> 'calculator.py' remains intact on disk; handler NEVER ran.")
 
-        # 10. Inspect Persisted Agent Events (PostgreSQL Audit)
-        print_step_header(10, "Inspect Persisted Agent Events Audit Log")
+        # 13. Inspect Persisted Agent Events (PostgreSQL Audit)
+        print_step_header(13, "Inspect Persisted Agent Events Audit Log")
         events = db.query(AgentEvent).filter(AgentEvent.agent_run_id == run.id).order_by(AgentEvent.id).all()
         print_kv("Total Events Recorded in Database", len(events))
         print(f"\n    {'ID':<5} | {'EVENT TYPE':<28} | {'MESSAGE'}")
@@ -239,8 +286,8 @@ def main():
             evt_name = evt.event_type.value if hasattr(evt.event_type, "value") else str(evt.event_type)
             print(f"    {evt.id:<5} | {evt_name:<28} | {evt.message}")
 
-        # 11. Lifecycle Completion & Terminal State Locking (Phase 1)
-        print_step_header(11, "Lifecycle Completion (EXECUTING -> VERIFYING -> COMPLETED)")
+        # 14. Lifecycle Completion & Terminal State Locking (Phase 1)
+        print_step_header(14, "Lifecycle Completion (EXECUTING -> VERIFYING -> COMPLETED)")
         agent.transition_state(db, run.id, to_state=AgentState.VERIFYING, reason="Running automated verification suite")
         agent.transition_state(db, run.id, to_state=AgentState.COMPLETED, reason="All goals and tests verified successfully")
         print_kv("Final Lifecycle State", run.current_state.value)
@@ -257,7 +304,7 @@ def main():
 
     db.close()
 
-    print_banner("ALL FLOWS (PHASE 1, PHASE 2 & PHASE 3) VERIFIED AND PASSED SUCCESSFULLY!")
+    print_banner("ALL FLOWS (PHASE 1, PHASE 2, PHASE 3 & PHASE 4) VERIFIED AND PASSED SUCCESSFULLY!")
 
 
 if __name__ == "__main__":

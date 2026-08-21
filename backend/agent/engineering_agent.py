@@ -25,6 +25,9 @@ from backend.agent.context.contracts import (
     ContextBudget,
     RepositoryContext,
 )
+from backend.agent.planning.contracts import Plan, PlanStatus
+from backend.agent.planning.orchestrator import PlanningOrchestrator
+
 from backend.agent.tools.contracts import (
     AgentToolContext,
     ToolErrorCode,
@@ -64,10 +67,13 @@ class EngineeringAgent:
         self,
         event_coordinator: Optional[AgentEventCoordinator] = None,
         tool_registry: Optional[AgentToolRegistry] = None,
+        llm_service: Optional[Any] = None,
     ):
         self.events = event_coordinator or AgentEventCoordinator()
         self.state_machine = AgentStateMachine()
         self.tools = tool_registry or create_default_tool_registry()
+        self.llm_service = llm_service
+
 
     def create_run(
         self,
@@ -512,7 +518,240 @@ class EngineeringAgent:
             )
             raise EngineeringAgentError(f"Repository context assembly failed: {err}") from err
 
+    def create_plan(
+        self,
+        db: Session,
+        run_id: str,
+        budget: Optional[ContextBudget] = None,
+    ) -> Plan:
+        """
+        Synthesizes, validates, and records a structured implementation plan.
+        Transitions the agent run to AWAITING_APPROVAL upon successful validation.
+        """
+        run = self.get_run(db, run_id)
+
+        # Invariant: Terminal state check
+        if self.state_machine.is_terminal(run.current_state):
+            raise EngineeringAgentError(
+                f"Cannot create plan on run '{run_id}' in terminal state '{run.current_state.value}'"
+            )
+
+        # Transition to PLANNING state if currently in IDLE or UNDERSTANDING
+        if run.current_state in (AgentState.IDLE, AgentState.UNDERSTANDING):
+            self.transition_state(db, run.id, to_state=AgentState.PLANNING, reason="Starting plan synthesis")
+
+        # 1. Emit PLANNING_STARTED
+        self.events.emit_event(
+            db,
+            run,
+            AgentEventType.PLANNING_STARTED,
+            f"Starting implementation plan synthesis for requirement: '{run.user_requirement[:60]}...'",
+            {"repository_id": run.repository_id},
+        )
+
+        try:
+            # 2. Assemble/fetch repository context
+            context = self.assemble_repository_context(db, run.id, budget=budget)
+
+            # Determine plan revision version
+            meta = run.metadata_json or {}
+            existing_plan_data = meta.get("plan")
+            current_version = existing_plan_data.get("version", 0) if isinstance(existing_plan_data, dict) else 0
+            new_version = current_version + 1
+
+            # 3. Invoke PlanningOrchestrator
+            orchestrator = PlanningOrchestrator(llm_service=self.llm_service)
+            plan = orchestrator.create_plan(
+                context=context,
+                agent_run_id=run.id,
+                repository_id=run.repository_id or "default",
+                requirement=run.user_requirement,
+                db=db,
+                version=new_version,
+            )
+
+            # 4. Handle validation outcome
+            if plan.validation and plan.validation.valid:
+                self.events.emit_event(
+                    db,
+                    run,
+                    AgentEventType.PLANNING_COMPLETED,
+                    f"Implementation plan v{plan.version} synthesized and validated with {len(plan.tasks)} tasks.",
+                    {
+                        "plan_id": plan.plan_id,
+                        "version": plan.version,
+                        "task_count": len(plan.tasks),
+                        "unknown_count": len(plan.unknowns),
+                    },
+                )
+                self.events.emit_event(
+                    db,
+                    run,
+                    AgentEventType.PLAN_READY_FOR_APPROVAL,
+                    f"Plan v{plan.version} is ready for human approval.",
+                    {"plan_id": plan.plan_id, "version": plan.version},
+                )
+
+                # Persist full plan artifact and bounded summary
+                from sqlalchemy.orm.attributes import flag_modified
+                meta["plan"] = plan.model_dump(mode="json")
+                run.metadata_json = meta
+                flag_modified(run, "metadata_json")
+                db.add(run)
+                db.commit()
+
+                # Transition to AWAITING_APPROVAL (Human Review Boundary)
+                self.transition_state(
+                    db,
+                    run.id,
+                    to_state=AgentState.AWAITING_APPROVAL,
+                    reason=f"Plan v{plan.version} created and validated with {len(plan.tasks)} tasks; awaiting user review",
+                )
+            else:
+                from sqlalchemy.orm.attributes import flag_modified
+                err_msg = "; ".join(plan.validation.errors) if plan.validation else "Validation failed"
+                self.events.emit_event(
+                    db,
+                    run,
+                    AgentEventType.PLANNING_FAILED,
+                    f"Plan validation failed: {err_msg}",
+                    {"errors": plan.validation.errors if plan.validation else []},
+                )
+                meta["plan"] = plan.model_dump(mode="json")
+                run.metadata_json = meta
+                flag_modified(run, "metadata_json")
+                db.add(run)
+                db.commit()
+
+            return plan
+
+        except Exception as err:
+            logger.error(f"Plan creation failed for run '{run_id}': {err}", exc_info=True)
+            self.events.emit_event(
+                db,
+                run,
+                AgentEventType.PLANNING_FAILED,
+                f"Planning failed: {err}",
+                {"error": str(err)},
+            )
+            raise EngineeringAgentError(f"Plan synthesis failed: {err}") from err
+
+    def get_plan(self, db: Session, run_id: str) -> Optional[Plan]:
+        """
+        Retrieves the current Plan object from run metadata.
+        """
+        run = self.get_run(db, run_id)
+        meta = run.metadata_json or {}
+        plan_dict = meta.get("plan")
+        if plan_dict and isinstance(plan_dict, dict):
+            try:
+                return Plan.model_validate(plan_dict)
+            except Exception as err:
+                logger.warning(f"Failed to parse Plan model from metadata for run '{run_id}': {err}")
+        return None
+
+    def approve_plan(self, db: Session, run_id: str) -> AgentRun:
+        """
+        Explicitly approves the synthesized plan.
+        CRITICAL INVARIANT: Approval does NOT execute tasks (PLAN_APPROVED != TASK_EXECUTION_STARTED).
+        Run remains in AWAITING_APPROVAL state until Phase 5 TaskOrchestrator initiates execution.
+        """
+        run = self.get_run(db, run_id)
+
+        if run.current_state != AgentState.AWAITING_APPROVAL:
+            raise EngineeringAgentError(
+                f"Cannot approve plan for run '{run_id}' in state '{run.current_state.value}'. "
+                f"Run must be in '{AgentState.AWAITING_APPROVAL.value}' state."
+            )
+
+        plan = self.get_plan(db, run_id)
+        if not plan:
+            raise EngineeringAgentError(f"No plan found to approve for run '{run_id}'")
+
+        if plan.status != PlanStatus.READY_FOR_APPROVAL:
+            raise EngineeringAgentError(
+                f"Plan '{plan.plan_id}' is in status '{plan.status.value}'. Only plans in READY_FOR_APPROVAL can be approved."
+            )
+
+        # Mark plan as approved
+        from sqlalchemy.orm.attributes import flag_modified
+        plan.status = PlanStatus.APPROVED
+        plan.updated_at = datetime.now(timezone.utc)
+
+        meta = run.metadata_json or {}
+        meta["plan"] = plan.model_dump(mode="json")
+        run.metadata_json = meta
+        flag_modified(run, "metadata_json")
+        db.add(run)
+        db.commit()
+
+        # Emit PLAN_APPROVED event
+        self.events.emit_event(
+            db,
+            run,
+            AgentEventType.PLAN_APPROVED,
+            f"Plan v{plan.version} ('{plan.plan_id}') approved by user. Ready for Phase 5 task orchestration.",
+            {
+                "plan_id": plan.plan_id,
+                "version": plan.version,
+                "task_count": len(plan.tasks),
+            },
+        )
+
+        return run
+
+    def reject_plan(self, db: Session, run_id: str, reason: Optional[str] = None) -> AgentRun:
+        """
+        Explicitly rejects the synthesized plan.
+        Transitions the run state to PLANNING for revision.
+        CRITICAL INVARIANT: Rejection NEVER triggers task implementation.
+        """
+        run = self.get_run(db, run_id)
+
+        if run.current_state != AgentState.AWAITING_APPROVAL:
+            raise EngineeringAgentError(
+                f"Cannot reject plan for run '{run_id}' in state '{run.current_state.value}'. "
+                f"Run must be in '{AgentState.AWAITING_APPROVAL.value}' state."
+            )
+
+        plan = self.get_plan(db, run_id)
+        if plan:
+            from sqlalchemy.orm.attributes import flag_modified
+            plan.status = PlanStatus.REJECTED
+            plan.updated_at = datetime.now(timezone.utc)
+            meta = run.metadata_json or {}
+            meta["plan"] = plan.model_dump(mode="json")
+            run.metadata_json = meta
+            flag_modified(run, "metadata_json")
+            db.add(run)
+            db.commit()
+
+
+        # Emit PLAN_REJECTED event
+        reject_msg = reason or "Plan rejected by user."
+        self.events.emit_event(
+            db,
+            run,
+            AgentEventType.PLAN_REJECTED,
+            f"Plan rejected by user: {reject_msg}",
+            {
+                "plan_id": plan.plan_id if plan else None,
+                "reason": reject_msg,
+            },
+        )
+
+        # Transition state back to PLANNING for plan revision
+        self.transition_state(
+            db,
+            run.id,
+            to_state=AgentState.PLANNING,
+            reason=f"Plan rejected: {reject_msg}; awaiting revision",
+        )
+
+        return run
+
     def recover_in_flight_runs(self, db: Session) -> List[str]:
+
         """
         Restart recovery: Detects non-terminal runs interrupted by a server reboot
         and transitions them safely to FAILED with explicit failure reason,

@@ -27,9 +27,15 @@ class PlanStatus(str, Enum):
 
 
 class PlanTaskStatus(str, Enum):
-    """Initial lifecycle status of an individual task in a plan."""
+    """Lifecycle status of an individual task in a plan."""
     PENDING = "PENDING"
-    # Note: Execution states (READY, RUNNING, VERIFYING, PASSED, FAILED) belong to Phase 5.
+    READY = "READY"
+    RUNNING = "RUNNING"
+    VERIFYING = "VERIFYING"
+    PASSED = "PASSED"
+    FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
+    SKIPPED = "SKIPPED"
 
 
 class PlanTask(BaseModel):
@@ -40,7 +46,7 @@ class PlanTask(BaseModel):
     step_number: int = Field(default=1, description="Sequential step index")
     title: str = Field(description="Short human-readable summary of the task")
     description: str = Field(description="Detailed technical description of the task actions")
-    status: PlanTaskStatus = Field(default=PlanTaskStatus.PENDING, description="Initial task status")
+    status: PlanTaskStatus = Field(default=PlanTaskStatus.PENDING, description="Task lifecycle status")
     dependencies: List[str] = Field(default_factory=list, description="IDs of tasks that must complete before this task")
     affected_files: List[str] = Field(default_factory=list, description="Files expected to be created or modified")
     affected_symbols: List[str] = Field(default_factory=list, description="Symbols expected to be added or modified")
@@ -49,7 +55,12 @@ class PlanTask(BaseModel):
     verification_strategy: str = Field(default="verify_static", description="Targeted verification tool or test approach")
     evidence_ids: List[str] = Field(default_factory=list, description="Referenced evidence IDs supporting this task")
     attempt_count: int = Field(default=0, description="Number of execution attempts")
+    failure_reason: Optional[str] = Field(default=None, description="Detailed explanation if task failed")
+    blocked_reason: Optional[str] = Field(default=None, description="Upstream failure explanation if task became blocked")
+    started_at: Optional[datetime] = Field(default=None, description="Timestamp when task execution started")
+    completed_at: Optional[datetime] = Field(default=None, description="Timestamp when task completed (PASSED, FAILED, BLOCKED, SKIPPED)")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Arbitrary task metadata")
+
 
 
 class PlanValidationResult(BaseModel):
