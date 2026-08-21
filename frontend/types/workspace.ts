@@ -87,4 +87,40 @@ export interface RunState {
   iteration: number;
   isLoading: boolean;
   statusMessage?: string;
+  currentState?: AgentState | string;
+  startedAt?: string;
+  currentActivity?: string;
 }
+
+export type AgentState =
+  | 'IDLE'
+  | 'UNDERSTANDING'
+  | 'PLANNING'
+  | 'AWAITING_APPROVAL'
+  | 'EXECUTING'
+  | 'VERIFYING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export interface AgentStateTransitionRecord {
+  from_state: AgentState | string;
+  to_state: AgentState | string;
+  reason?: string;
+  timestamp: string;
+}
+
+export interface AgentRunRecord {
+  id: string;
+  task_id: string;
+  repository_id?: string;
+  user_requirement?: string;
+  current_state: AgentState | string;
+  status: string;
+  started_at: string;
+  completed_at?: string;
+  cancellation_reason?: string;
+  error_message?: string;
+  transitions?: AgentStateTransitionRecord[];
+}
+

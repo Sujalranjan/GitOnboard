@@ -19,7 +19,9 @@ from .implementation import (
     ComponentType,
     AgentRun,
     AgentEvent,
+    AgentStateTransition,
     FileChange,
+    AgentState,
     AgentRunStatus,
     AgentEventType,
     FileChangeType,
@@ -32,6 +34,7 @@ __all__ = [
     "FactDatabaseObject", "FactCapability", "FactEvidence", "FactCapabilityMember",
     "Implementation", "ImplementationContract", "ImplementationPlan",
     "ImplementationStatus", "PlanStepStatus", "ComponentType",
-    "AgentRun", "AgentEvent", "FileChange",
-    "AgentRunStatus", "AgentEventType", "FileChangeType",
+    "AgentRun", "AgentEvent", "AgentStateTransition", "FileChange",
+    "AgentState", "AgentRunStatus", "AgentEventType", "FileChangeType",
 ]
+

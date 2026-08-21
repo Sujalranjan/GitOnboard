@@ -71,10 +71,14 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        return self.local_database_url if self.deployment_type == "LOCAL" else self.prod_database_url
+        if self.deployment_type == "PROD" and self.prod_database_url.strip():
+            return self.prod_database_url
+        return self.local_database_url or "sqlite:///data/local.db"
 
     @property
     def frontend_url(self) -> str:
-        return self.local_frontend_url if self.deployment_type == "LOCAL" else self.prod_frontend_url
+        if self.deployment_type == "PROD" and self.prod_frontend_url.strip():
+            return self.prod_frontend_url
+        return self.local_frontend_url
 
 settings = Settings()

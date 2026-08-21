@@ -189,11 +189,38 @@ export function AIAgentPanel({
         </button>
       </div>
 
+      {/* Agent Run & Lifecycle State Bar */}
+      {runState?.runId && (
+        <div className="bg-[#0D1117] border-b border-[#2F343A] px-3 py-1.5 flex items-center justify-between text-[11px]">
+          <div className="flex items-center gap-1.5 truncate">
+            <span className="text-[#8B949E]">Run:</span>
+            <span className="font-mono text-purple-300 font-semibold truncate max-w-[110px]" title={runState.runId}>
+              {runState.runId.slice(0, 12)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase font-semibold ${
+                runState.currentState === "COMPLETED"
+                  ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                  : runState.currentState === "FAILED" || runState.currentState === "CANCELLED"
+                  ? "bg-rose-950 text-rose-300 border border-rose-800"
+                  : runState.currentState === "EXECUTING" || runState.currentState === "VERIFYING"
+                  ? "bg-amber-950 text-amber-300 border border-amber-800 animate-pulse"
+                  : "bg-purple-950 text-purple-300 border border-purple-800"
+              }`}
+            >
+              {runState.currentState || "IDLE"}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Real-time Status Loader */}
       {runState?.isLoading && (
         <div className="bg-purple-950/60 border-b border-purple-500/40 p-2 flex items-center gap-2 text-xs text-purple-200 animate-pulse">
           <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-400 flex-shrink-0" />
-          <span>{runState.statusMessage || "Dispatching requirement..."}</span>
+          <span>{runState.statusMessage || runState.currentActivity || "Dispatching requirement..."}</span>
         </div>
       )}
 
