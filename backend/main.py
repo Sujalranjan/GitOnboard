@@ -54,6 +54,13 @@ def ensure_db_schema_up_to_date(bind_engine):
                 ALTER TABLE files ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT false;
                 ALTER TABLE files ADD COLUMN IF NOT EXISTS is_documentation BOOLEAN DEFAULT false;
                 ALTER TABLE files ADD COLUMN IF NOT EXISTS is_agent_instruction BOOLEAN DEFAULT false;
+
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS repository_id VARCHAR;
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS user_requirement TEXT;
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS current_state VARCHAR DEFAULT 'IDLE';
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS metadata JSONB;
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
             """))
             conn.commit()
     except Exception as e:
@@ -103,6 +110,15 @@ async def lifespan(app: FastAPI):
             job.status = "Queued"
             db.commit()
             await repo_queue.enqueue(job.id)
+
+        # Recover in-flight agent runs after server restart
+        try:
+            from backend.agent.engineering_agent import EngineeringAgent
+            recovered_agent_runs = EngineeringAgent().recover_in_flight_runs(db)
+            if recovered_agent_runs:
+                logger.info(f"Recovered {len(recovered_agent_runs)} in-flight agent run(s)")
+        except Exception as err:
+            logger.warning(f"Note on agent run restart recovery: {err}")
     except Exception as e:
         logger.error(f"Failed to recover jobs: {e}")
     finally:
@@ -200,7 +216,7 @@ async def correlation_id_middleware(request: Request, call_next):
         )
         raise exc
 
-from backend.routers import auth_router, health_router
+from backend.routers import auth_router, health_router, agent_router
 from backend.routers.implementation import router as implementation_router
 from backend.routers.repo import repo_router, import_router
 from backend.routers.verification import router as verification_router
@@ -212,6 +228,7 @@ app.include_router(health_router, prefix="/api")
 app.include_router(import_router, prefix="/api/import")
 app.include_router(repo_router, prefix="/api/repos")
 
+app.include_router(agent_router)
 app.include_router(implementation_router)
 app.include_router(verification_router)
 app.include_router(verification_pipeline_router)

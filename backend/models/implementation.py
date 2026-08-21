@@ -60,7 +60,28 @@ class ComponentType(str, Enum):
     NEW = "NEW"            # Symbol/file to be created by the agent
 
 
+class AgentState(str, Enum):
+    """
+    Authoritative granular lifecycle state of an EngineeringAgent session.
+
+    Initial Phase 1 States:
+      IDLE ──► UNDERSTANDING ──► PLANNING ──► AWAITING_APPROVAL ──► EXECUTING ──► VERIFYING ──► COMPLETED
+                                                                                               └──► FAILED
+                                                                                               └──► CANCELLED (Terminal)
+    """
+    IDLE = "IDLE"
+    UNDERSTANDING = "UNDERSTANDING"
+    PLANNING = "PLANNING"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    EXECUTING = "EXECUTING"
+    VERIFYING = "VERIFYING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
 class AgentRunStatus(str, Enum):
+    """Coarse legacy status kept in sync for backward-compatible pipeline queries."""
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
     VERIFYING = "VERIFYING"
@@ -69,10 +90,36 @@ class AgentRunStatus(str, Enum):
     FAILED = "FAILED"
 
 
+def map_agent_state_to_legacy_status(state: AgentState | str) -> AgentRunStatus:
+    """
+    Deterministic mapping from authoritative granular AgentState to coarse AgentRunStatus.
+    """
+    val = state.value if isinstance(state, AgentState) else str(state)
+    if val == AgentState.IDLE.value:
+        return AgentRunStatus.QUEUED
+    elif val in (
+        AgentState.UNDERSTANDING.value,
+        AgentState.PLANNING.value,
+        AgentState.AWAITING_APPROVAL.value,
+        AgentState.EXECUTING.value,
+    ):
+        return AgentRunStatus.RUNNING
+    elif val == AgentState.VERIFYING.value:
+        return AgentRunStatus.VERIFYING
+    elif val == AgentState.COMPLETED.value:
+        return AgentRunStatus.COMPLETED
+    elif val in (AgentState.FAILED.value, AgentState.CANCELLED.value):
+        return AgentRunStatus.FAILED
+    return AgentRunStatus.RUNNING
+
+
 class AgentEventType(str, Enum):
     STARTED = "STARTED"
+    STATE_TRANSITION = "STATE_TRANSITION"
     CONTRACT_GENERATED = "CONTRACT_GENERATED"
     CODE_GENERATING = "CODE_GENERATING"
+    ACTION_STARTED = "ACTION_STARTED"
+    ACTION_COMPLETED = "ACTION_COMPLETED"
     FILE_WRITTEN = "FILE_WRITTEN"
     DIFF_CAPTURED = "DIFF_CAPTURED"
     VERIFICATION_STARTED = "VERIFICATION_STARTED"
@@ -80,6 +127,7 @@ class AgentEventType(str, Enum):
     REPAIR_STARTED = "REPAIR_STARTED"
     FINISHED = "FINISHED"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class FileChangeType(str, Enum):
@@ -210,9 +258,11 @@ class ImplementationPlan(Base):
 
 class AgentRun(Base):
     """
-    A single execution of the Coding Agent Adapter (code generation, verification,
-    and bounded repair) against one worktree. implementation_id is nullable since
-    the pipeline can also be driven ad-hoc (task_id only, no persisted Implementation).
+    A single execution of the Engineering Agent / Coding Agent session.
+
+    AUTHORITY HIERARCHY:
+      - `current_state` (AgentState) is the AUTHORITATIVE granular state of the agent run.
+      - `status` (AgentRunStatus) is a coarse legacy status kept in sync for backward compatibility.
     """
     __tablename__ = "agent_runs"
 
@@ -221,7 +271,18 @@ class AgentRun(Base):
         String, ForeignKey("implementations.id", ondelete="CASCADE"), nullable=True, index=True
     )
     task_id = Column(String, nullable=False, index=True)
+    repository_id = Column(String, nullable=True, index=True)
+    user_requirement = Column(Text, nullable=True)
 
+    # Authoritative granular state
+    current_state = Column(
+        SAEnum(AgentState, name="agent_state"),
+        nullable=False,
+        default=AgentState.IDLE,
+        index=True,
+    )
+
+    # Coarse legacy status
     status = Column(
         SAEnum(AgentRunStatus, name="agent_run_status"),
         nullable=False,
@@ -231,7 +292,11 @@ class AgentRun(Base):
     iteration = Column(Integer, nullable=False, default=1)
     worktree_path = Column(String, nullable=True)
     error_message = Column(Text, nullable=True)
+    cancellation_reason = Column(Text, nullable=True)
+    metadata_json = Column("metadata", JSONType, nullable=True, default=dict)
 
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
     started_at = Column(DateTime(timezone=True), default=_now, nullable=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -242,9 +307,35 @@ class AgentRun(Base):
     file_changes = relationship(
         "FileChange", back_populates="agent_run", cascade="all, delete-orphan",
     )
+    transitions = relationship(
+        "AgentStateTransition", back_populates="agent_run", cascade="all, delete-orphan",
+        order_by="AgentStateTransition.timestamp",
+    )
 
     def __repr__(self) -> str:
-        return f"<AgentRun id={self.id!r} task_id={self.task_id!r} status={self.status!r}>"
+        return f"<AgentRun id={self.id!r} state={self.current_state.value!r} status={self.status.value!r}>"
+
+
+class AgentStateTransition(Base):
+    """
+    Append-only audit log of state transitions for an AgentRun.
+    """
+    __tablename__ = "agent_state_transitions"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    agent_run_id = Column(
+        String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    from_state = Column(SAEnum(AgentState, name="agent_state_from"), nullable=False)
+    to_state = Column(SAEnum(AgentState, name="agent_state_to"), nullable=False)
+    reason = Column(Text, nullable=True)
+    metadata_json = Column("metadata", JSONType, nullable=True, default=dict)
+    timestamp = Column(DateTime(timezone=True), default=_now, nullable=False, index=True)
+
+    agent_run = relationship("AgentRun", back_populates="transitions")
+
+    def __repr__(self) -> str:
+        return f"<AgentStateTransition run={self.agent_run_id!r} {self.from_state.value} -> {self.to_state.value}>"
 
 
 class AgentEvent(Base):

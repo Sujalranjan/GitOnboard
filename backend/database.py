@@ -8,7 +8,8 @@ from backend.config import settings
 
 # Support both the legacy DATABASE_URL env var and the config-backed database URL.
 # Docker Compose still injects DATABASE_URL, while local development uses settings.database_url.
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL") or settings.database_url
+raw_url = os.getenv("DATABASE_URL") or settings.database_url or ""
+SQLALCHEMY_DATABASE_URL = raw_url.strip() if raw_url else "sqlite:///data/local.db"
 
 if SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
     try:
