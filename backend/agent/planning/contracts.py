@@ -112,6 +112,13 @@ class Plan(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    def get_task(self, task_id: str) -> Optional[PlanTask]:
+        """Retrieves a task by its task_id."""
+        for t in self.tasks:
+            if t.task_id == task_id:
+                return t
+        return None
+
     def to_bounded_summary(self) -> Dict[str, Any]:
         """
         Produces a lightweight, bounded summary for persistence in run metadata_json.

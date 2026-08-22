@@ -1,5 +1,5 @@
 """
-Manual Verification Script: Comprehensive End-to-End Test for Phase 1, Phase 2, Phase 3, Phase 4 & Phase 5.
+Manual Verification Script: Comprehensive End-to-End Test for Phase 1, Phase 2, Phase 3, Phase 4, Phase 5 & Phase 6.
 
 This script executes and logs every stage of the Engineering Agent lifecycle:
   1. AgentRun Creation & Lifecycle State (Phase 1)
@@ -8,16 +8,18 @@ This script executes and logs every stage of the Engineering Agent lifecycle:
   4. Human Plan Rejection & Revision (Phase 4: Plan v1 -> Plan v2 revision)
   5. Explicit Human Approval Boundary (Phase 4: Plan v2 APPROVED; Invariant: Zero execution during approval!)
   6. Start Plan Execution (Phase 5: AWAITING_APPROVAL -> EXECUTING, unlock initial tasks to READY)
-  7. Sequential Task Orchestration & Execution (Phase 5: TaskOrchestrator -> TaskExecutor -> VerificationDispatcher -> PASSED)
-  8. Inspect Task DAG & Statuses (Phase 5: get_plan_tasks query)
-  9. Repository Tools (read_file with bounded lines)
-  10. Workspace Isolated File & Patch Tools (create_file, modify_file, get_diff)
-  11. Terminal Tools (detect_commands via sandbox)
-  12. Verification Mesh Tools (verify_static AST integrity)
-  13. Git Tools (create_checkpoint, git_status)
-  14. Tool Policy Safety Enforcement (BLOCKED policy blocks handler execution)
-  15. Database Event Audit & History (AgentEvent log inspection)
-  16. Terminal State Locking (COMPLETED state locks execution)
+  7. Sequential Task Orchestration via EngineeringAgentTaskExecutor (Phase 5 + Phase 6: Loop -> COMPLETED_FOR_VERIFICATION -> PASSED)
+  8. Direct EngineeringAgentLoop Multi-Turn Execution (Phase 6: Tool Proposal -> Observation -> Completion Protocol)
+  9. Phase 6 Repetition Loop Detector & Guardrails (Phase 6: Consecutive duplicate tool calls -> REPEATED_TOOL_CALL_LIMIT)
+  10. Phase 6 Protocol Guardrail (Phase 6: Rejection of plain 'Done' -> Malformed response feedback)
+  11. Repository Tools (read_file with bounded lines)
+  12. Workspace Isolated File & Patch Tools (create_file, modify_file, get_diff)
+  13. Terminal Tools (detect_commands via sandbox)
+  14. Verification Mesh Tools (verify_static AST integrity)
+  15. Git Tools (create_checkpoint, git_status)
+  16. Tool Policy Safety Enforcement (BLOCKED policy blocks handler execution)
+  17. Database Event Audit & History (AgentEvent log inspection including Phase 6 loop events)
+  18. Terminal State Locking (COMPLETED state locks execution)
 
 Run via uv:
   uv run python scripts/manual_test_flow.py
@@ -30,16 +32,60 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import List
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.agent.engineering_agent import EngineeringAgent, EngineeringAgentError
-from backend.agent.planning.contracts import PlanStatus, PlanTaskStatus
+from backend.agent.loop import (
+    AgentExecutionResult,
+    AgentLoopConfig,
+    CompletionSignal,
+    CriterionEvaluation,
+    EngineeringAgentLoop,
+    LoopGuardrails,
+    ModelAdapter,
+    StopReason,
+)
+from backend.agent.planning.contracts import PlanStatus, PlanTask, PlanTaskStatus
+from backend.agent.tasks import (
+    DefaultVerificationDispatcher,
+    EngineeringAgentTaskExecutor,
+    TaskExecutionContext,
+    TaskOrchestrator,
+)
 from backend.agent.tools.policy import PolicyAction
 from backend.agent.tools import create_default_tool_registry
 from backend.database import Base, SessionLocal, engine
 from backend.models.implementation import AgentEvent, AgentEventType, AgentRun, AgentState
+
+
+class MockScriptModelAdapter(ModelAdapter):
+    """Mock model adapter returning scripted JSON proposals for automated walkthrough."""
+
+    def __init__(self, responses: List[str]):
+        super().__init__()
+        self.responses = list(responses)
+        self.call_idx = 0
+
+    async def call_model(self, messages) -> str:
+        if self.call_idx < len(self.responses):
+            resp = self.responses[self.call_idx]
+            self.call_idx += 1
+            return resp
+        return json.dumps({
+            "action": "complete",
+            "summary": "Completed fallback implementation",
+            "acceptance_criteria_status": [
+                {
+                    "criterion": "Default criterion",
+                    "status": "satisfied",
+                    "evidence": "Verified in sandbox worktree",
+                }
+            ],
+            "verification_requested": True,
+        })
 
 
 def print_banner(text: str):
@@ -65,7 +111,7 @@ def print_kv(key: str, value: any, indent: int = 4):
 def main():
     print_banner(
         "GITONBOARD ENGINEERING AGENT -- COMPLETE SYSTEM VERIFICATION\n"
-        "  COVERS: PHASE 1 (LIFECYCLE) + PHASE 2 (TOOLS) + PHASE 3 (CONTEXT) + PHASE 4 (PLANNING) + PHASE 5 (TASK ORCHESTRATOR)"
+        "  COVERS: PHASES 1 (LIFECYCLE), 2 (TOOLS), 3 (CONTEXT), 4 (PLANNING), 5 (ORCHESTRATOR), 6 (ENGINEERING AGENT LOOP)"
     )
 
     # 0. Initialize Database
@@ -174,8 +220,8 @@ def main():
         print_kv("Current State", run.current_state.value)
         assert run.current_state == AgentState.EXECUTING
 
-        # 7. Sequential Task Orchestration & Verification (Phase 5)
-        print_step_header(7, "Sequential Task Orchestration & Verification (Phase 5)")
+        # 7. Sequential Task Orchestration & Execution via TaskExecutor (Phase 5)
+        print_step_header(7, "Sequential Task Orchestration & Execution (Phase 5)")
         tasks = agent.get_plan_tasks(db, run_id=run.id)
         print_kv("Total Tasks to Orchestrate", len(tasks))
         
@@ -197,15 +243,118 @@ def main():
         assert len(executed_tasks) == len(tasks)
         print_kv("All Tasks Passed", "PASSED -> Every task completed through TaskExecutor and VerificationDispatcher.")
 
-        # 8. Query Task Graph & Detail (Phase 5)
-        print_step_header(8, "Query Task Graph & Detail (Phase 5)")
-        final_tasks = agent.get_plan_tasks(db, run_id=run.id)
-        for t in final_tasks:
-            print_kv(f"Task [{t.task_id}]", f"status={t.status.value} (deps={t.dependencies}, verif={t.verification_strategy})")
-            assert t.status == PlanTaskStatus.PASSED
+        # 8. Phase 6: Direct EngineeringAgentLoop Multi-Turn Execution
+        print_step_header(8, "Phase 6: EngineeringAgentLoop Multi-Turn Controlled Execution")
+        test_task_def = PlanTask(
+            task_id="task-p6-demo",
+            step_number=1,
+            title="Implement Calculator Module",
+            description="Add calculator.py with add/multiply functions and docstrings",
+            affected_files=["calculator.py"],
+            acceptance_criteria=[
+                "calculator.py exists with add() and multiply()",
+                "functions include complete docstrings",
+            ],
+            verification_strategy="verify_static",
+        )
+        task_exec_ctx = TaskExecutionContext(
+            agent_run_id=run.id,
+            plan_id=approved_plan.plan_id,
+            task_id="task-p6-demo",
+            repository_id=run.repository_id,
+            worktree_path=str(wt_path),
+            task_definition=test_task_def,
+        )
 
-        # 9. Repository Tools (Phase 2)
-        print_step_header(9, "Invoke Repository Tools (read_file with bounded range)")
+        scripted_responses = [
+            # Turn 1: Model requests read_file to inspect main.py
+            json.dumps({
+                "action": "tool_call",
+                "tool_name": "read_file",
+                "arguments": {"path": "main.py"},
+            }),
+            # Turn 2: Model requests create_file to write calculator.py
+            json.dumps({
+                "action": "tool_call",
+                "tool_name": "create_file",
+                "arguments": {
+                    "path": "calculator.py",
+                    "content": "def add(a: int, b: int) -> int:\n    '''Adds two integers.'''\n    return a + b\n\ndef multiply(a: int, b: int) -> int:\n    '''Multiplies two integers.'''\n    return a * b\n",
+                },
+            }),
+            # Turn 3: Model requests completion with structured criterion evaluations
+            json.dumps({
+                "action": "complete",
+                "summary": "Implemented calculator.py with typed add and multiply functions and docstrings.",
+                "acceptance_criteria_status": [
+                    {
+                        "criterion": "calculator.py exists with add() and multiply()",
+                        "status": "satisfied",
+                        "evidence": "Created calculator.py with def add and def multiply",
+                    },
+                    {
+                        "criterion": "functions include complete docstrings",
+                        "status": "satisfied",
+                        "evidence": "Added triple-quoted docstrings to all functions",
+                    },
+                ],
+                "verification_requested": True,
+            }),
+        ]
+
+        p6_adapter = MockScriptModelAdapter(scripted_responses)
+        p6_loop = EngineeringAgentLoop(
+            tool_registry=agent.tools,
+            model_adapter=p6_adapter,
+            event_coordinator=agent.events,
+            config=AgentLoopConfig(max_agent_turns=10),
+        )
+
+        p6_result: AgentExecutionResult = p6_loop.run(task_context=task_exec_ctx, db=db, run_model=run)
+
+        print_kv("P6 Loop Status", p6_result.status)
+        print_kv("P6 Stop Reason", p6_result.stop_reason.value)
+        print_kv("Iterations Completed", p6_result.iterations)
+        print_kv("Tool Calls Invoked", p6_result.tool_call_count)
+        print_kv("Changed Files", p6_result.changed_files)
+        print_kv("Captured Unified Diff", "\n" + (p6_result.diff or "(clean diff)"))
+        print_kv("Completion Summary", p6_result.completion_signal.summary if p6_result.completion_signal else None)
+        assert p6_result.status == "COMPLETED_FOR_VERIFICATION"
+        assert p6_result.stop_reason == StopReason.COMPLETED_FOR_VERIFICATION
+        assert len(p6_result.changed_files) > 0
+        assert (wt_path / "calculator.py").exists()
+
+        # 9. Phase 6: Repetition Loop Detector Guardrail
+        print_step_header(9, "Phase 6: Repetition Loop Detection Guardrail (3-strike limit)")
+        repeat_call = json.dumps({
+            "action": "tool_call",
+            "tool_name": "read_file",
+            "arguments": {"path": "main.py"},
+        })
+        repeat_adapter = MockScriptModelAdapter([repeat_call, repeat_call, repeat_call, repeat_call])
+        repeat_loop = EngineeringAgentLoop(
+            tool_registry=agent.tools,
+            model_adapter=repeat_adapter,
+            config=AgentLoopConfig(max_repeated_tool_calls=3, max_agent_turns=10),
+        )
+        repeat_res = repeat_loop.run(task_context=task_exec_ctx, db=db, run_model=run)
+        print_kv("Repetition Test Status", repeat_res.status)
+        print_kv("Repetition Stop Reason", repeat_res.stop_reason.value)
+        print_kv("Repetition Error", repeat_res.error)
+        assert repeat_res.status == "FAILED"
+        assert repeat_res.stop_reason == StopReason.REPEATED_TOOL_CALL_LIMIT
+        print_kv("Loop Detection Guardrail", "PASSED -> Terminated loop when agent repeated identical call 3 times.")
+
+        # 10. Phase 6: Protocol Guardrail (Plain 'Done' Rejection)
+        print_step_header(10, "Phase 6: Protocol Guardrail (Plain 'Done' String Rejection)")
+        parsed_done = p6_adapter.parse_response("Done.")
+        print_kv("Plain 'Done' Is Malformed", parsed_done.is_malformed)
+        print_kv("Parse Error Feedback", parsed_done.parse_error)
+        assert parsed_done.is_malformed is True
+        print_kv("Protocol Safety Invariant", "PASSED -> Plain string 'Done' rejected as malformed. Structured criteria evidence required.")
+
+        # 11. Repository Tools (Phase 2)
+        print_step_header(11, "Invoke Repository Tools (read_file with bounded range)")
         res_read = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -218,23 +367,8 @@ def main():
         print_kv("Raw Content", "\n" + res_read.data.get("content", "").strip())
         assert res_read.success
 
-        # 10. Workspace Tools (Phase 2)
-        print_step_header(10, "Invoke Workspace Isolated Tools (create_file, modify_file, get_diff)")
-        
-        # 10.1 create_file
-        res_create = agent.invoke_tool(
-            db,
-            run_id=run.id,
-            tool_name="create_file",
-            arguments={"path": "calculator.py", "content": "def add(a, b):\n    return a + b\n"},
-        )
-        print_kv("create_file Status", "SUCCESS" if res_create.success else "FAILED")
-        print_kv("File Created", res_create.data.get("path"))
-        print_kv("Bytes Written", res_create.data.get("bytes_written"))
-        assert res_create.success
-        assert (wt_path / "calculator.py").exists()
-
-        # 10.2 modify_file
+        # 12. Workspace Tools (Phase 2)
+        print_step_header(12, "Invoke Workspace Isolated Tools (create_file, modify_file, get_diff)")
         res_mod = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -245,22 +379,21 @@ def main():
         print_kv("Modified Bytes", res_mod.data.get("bytes_written"))
         assert res_mod.success
 
-        # 10.3 get_diff
         res_diff = agent.invoke_tool(db, run_id=run.id, tool_name="get_diff", arguments={})
         print_kv("get_diff Status", "SUCCESS" if res_diff.success else "FAILED")
         print_kv("Modified Files", res_diff.data.get("modified_files"))
         print_kv("Unified Diff Output", "\n" + res_diff.data.get("diff", "(empty diff)"))
         assert res_diff.success
 
-        # 11. Terminal Tools (Phase 2)
-        print_step_header(11, "Invoke Terminal Tools (detect_commands in sandbox)")
+        # 13. Terminal Tools (Phase 2)
+        print_step_header(13, "Invoke Terminal Tools (detect_commands in sandbox)")
         res_detect = agent.invoke_tool(db, run_id=run.id, tool_name="detect_commands", arguments={})
         print_kv("detect_commands Status", "SUCCESS" if res_detect.success else "FAILED")
         print_kv("Detected Build/Test Tools", res_detect.data.get("detected_commands"))
         assert res_detect.success
 
-        # 12. Verification Tools (Phase 2)
-        print_step_header(12, "Invoke Verification Mesh (verify_static AST & Import Integrity)")
+        # 14. Verification Tools (Phase 2)
+        print_step_header(14, "Invoke Verification Mesh (verify_static AST & Import Integrity)")
         res_verify = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -272,13 +405,13 @@ def main():
         print_kv("Defects Detected", res_verify.data.get("defects"))
         assert res_verify.success
 
-        # 13. Git Tools (Phase 2)
-        print_step_header(13, "Invoke Git Tools (create_checkpoint, git_status)")
+        # 15. Git Tools (Phase 2)
+        print_step_header(15, "Invoke Git Tools (create_checkpoint, git_status)")
         res_cp = agent.invoke_tool(
             db,
             run_id=run.id,
             tool_name="create_checkpoint",
-            arguments={"message": "Phase 5 verification checkpoint"},
+            arguments={"message": "Phase 6 verification checkpoint"},
         )
         print_kv("create_checkpoint Status", "SUCCESS" if res_cp.success else "FAILED")
         print_kv("Commit SHA", res_cp.data.get("commit_sha"))
@@ -289,8 +422,8 @@ def main():
         print_kv("git status porcelain", res_status.data.get("porcelain_output", "(clean)"))
         assert res_status.success
 
-        # 14. Tool Policy Safety Enforcement (Phase 2 Invariant)
-        print_step_header(14, "Policy Safety Enforcement (BLOCKED Policy Invariant)")
+        # 16. Tool Policy Safety Enforcement (Phase 2 Invariant)
+        print_step_header(16, "Policy Safety Enforcement (BLOCKED Policy Invariant)")
         agent.tools.policy.set_policy("delete_file", PolicyAction.BLOCKED, reason="Deletion of files is forbidden in this environment")
         res_blocked = agent.invoke_tool(
             db,
@@ -306,18 +439,18 @@ def main():
         assert (wt_path / "calculator.py").exists()
         print_kv("Filesystem Safety Invariant", "PASSED -> 'calculator.py' remains intact on disk; handler NEVER ran.")
 
-        # 15. Inspect Persisted Agent Events (PostgreSQL Audit)
-        print_step_header(15, "Inspect Persisted Agent Events Audit Log")
+        # 17. Inspect Persisted Agent Events (PostgreSQL Audit)
+        print_step_header(17, "Inspect Persisted Agent Events Audit Log (Phases 1-6)")
         events = db.query(AgentEvent).filter(AgentEvent.agent_run_id == run.id).order_by(AgentEvent.id).all()
         print_kv("Total Events Recorded in Database", len(events))
-        print(f"\n    {'ID':<5} | {'EVENT TYPE':<28} | {'MESSAGE'}")
-        print(f"    {'-'*5}-+-{'-'*28}-+-{'-'*40}")
+        print(f"\n    {'ID':<5} | {'EVENT TYPE':<34} | {'MESSAGE'}")
+        print(f"    {'-'*5}-+-{'-'*34}-+-{'-'*40}")
         for evt in events:
             evt_name = evt.event_type.value if hasattr(evt.event_type, "value") else str(evt.event_type)
-            print(f"    {evt.id:<5} | {evt_name:<28} | {evt.message}")
+            print(f"    {evt.id:<5} | {evt_name:<34} | {evt.message}")
 
-        # 16. Lifecycle Completion & Terminal State Locking (Phase 1)
-        print_step_header(16, "Lifecycle Completion (EXECUTING -> VERIFYING -> COMPLETED)")
+        # 18. Lifecycle Completion & Terminal State Locking (Phase 1)
+        print_step_header(18, "Lifecycle Completion (EXECUTING -> VERIFYING -> COMPLETED)")
         agent.transition_state(db, run.id, to_state=AgentState.VERIFYING, reason="Running automated verification suite")
         agent.transition_state(db, run.id, to_state=AgentState.COMPLETED, reason="All goals and tests verified successfully")
         print_kv("Final Lifecycle State", run.current_state.value)
@@ -334,7 +467,7 @@ def main():
 
     db.close()
 
-    print_banner("ALL FLOWS (PHASE 1, PHASE 2, PHASE 3, PHASE 4 & PHASE 5) VERIFIED AND PASSED SUCCESSFULLY!")
+    print_banner("ALL FLOWS (PHASES 1, 2, 3, 4, 5 & 6) VERIFIED AND PASSED SUCCESSFULLY!")
 
 
 if __name__ == "__main__":

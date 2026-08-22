@@ -71,3 +71,57 @@ class DefaultTaskExecutor(TaskExecutor):
             observations=[f"Completed execution steps for: {task.title}"],
             duration_ms=round(duration_ms, 2),
         )
+
+
+class EngineeringAgentTaskExecutor(TaskExecutor):
+    """
+    Phase 6 TaskExecutor adapter executing tasks via the controlled EngineeringAgentLoop.
+    Maps structured AgentExecutionResult into standard TaskExecutionResult for Phase 7 verification.
+    """
+
+    def __init__(
+        self,
+        loop: Optional[Any] = None,
+        config: Optional[Any] = None,
+    ):
+        if loop is None:
+            from backend.agent.loop import EngineeringAgentLoop
+            self.loop = EngineeringAgentLoop()
+        else:
+            self.loop = loop
+        self.config = config
+
+    def execute(self, context: TaskExecutionContext) -> TaskExecutionResult:
+        logger.info(f"EngineeringAgentTaskExecutor: Running EngineeringAgentLoop for task '{context.task_id}'")
+        agent_result = self.loop.run(
+            task_context=context,
+            config=self.config,
+        )
+
+        is_success = (agent_result.status == "COMPLETED_FOR_VERIFICATION")
+        target_status = PlanTaskStatus.VERIFYING if is_success else PlanTaskStatus.FAILED
+
+        summary_text = (
+            agent_result.completion_signal.summary
+            if agent_result.completion_signal
+            else f"Task stopped: {agent_result.status} (Reason: {agent_result.stop_reason.value})"
+        )
+
+        return TaskExecutionResult(
+            task_id=context.task_id,
+            success=is_success,
+            status=target_status,
+            summary=summary_text,
+            changed_files=agent_result.changed_files,
+            tool_calls=agent_result.tool_calls,
+            observations=agent_result.observations,
+            error=agent_result.error,
+            duration_ms=agent_result.duration_ms,
+            metadata={
+                "stop_reason": agent_result.stop_reason.value,
+                "iterations": agent_result.iterations,
+                "tool_call_count": agent_result.tool_call_count,
+                "diff": agent_result.diff,
+                **agent_result.metadata,
+            },
+        )
