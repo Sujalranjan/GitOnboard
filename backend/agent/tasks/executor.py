@@ -33,6 +33,10 @@ class TaskExecutor(ABC):
         """
         pass
 
+    def execute_task(self, context: TaskExecutionContext) -> TaskExecutionResult:
+        """Alias for execute()."""
+        return self.execute(context)
+
 
 class DefaultTaskExecutor(TaskExecutor):
     """
@@ -83,12 +87,14 @@ class EngineeringAgentTaskExecutor(TaskExecutor):
         self,
         loop: Optional[Any] = None,
         config: Optional[Any] = None,
+        agent_loop: Optional[Any] = None,
     ):
-        if loop is None:
+        actual_loop = loop or agent_loop
+        if actual_loop is None:
             from backend.agent.loop import EngineeringAgentLoop
             self.loop = EngineeringAgentLoop()
         else:
-            self.loop = loop
+            self.loop = actual_loop
         self.config = config
 
     def execute(self, context: TaskExecutionContext) -> TaskExecutionResult:
