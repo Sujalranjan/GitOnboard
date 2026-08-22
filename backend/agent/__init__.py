@@ -19,9 +19,24 @@ from backend.agent.planning import (
     PlanValidator,
     PlanningOrchestrator,
 )
+from backend.agent.loop import (
+    AgentExecutionResult,
+    AgentLoopConfig,
+    CompletionSignal,
+    CriterionEvaluation,
+    EngineeringAgentLoop,
+    LoopGuardrails,
+    ModelAdapter,
+    ModelMessage,
+    ParsedModelOutput,
+    StopReason,
+    ToolCall,
+    ToolObservation,
+)
 from backend.agent.tasks import (
     DefaultTaskExecutor,
     DefaultVerificationDispatcher,
+    EngineeringAgentTaskExecutor,
     InvalidTaskStateTransitionError,
     TaskExecutionContext,
     TaskExecutionResult,
@@ -109,10 +124,23 @@ __all__ = [
     "InvalidTaskStateTransitionError",
     "TaskExecutor",
     "DefaultTaskExecutor",
+    "EngineeringAgentTaskExecutor",
     "VerificationDispatcher",
     "DefaultVerificationDispatcher",
     "TaskExecutionContext",
     "TaskExecutionResult",
+    "EngineeringAgentLoop",
+    "AgentLoopConfig",
+    "StopReason",
+    "ToolCall",
+    "ToolObservation",
+    "CriterionEvaluation",
+    "CompletionSignal",
+    "AgentExecutionResult",
+    "ModelAdapter",
+    "ModelMessage",
+    "ParsedModelOutput",
+    "LoopGuardrails",
 ]
 
 

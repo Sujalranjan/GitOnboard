@@ -12,7 +12,11 @@ from backend.agent.context.contracts import (
     ContextBudget,
 )
 from backend.database import Base, SessionLocal, engine
-from backend.models.fact_store import FactCapability, FactRoute, FactSymbol
+from backend.models.fact_store import FactCapability, FactFile, FactRoute, FactSymbol
+
+
+from backend.models.user import User
+from backend.models.repository import Analysis, Repository
 
 
 @pytest.fixture(autouse=True)
@@ -26,7 +30,28 @@ def init_db():
 def test_context_assembler_basic_flow(init_db):
     db = init_db
 
+    # Seed parent User, Repository, Analysis to satisfy FK constraints
+    user = User(id=1, github_id="1", username="testuser", email="test@example.com")
+    db.merge(user)
+    db.commit()
+    repo = Repository(id=1, user_id=1, url="https://github.com/test/repo")
+    db.merge(repo)
+    db.commit()
+    analysis = Analysis(id=1, repository_id=1, status="Completed")
+    db.merge(analysis)
+    db.commit()
+
     # Seed sample fact store data
+    ff = FactFile(
+        id="test:file:auth.py",
+        analysis_id=1,
+        path="auth.py",
+        size=100,
+        is_binary=False,
+    )
+    db.merge(ff)
+    db.commit()
+
     cap = FactCapability(
         id="test:cap:auth",
         analysis_id=1,
