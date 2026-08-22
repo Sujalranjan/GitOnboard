@@ -48,6 +48,20 @@ from backend.agent.verification import (
     VerificationStrategyResolver,
     VerificationType,
 )
+from backend.agent.repair import (
+    Defect,
+    DiagnosisCategory,
+    DiagnosisContext,
+    DiagnosisStatus,
+    FailureCategory,
+    FailureDiagnosisController,
+    RepairAttempt,
+    RepairAttemptTracker,
+    RepairConfig,
+    RepairController,
+    RepairResult,
+    RepairStatus,
+)
 from backend.agent.tasks import (
     DefaultTaskExecutor,
     DefaultVerificationDispatcher,
@@ -169,6 +183,18 @@ __all__ = [
     "VerificationEvidenceCollector",
     "VerificationResultAggregator",
     "VerificationMeshDispatcher",
+    "Defect",
+    "DiagnosisCategory",
+    "DiagnosisContext",
+    "DiagnosisStatus",
+    "FailureCategory",
+    "FailureDiagnosisController",
+    "RepairAttempt",
+    "RepairAttemptTracker",
+    "RepairConfig",
+    "RepairController",
+    "RepairResult",
+    "RepairStatus",
 ]
 
 

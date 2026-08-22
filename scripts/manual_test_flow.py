@@ -1,5 +1,5 @@
 """
-Manual Verification Script: Comprehensive End-to-End Test for Phases 1 through 7.
+Manual Verification Script: Comprehensive End-to-End Test for Phases 1 through 8.
 
 This script executes and logs every stage of the Engineering Agent lifecycle:
   1. AgentRun Creation & Lifecycle State (Phase 1)
@@ -14,14 +14,16 @@ This script executes and logs every stage of the Engineering Agent lifecycle:
   10. Phase 6: Protocol Guardrail (Plain 'Done' Rejection -> Malformed feedback)
   11. Phase 7: VerificationDispatcher Multi-Vector Mesh (Static -> Dynamic -> Contract -> Judge -> Evidence-backed PASS)
   12. Phase 7: Defect Extraction & Failure Normalization (Failure -> Structured VerificationDefects for Phase 8)
-  13. Repository Tools (read_file with bounded lines)
-  14. Workspace Isolated File & Patch Tools (create_file, modify_file, get_diff)
-  15. Terminal Tools (detect_commands via sandbox)
-  16. Verification Mesh Tools (verify_static AST integrity)
-  17. Git Tools (create_checkpoint, git_status)
-  18. Tool Policy Safety Enforcement (BLOCKED policy blocks handler execution)
-  19. Database Event Audit & History (AgentEvent log inspection including Phase 6 loop and Phase 7 verification events)
-  20. Terminal State Locking (COMPLETED state locks execution)
+  13. Phase 8: Failure Diagnosis, Context Assembly, Agentic Repair & Re-Verification Loop (Diagnosis -> Repair -> Reverify PASS)
+  14. Phase 8: Bounded Repair Attempt Limit & BLOCKED Transition on Unresolvable Defect (Exhausts limit -> BLOCKED)
+  15. Repository Tools (read_file with bounded lines)
+  16. Workspace Isolated File & Patch Tools (create_file, modify_file, get_diff)
+  17. Terminal Tools (detect_commands via sandbox)
+  18. Verification Mesh Tools (verify_static AST integrity)
+  19. Git Tools (create_checkpoint, git_status)
+  20. Tool Policy Safety Enforcement (BLOCKED policy blocks handler execution)
+  21. Database Event Audit & History (AgentEvent log inspection including Phase 6 loop, Phase 7 verification, and Phase 8 repair events)
+  22. Terminal State Locking (COMPLETED state locks execution)
 
 Run via uv:
   uv run python scripts/manual_test_flow.py
@@ -51,6 +53,19 @@ from backend.agent.loop import (
     StopReason,
 )
 from backend.agent.planning.contracts import PlanStatus, PlanTask, PlanTaskStatus
+from backend.agent.repair import (
+    Defect,
+    DiagnosisCategory,
+    DiagnosisContext,
+    FailureCategory,
+    FailureDiagnosisController,
+    RepairAttempt,
+    RepairAttemptTracker,
+    RepairConfig,
+    RepairController,
+    RepairResult,
+    RepairStatus,
+)
 from backend.agent.tasks import (
     DefaultVerificationDispatcher,
     EngineeringAgentTaskExecutor,
@@ -129,7 +144,7 @@ def print_kv(key: str, value: any, indent: int = 4):
 def main():
     print_banner(
         "GITONBOARD ENGINEERING AGENT -- COMPLETE SYSTEM VERIFICATION\n"
-        "  COVERS: PHASES 1 (LIFECYCLE), 2 (TOOLS), 3 (CONTEXT), 4 (PLANNING), 5 (ORCHESTRATOR), 6 (LOOP), 7 (VERIFICATION)"
+        "  COVERS: PHASES 1 (LIFECYCLE), 2 (TOOLS), 3 (CONTEXT), 4 (PLANNING), 5 (ORCHESTRATOR), 6 (LOOP), 7 (VERIFICATION), 8 (REPAIR)"
     )
 
     # 0. Initialize Database
@@ -447,11 +462,139 @@ def main():
         assert len(broken_verif_res.defects) > 0
         print_kv("Defect Normalization Invariant", "PASSED -> Structured defects extracted without guessing or repair; ready for Phase 8.")
 
-        # Clean up broken test file
+        # 13. Phase 8: Failure Diagnosis, Context Assembly, Agentic Repair & Re-Verification Loop
+        print_step_header(13, "Phase 8: Failure Diagnosis, Context Assembly, Agentic Repair & Re-Verification")
+        
+        # Script model repair response: fixes broken.py syntax
+        repair_script = [
+            json.dumps({
+                "action": "tool_call",
+                "tool_name": "modify_file",
+                "arguments": {
+                    "path": "broken.py",
+                    "content": "def broken_syntax():\n    '''Repaired syntax function'''\n    return True\n",
+                },
+            }),
+            json.dumps({
+                "action": "complete",
+                "summary": "Fixed invalid syntax in broken.py",
+                "acceptance_criteria_status": [
+                    {
+                        "criterion": "broken.py has valid syntax",
+                        "status": "satisfied",
+                        "evidence": "Repaired function header syntax",
+                    }
+                ],
+                "verification_requested": True,
+            }),
+        ]
+        p8_adapter = MockScriptModelAdapter(repair_script)
+        p8_loop = EngineeringAgentLoop(
+            tool_registry=agent.tools,
+            model_adapter=p8_adapter,
+            event_coordinator=agent.events,
+            config=AgentLoopConfig(max_agent_turns=5),
+        )
+        p8_repair_controller = RepairController(
+            agent_loop=p8_loop,
+            verification_dispatcher=p7_dispatcher,
+            event_coordinator=agent.events,
+            config=RepairConfig(max_repair_attempts=3),
+        )
+
+        p8_repair_result = p8_repair_controller.repair_task(
+            task_context=broken_ctx,
+            initial_verification_result=broken_verif_res,
+            db=db,
+            run_model=run,
+        )
+
+        print_kv("Phase 8 Repair Status", p8_repair_result.status.value)
+        print_kv("Phase 8 Repaired & Passed", p8_repair_result.passed)
+        print_kv("Attempts Utilized", p8_repair_result.attempts_used)
+        print_kv("Repaired Changed Files", p8_repair_result.changed_files)
+        print_kv("Executive Summary", p8_repair_result.summary)
+        assert p8_repair_result.passed is True
+        assert p8_repair_result.status == RepairStatus.PASSED
+        assert p8_repair_result.attempts_used == 1
+
+        # Clean up test file
         broken_file.unlink()
 
-        # 13. Repository Tools (Phase 2)
-        print_step_header(13, "Invoke Repository Tools (read_file with bounded range)")
+        # 14. Phase 8: Bounded Repair Attempt Limit & BLOCKED Transition on Unresolvable Defect
+        print_step_header(14, "Phase 8: Bounded Repair Attempt Limit & BLOCKED Transition (Safely Halts)")
+        # Introduce unfixable test file
+        unfixable_file = wt_path / "unfixable.py"
+        unfixable_file.write_text("def unfixable():\n    syntax error here((\n", encoding="utf-8")
+
+        unfixable_task_def = PlanTask(
+            task_id="task-p8-unfixable-demo",
+            step_number=3,
+            title="Unfixable Task",
+            description="Exhausts attempt limit",
+            affected_files=["unfixable.py"],
+            verification_strategy="verify_static",
+        )
+        unfixable_ctx = TaskExecutionContext(
+            agent_run_id=run.id,
+            plan_id=approved_plan.plan_id,
+            task_id="task-p8-unfixable-demo",
+            repository_id=run.repository_id,
+            worktree_path=str(wt_path),
+            task_definition=unfixable_task_def,
+        )
+        unfixable_exec_res = TaskExecutionResult(
+            task_id="task-p8-unfixable-demo",
+            success=True,
+            summary="Attempted unfixable implementation",
+            changed_files=["unfixable.py"],
+        )
+        unfixable_verif_res = p7_dispatcher.verify(
+            task_context=unfixable_ctx,
+            execution_result=unfixable_exec_res,
+            db=db,
+            run_model=run,
+        )
+
+        # Script model to never fix the syntax
+        stagnant_adapter = MockScriptModelAdapter([
+            json.dumps({"action": "complete", "summary": "Did not fix syntax", "verification_requested": True})
+        ])
+        stagnant_loop = EngineeringAgentLoop(
+            tool_registry=agent.tools,
+            model_adapter=stagnant_adapter,
+            event_coordinator=agent.events,
+            config=AgentLoopConfig(max_agent_turns=5),
+        )
+        bounded_repair_controller = RepairController(
+            agent_loop=stagnant_loop,
+            verification_dispatcher=p7_dispatcher,
+            event_coordinator=agent.events,
+            config=RepairConfig(max_repair_attempts=2),
+        )
+
+        blocked_repair_res = bounded_repair_controller.repair_task(
+            task_context=unfixable_ctx,
+            initial_verification_result=unfixable_verif_res,
+            db=db,
+            run_model=run,
+        )
+
+        print_kv("Bounded Repair Verdict", blocked_repair_res.status.value)
+        print_kv("Bounded Repair Passed", blocked_repair_res.passed)
+        print_kv("Attempts Utilized", blocked_repair_res.attempts_used)
+        print_kv("Stop Reason", blocked_repair_res.stop_reason)
+        print_kv("Executive Summary", blocked_repair_res.summary)
+        assert blocked_repair_res.passed is False
+        assert blocked_repair_res.status == RepairStatus.BLOCKED
+        assert blocked_repair_res.attempts_used == 2
+        print_kv("Bounded Autonomy Invariant", "PASSED -> Task transitioned to BLOCKED after 2 failed attempts; halted safely without infinite loop.")
+
+        # Clean up test file
+        unfixable_file.unlink()
+
+        # 15. Repository Tools (Phase 2)
+        print_step_header(15, "Invoke Repository Tools (read_file with bounded range)")
         res_read = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -464,8 +607,8 @@ def main():
         print_kv("Raw Content", "\n" + res_read.data.get("content", "").strip())
         assert res_read.success
 
-        # 14. Workspace Tools (Phase 2)
-        print_step_header(14, "Invoke Workspace Isolated Tools (create_file, modify_file, get_diff)")
+        # 16. Workspace Tools (Phase 2)
+        print_step_header(16, "Invoke Workspace Isolated Tools (create_file, modify_file, get_diff)")
         res_mod = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -482,15 +625,15 @@ def main():
         print_kv("Unified Diff Output", "\n" + res_diff.data.get("diff", "(empty diff)"))
         assert res_diff.success
 
-        # 15. Terminal Tools (Phase 2)
-        print_step_header(15, "Invoke Terminal Tools (detect_commands in sandbox)")
+        # 17. Terminal Tools (Phase 2)
+        print_step_header(17, "Invoke Terminal Tools (detect_commands in sandbox)")
         res_detect = agent.invoke_tool(db, run_id=run.id, tool_name="detect_commands", arguments={})
         print_kv("detect_commands Status", "SUCCESS" if res_detect.success else "FAILED")
         print_kv("Detected Build/Test Tools", res_detect.data.get("detected_commands"))
         assert res_detect.success
 
-        # 16. Verification Tools (Phase 2)
-        print_step_header(16, "Invoke Verification Mesh (verify_static AST & Import Integrity)")
+        # 18. Verification Tools (Phase 2)
+        print_step_header(18, "Invoke Verification Mesh (verify_static AST & Import Integrity)")
         res_verify = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -502,13 +645,13 @@ def main():
         print_kv("Defects Detected", res_verify.data.get("defects"))
         assert res_verify.success
 
-        # 17. Git Tools (Phase 2)
-        print_step_header(17, "Invoke Git Tools (create_checkpoint, git_status)")
+        # 19. Git Tools (Phase 2)
+        print_step_header(19, "Invoke Git Tools (create_checkpoint, git_status)")
         res_cp = agent.invoke_tool(
             db,
             run_id=run.id,
             tool_name="create_checkpoint",
-            arguments={"message": "Phase 7 verification checkpoint"},
+            arguments={"message": "Phase 8 verification checkpoint"},
         )
         print_kv("create_checkpoint Status", "SUCCESS" if res_cp.success else "FAILED")
         print_kv("Commit SHA", res_cp.data.get("commit_sha"))
@@ -519,8 +662,8 @@ def main():
         print_kv("git status porcelain", res_status.data.get("porcelain_output", "(clean)"))
         assert res_status.success
 
-        # 18. Tool Policy Safety Enforcement (Phase 2 Invariant)
-        print_step_header(18, "Policy Safety Enforcement (BLOCKED Policy Invariant)")
+        # 20. Tool Policy Safety Enforcement (Phase 2 Invariant)
+        print_step_header(20, "Policy Safety Enforcement (BLOCKED Policy Invariant)")
         agent.tools.policy.set_policy("delete_file", PolicyAction.BLOCKED, reason="Deletion of files is forbidden in this environment")
         res_blocked = agent.invoke_tool(
             db,
@@ -536,8 +679,8 @@ def main():
         assert (wt_path / "calculator.py").exists()
         print_kv("Filesystem Safety Invariant", "PASSED -> 'calculator.py' remains intact on disk; handler NEVER ran.")
 
-        # 19. Inspect Persisted Agent Events (PostgreSQL Audit)
-        print_step_header(19, "Inspect Persisted Agent Events Audit Log (Phases 1-7)")
+        # 21. Inspect Persisted Agent Events (PostgreSQL Audit)
+        print_step_header(21, "Inspect Persisted Agent Events Audit Log (Phases 1-8)")
         events = db.query(AgentEvent).filter(AgentEvent.agent_run_id == run.id).order_by(AgentEvent.id).all()
         print_kv("Total Events Recorded in Database", len(events))
         print(f"\n    {'ID':<5} | {'EVENT TYPE':<34} | {'MESSAGE'}")
@@ -546,8 +689,8 @@ def main():
             evt_name = evt.event_type.value if hasattr(evt.event_type, "value") else str(evt.event_type)
             print(f"    {evt.id:<5} | {evt_name:<34} | {evt.message}")
 
-        # 20. Lifecycle Completion & Terminal State Locking (Phase 1)
-        print_step_header(20, "Lifecycle Completion (EXECUTING -> VERIFYING -> COMPLETED)")
+        # 22. Lifecycle Completion & Terminal State Locking (Phase 1)
+        print_step_header(22, "Lifecycle Completion (EXECUTING -> VERIFYING -> COMPLETED)")
         agent.transition_state(db, run.id, to_state=AgentState.VERIFYING, reason="Running automated verification suite")
         agent.transition_state(db, run.id, to_state=AgentState.COMPLETED, reason="All goals and tests verified successfully")
         print_kv("Final Lifecycle State", run.current_state.value)
@@ -564,7 +707,7 @@ def main():
 
     db.close()
 
-    print_banner("ALL FLOWS (PHASES 1, 2, 3, 4, 5, 6 & 7) VERIFIED AND PASSED SUCCESSFULLY!")
+    print_banner("ALL FLOWS (PHASES 1, 2, 3, 4, 5, 6, 7 & 8) VERIFIED AND PASSED SUCCESSFULLY!")
 
 
 if __name__ == "__main__":
