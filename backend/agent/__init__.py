@@ -33,6 +33,21 @@ from backend.agent.loop import (
     ToolCall,
     ToolObservation,
 )
+from backend.agent.verification import (
+    DefectCategory,
+    DefectSeverity,
+    VerificationCheck,
+    VerificationDefect,
+    VerificationDispatcher as VerificationMeshDispatcher,
+    VerificationEvidence,
+    VerificationEvidenceCollector,
+    VerificationResult,
+    VerificationResultAggregator,
+    VerificationStatus,
+    VerificationStrategy,
+    VerificationStrategyResolver,
+    VerificationType,
+)
 from backend.agent.tasks import (
     DefaultTaskExecutor,
     DefaultVerificationDispatcher,
@@ -141,6 +156,19 @@ __all__ = [
     "ModelMessage",
     "ParsedModelOutput",
     "LoopGuardrails",
+    "VerificationType",
+    "VerificationStatus",
+    "DefectSeverity",
+    "DefectCategory",
+    "VerificationCheck",
+    "VerificationEvidence",
+    "VerificationDefect",
+    "VerificationStrategy",
+    "VerificationResult",
+    "VerificationStrategyResolver",
+    "VerificationEvidenceCollector",
+    "VerificationResultAggregator",
+    "VerificationMeshDispatcher",
 ]
 
 
