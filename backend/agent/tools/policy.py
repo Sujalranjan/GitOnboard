@@ -1,5 +1,6 @@
 """
 ToolPolicy: Enforces explicit execution permissions and safety invariants for agent tools.
+Delegates to ExecutionPolicy (Phase 9) while maintaining backward-compatible interface.
 
 Safety Invariant:
   When policy evaluates to BLOCKED or APPROVAL_REQUIRED:
@@ -9,38 +10,37 @@ Safety Invariant:
 from __future__ import annotations
 
 import logging
-from enum import Enum
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, Field
 
-from backend.agent.tools.contracts import AgentToolContext, ToolErrorCode, ToolResult
+from backend.agent.safety.contracts import AgentSafetyConfig, PolicyDecision
+from backend.agent.safety.policy import ExecutionPolicy
+from backend.agent.tools.contracts import AgentToolContext
+from backend.models.implementation import PolicyAction, RiskLevel
 
 logger = logging.getLogger(__name__)
-
-
-class PolicyAction(str, Enum):
-    ALLOWED = "ALLOWED"
-    BLOCKED = "BLOCKED"
-    APPROVAL_REQUIRED = "APPROVAL_REQUIRED"
-
-
-class PolicyDecision(BaseModel):
-    """Result of policy evaluation for a specific tool call."""
-    action: PolicyAction
-    reason: Optional[str] = None
-    timeout_override_sec: Optional[float] = None
 
 
 class ToolPolicy:
     """
     Centralized tool execution policy engine.
-    Evaluates tool authorization, file path constraints, and approval requirements.
+    Wraps ExecutionPolicy to enforce context-aware safety, command validation, and path isolation.
     """
 
-    def __init__(self, default_action: PolicyAction = PolicyAction.ALLOWED):
+    def __init__(
+        self,
+        default_action: PolicyAction = PolicyAction.ALLOWED,
+        safety_config: Optional[AgentSafetyConfig] = None,
+    ):
         self.default_action = default_action
-        self._tool_policies: Dict[str, PolicyAction] = {}
-        self._policy_reasons: Dict[str, str] = {}
+        self.execution_policy = ExecutionPolicy(config=safety_config)
+
+    @property
+    def _tool_policies(self) -> Dict[str, PolicyAction]:
+        return self.execution_policy._tool_overrides
+
+    @property
+    def _policy_reasons(self) -> Dict[str, str]:
+        return self.execution_policy._tool_reasons
 
     def set_policy(
         self,
@@ -50,13 +50,12 @@ class ToolPolicy:
     ) -> None:
         """Sets the explicit policy action for a specific tool."""
         act = action if isinstance(action, PolicyAction) else PolicyAction(str(action))
-        self._tool_policies[tool_name] = act
-        if reason:
-            self._policy_reasons[tool_name] = reason
+        self.execution_policy.set_tool_policy(tool_name, act, reason)
 
     def get_policy(self, tool_name: str) -> PolicyAction:
         """Retrieves configured policy action for tool, falling back to default_action."""
-        return self._tool_policies.get(tool_name, self.default_action)
+        act = self.execution_policy.get_tool_policy(tool_name)
+        return act if act is not None else self.default_action
 
     def evaluate(
         self,
@@ -66,34 +65,7 @@ class ToolPolicy:
     ) -> PolicyDecision:
         """
         Evaluates whether a tool invocation is permissible.
-        Enforces path traversal safety and explicit policy category.
+        Enforces path traversal safety, terminal command safety, and approval requirements.
         """
-        # Invariant 1: Path Traversal Isolation Guard
-        for key in ("path", "file_path", "target_file"):
-            if key in arguments and isinstance(arguments[key], str):
-                p = arguments[key]
-                if ".." in p or p.startswith("/") or (len(p) > 1 and p[1] == ":"):
-                    # Check if absolute path escapes the assigned worktree
-                    if context.worktree_path and not p.startswith(context.worktree_path) and (".." in p or p.startswith("/") or (len(p) > 1 and p[1] == ":")):
-                        logger.warning(f"Path traversal detected in argument '{key}={p}' for tool '{tool_name}'")
-                        return PolicyDecision(
-                            action=PolicyAction.BLOCKED,
-                            reason=f"Path traversal detected: argument '{key}' escapes assigned worktree boundary",
-                        )
-
-        # Invariant 2: Explicit Tool Policy Action
-        action = self.get_policy(tool_name)
-        reason = self._policy_reasons.get(tool_name)
-
-        if action == PolicyAction.BLOCKED:
-            return PolicyDecision(
-                action=PolicyAction.BLOCKED,
-                reason=reason or f"Tool '{tool_name}' is blocked by security policy",
-            )
-        elif action == PolicyAction.APPROVAL_REQUIRED:
-            return PolicyDecision(
-                action=PolicyAction.APPROVAL_REQUIRED,
-                reason=reason or f"Tool '{tool_name}' requires explicit user approval before execution",
-            )
-
-        return PolicyDecision(action=PolicyAction.ALLOWED)
+        decision = self.execution_policy.evaluate(tool_name, context, arguments)
+        return decision

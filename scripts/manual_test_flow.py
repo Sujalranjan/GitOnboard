@@ -1,5 +1,5 @@
 """
-Manual Verification Script: Comprehensive End-to-End Test for Phases 1 through 8.
+Manual Verification Script: Comprehensive End-to-End Test for Phases 1 through 9.
 
 This script executes and logs every stage of the Engineering Agent lifecycle:
   1. AgentRun Creation & Lifecycle State (Phase 1)
@@ -16,14 +16,18 @@ This script executes and logs every stage of the Engineering Agent lifecycle:
   12. Phase 7: Defect Extraction & Failure Normalization (Failure -> Structured VerificationDefects for Phase 8)
   13. Phase 8: Failure Diagnosis, Context Assembly, Agentic Repair & Re-Verification Loop (Diagnosis -> Repair -> Reverify PASS)
   14. Phase 8: Bounded Repair Attempt Limit & BLOCKED Transition on Unresolvable Defect (Exhausts limit -> BLOCKED)
-  15. Repository Tools (read_file with bounded lines)
-  16. Workspace Isolated File & Patch Tools (create_file, modify_file, get_diff)
-  17. Terminal Tools (detect_commands via sandbox)
-  18. Verification Mesh Tools (verify_static AST integrity)
-  19. Git Tools (create_checkpoint, git_status)
-  20. Tool Policy Safety Enforcement (BLOCKED policy blocks handler execution)
-  21. Database Event Audit & History (AgentEvent log inspection including Phase 6 loop, Phase 7 verification, and Phase 8 repair events)
-  22. Terminal State Locking (COMPLETED state locks execution)
+  15. Phase 9: Context-Aware ExecutionPolicy (Allowed inspection vs Blocked destructive commands vs Approval-required operations)
+  16. Phase 9: Human Action Approval Request & Resolution (Create approval -> Pause -> User approves -> Resume)
+  17. Phase 9: Human Action Rejection & Agent Observation Feedback (User rejects -> Structured observation returned)
+  18. Phase 9: Safe Cancellation Controller (Explicit human stop -> Safe interruption across all subsystems -> CANCELLED)
+  19. Repository Tools (read_file with bounded lines)
+  20. Workspace Isolated File & Patch Tools (create_file, modify_file, get_diff)
+  21. Terminal Tools (detect_commands via sandbox)
+  22. Verification Mesh Tools (verify_static AST integrity)
+  23. Git Tools (create_checkpoint, git_status)
+  24. Tool Policy Safety Enforcement (BLOCKED policy blocks handler execution)
+  25. Database Event Audit & History (AgentEvent log inspection including Phases 6-9 events)
+  26. Terminal State Locking (COMPLETED state locks execution)
 
 Run via uv:
   uv run python scripts/manual_test_flow.py
@@ -66,6 +70,18 @@ from backend.agent.repair import (
     RepairResult,
     RepairStatus,
 )
+from backend.agent.safety import (
+    AgentSafetyConfig,
+    ApprovalActionType,
+    ApprovalController,
+    ApprovalStatus,
+    CancellationController,
+    CancellationToken,
+    ExecutionPolicy,
+    PolicyAction,
+    PolicyDecision,
+    RiskLevel,
+)
 from backend.agent.tasks import (
     DefaultVerificationDispatcher,
     EngineeringAgentTaskExecutor,
@@ -73,7 +89,7 @@ from backend.agent.tasks import (
     TaskExecutionResult,
     TaskOrchestrator,
 )
-from backend.agent.tools.policy import PolicyAction
+from backend.agent.tools.contracts import AgentToolContext, ToolErrorCode
 from backend.agent.tools import create_default_tool_registry
 from backend.agent.verification import (
     DefectCategory,
@@ -88,10 +104,14 @@ from backend.agent.verification import (
     VerificationDispatcher,
 )
 from backend.database import Base, SessionLocal, engine
-from backend.models.implementation import AgentEvent, AgentEventType, AgentRun, AgentState
-from backend.verification.judge import Judge
-from backend.verification.schemas import ExecutionState, VerificationReport, VerificationResult as LegacyVerificationResult
-from backend.verification.static_verifier import StaticVerifier
+from backend.models.implementation import (
+    AgentEvent,
+    AgentEventType,
+    AgentRun,
+    AgentState,
+    ApprovalRequest,
+    PolicyDecisionRecord,
+)
 
 
 class MockScriptModelAdapter(ModelAdapter):
@@ -144,7 +164,8 @@ def print_kv(key: str, value: any, indent: int = 4):
 def main():
     print_banner(
         "GITONBOARD ENGINEERING AGENT -- COMPLETE SYSTEM VERIFICATION\n"
-        "  COVERS: PHASES 1 (LIFECYCLE), 2 (TOOLS), 3 (CONTEXT), 4 (PLANNING), 5 (ORCHESTRATOR), 6 (LOOP), 7 (VERIFICATION), 8 (REPAIR)"
+        "  COVERS: PHASES 1 (LIFECYCLE), 2 (TOOLS), 3 (CONTEXT), 4 (PLANNING), 5 (ORCHESTRATOR),\n"
+        "          PHASE 6 (LOOP), PHASE 7 (VERIFICATION), PHASE 8 (REPAIR), PHASE 9 (SAFETY & APPROVAL)"
     )
 
     # 0. Initialize Database
@@ -417,7 +438,6 @@ def main():
 
         # 12. Phase 7: Defect Extraction & Failure Normalization (Phase 8 Handoff)
         print_step_header(12, "Phase 7: Defect Extraction & Failure Normalization (Phase 8 Handoff)")
-        # Introduce a broken syntax file in worktree to test defect extraction
         broken_file = wt_path / "broken.py"
         broken_file.write_text("def broken_syntax(:\n    return False\n", encoding="utf-8")
         
@@ -465,7 +485,6 @@ def main():
         # 13. Phase 8: Failure Diagnosis, Context Assembly, Agentic Repair & Re-Verification Loop
         print_step_header(13, "Phase 8: Failure Diagnosis, Context Assembly, Agentic Repair & Re-Verification")
         
-        # Script model repair response: fixes broken.py syntax
         repair_script = [
             json.dumps({
                 "action": "tool_call",
@@ -518,12 +537,10 @@ def main():
         assert p8_repair_result.status == RepairStatus.PASSED
         assert p8_repair_result.attempts_used == 1
 
-        # Clean up test file
         broken_file.unlink()
 
         # 14. Phase 8: Bounded Repair Attempt Limit & BLOCKED Transition on Unresolvable Defect
         print_step_header(14, "Phase 8: Bounded Repair Attempt Limit & BLOCKED Transition (Safely Halts)")
-        # Introduce unfixable test file
         unfixable_file = wt_path / "unfixable.py"
         unfixable_file.write_text("def unfixable():\n    syntax error here((\n", encoding="utf-8")
 
@@ -556,9 +573,13 @@ def main():
             run_model=run,
         )
 
-        # Script model to never fix the syntax
         stagnant_adapter = MockScriptModelAdapter([
-            json.dumps({"action": "complete", "summary": "Did not fix syntax", "verification_requested": True})
+            json.dumps({
+                "action": "complete",
+                "summary": "Did not fix syntax",
+                "acceptance_criteria_status": [{"criterion": "unfixable", "status": "failed", "evidence": "still broken"}],
+                "verification_requested": True,
+            })
         ])
         stagnant_loop = EngineeringAgentLoop(
             tool_registry=agent.tools,
@@ -590,11 +611,117 @@ def main():
         assert blocked_repair_res.attempts_used == 2
         print_kv("Bounded Autonomy Invariant", "PASSED -> Task transitioned to BLOCKED after 2 failed attempts; halted safely without infinite loop.")
 
-        # Clean up test file
         unfixable_file.unlink()
 
-        # 15. Repository Tools (Phase 2)
-        print_step_header(15, "Invoke Repository Tools (read_file with bounded range)")
+        # 15. Phase 9: Context-Aware ExecutionPolicy Evaluation
+        print_step_header(15, "Phase 9: Context-Aware ExecutionPolicy & Worktree Containment")
+        exec_policy = ExecutionPolicy()
+        tool_ctx = AgentToolContext(
+            worktree_path=str(wt_path),
+            repository_id=run.repository_id,
+            agent_run_id=run.id,
+        )
+
+        # 15a. Allowed read-only & safe modifications
+        d_read = exec_policy.evaluate("read_file", tool_ctx, {"path": "main.py"})
+        assert d_read.action == PolicyAction.ALLOWED
+        print_kv("read_file Policy Decision", f"{d_read.action.value} (Risk: {d_read.risk_level.value})")
+
+        # 15b. Blocked critical commands
+        d_sudo = exec_policy.evaluate("execute_command", tool_ctx, {"command": "sudo rm -rf /"})
+        assert d_sudo.action == PolicyAction.BLOCKED
+        assert d_sudo.risk_level == RiskLevel.CRITICAL
+        print_kv("sudo rm -rf / Decision", f"{d_sudo.action.value} (Risk: {d_sudo.risk_level.value}) -> {d_sudo.reason}")
+
+        # 15c. Approval required dangerous Git commands
+        d_reset = exec_policy.evaluate("execute_command", tool_ctx, {"command": "git reset --hard HEAD~1"})
+        assert d_reset.action == PolicyAction.APPROVAL_REQUIRED
+        assert d_reset.risk_level == RiskLevel.HIGH
+        print_kv("git reset --hard Decision", f"{d_reset.action.value} (Risk: {d_reset.risk_level.value}) -> {d_reset.reason}")
+
+        # 15d. Blocked path traversal escaping worktree
+        d_trav = exec_policy.evaluate("read_file", tool_ctx, {"path": "../../etc/shadow"})
+        assert d_trav.action == PolicyAction.BLOCKED
+        print_kv("Path Traversal Decision", f"{d_trav.action.value} -> {d_trav.reason}")
+
+        # 16. Phase 9: Human Action Approval Request & Resolution (Approve -> Execute)
+        print_step_header(16, "Phase 9: Human Action Approval Request & Resolution (Approve -> Resume)")
+        appr_req = agent.request_action_approval(
+            db=db,
+            run_id=run.id,
+            action_description="Reset worktree after defective repair attempt",
+            risk_level=RiskLevel.HIGH,
+            action_type=ApprovalActionType.GIT_OPERATION,
+            command="git reset --hard HEAD",
+            reason="Worktree restoration needed",
+        )
+        print_kv("Approval Request ID", appr_req.id)
+        print_kv("Initial Status", appr_req.status.value)
+        print_kv("Run State During Pause", run.current_state.value)
+        assert appr_req.status == ApprovalStatus.PENDING
+        assert run.current_state == AgentState.AWAITING_APPROVAL
+
+        # User approves the action
+        approved_action = agent.approve_action(db=db, approval_id=appr_req.id, resolved_by="developer_alice")
+        print_kv("Resolved Status", approved_action.status.value)
+        print_kv("Resolved By", approved_action.resolved_by)
+        print_kv("Run State Post-Approval", run.current_state.value)
+        assert approved_action.status == ApprovalStatus.APPROVED
+        assert run.current_state == AgentState.EXECUTING
+        print_kv("Action Approval Flow", "PASSED -> Paused in AWAITING_APPROVAL, resumed to EXECUTING upon human approval.")
+
+        # 17. Phase 9: Human Action Rejection & Observation Feedback
+        print_step_header(17, "Phase 9: Human Action Rejection & Structured Feedback")
+        rej_req = agent.request_action_approval(
+            db=db,
+            run_id=run.id,
+            action_description="Delete production credentials file",
+            risk_level=RiskLevel.CRITICAL,
+            action_type=ApprovalActionType.FILE_MODIFICATION,
+            command="rm .env.production",
+            reason="Clean credentials",
+        )
+        print_kv("Rejection Request ID", rej_req.id)
+        print_kv("Run State Paused", run.current_state.value)
+        assert run.current_state == AgentState.AWAITING_APPROVAL
+
+        # User rejects the action
+        rejected_action = agent.reject_action(
+            db=db, approval_id=rej_req.id, reason="Production credentials must not be deleted", resolved_by="secops_bob"
+        )
+        print_kv("Resolved Status", rejected_action.status.value)
+        print_kv("Rejection Reason", rejected_action.rejection_reason)
+        print_kv("Run State Post-Rejection", run.current_state.value)
+        assert rejected_action.status == ApprovalStatus.REJECTED
+        assert run.current_state == AgentState.EXECUTING
+        print_kv("Action Rejection Flow", "PASSED -> Rejection recorded, run resumed in EXECUTING with feedback.")
+
+        # 18. Phase 9: Safe Cancellation Controller & Subsystem Interruption
+        print_step_header(18, "Phase 9: Safe Cancellation Controller & Subsystem Interruption")
+        cancel_token = agent.cancellation_controller.get_or_create_token(run.id)
+        assert cancel_token.is_cancelled is False
+
+        # Create sub-run for cancellation demo
+        cancel_demo_run = agent.create_run(
+            db=db,
+            repository_id="manual-test-repo",
+            user_requirement="Demo run for cancellation testing",
+            custom_run_id="run-cancel-demo",
+        )
+        agent.transition_state(db, cancel_demo_run.id, to_state=AgentState.EXECUTING, reason="Starting long task")
+        assert cancel_demo_run.current_state == AgentState.EXECUTING
+
+        # Human operator triggers cancellation
+        agent.cancel_run(db, cancel_demo_run.id, reason="User clicked Stop button in UI")
+        print_kv("Cancelled Run State", cancel_demo_run.current_state.value)
+        print_kv("Cancellation Reason", cancel_demo_run.cancellation_reason)
+        print_kv("Completed Timestamp", str(cancel_demo_run.completed_at))
+        assert cancel_demo_run.current_state == AgentState.CANCELLED
+        assert cancel_demo_run.cancellation_reason == "User clicked Stop button in UI"
+        print_kv("Cancellation Guardrail", "PASSED -> Run immediately transitioned to CANCELLED without false PASSED.")
+
+        # 19. Repository Tools (Phase 2)
+        print_step_header(19, "Invoke Repository Tools (read_file with bounded range)")
         res_read = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -607,8 +734,8 @@ def main():
         print_kv("Raw Content", "\n" + res_read.data.get("content", "").strip())
         assert res_read.success
 
-        # 16. Workspace Tools (Phase 2)
-        print_step_header(16, "Invoke Workspace Isolated Tools (create_file, modify_file, get_diff)")
+        # 20. Workspace Tools (Phase 2)
+        print_step_header(20, "Invoke Workspace Isolated Tools (create_file, modify_file, get_diff)")
         res_mod = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -625,15 +752,15 @@ def main():
         print_kv("Unified Diff Output", "\n" + res_diff.data.get("diff", "(empty diff)"))
         assert res_diff.success
 
-        # 17. Terminal Tools (Phase 2)
-        print_step_header(17, "Invoke Terminal Tools (detect_commands in sandbox)")
+        # 21. Terminal Tools (Phase 2)
+        print_step_header(21, "Invoke Terminal Tools (detect_commands in sandbox)")
         res_detect = agent.invoke_tool(db, run_id=run.id, tool_name="detect_commands", arguments={})
         print_kv("detect_commands Status", "SUCCESS" if res_detect.success else "FAILED")
         print_kv("Detected Build/Test Tools", res_detect.data.get("detected_commands"))
         assert res_detect.success
 
-        # 18. Verification Tools (Phase 2)
-        print_step_header(18, "Invoke Verification Mesh (verify_static AST & Import Integrity)")
+        # 22. Verification Tools (Phase 2)
+        print_step_header(22, "Invoke Verification Mesh (verify_static AST & Import Integrity)")
         res_verify = agent.invoke_tool(
             db,
             run_id=run.id,
@@ -645,13 +772,13 @@ def main():
         print_kv("Defects Detected", res_verify.data.get("defects"))
         assert res_verify.success
 
-        # 19. Git Tools (Phase 2)
-        print_step_header(19, "Invoke Git Tools (create_checkpoint, git_status)")
+        # 23. Git Tools (Phase 2)
+        print_step_header(23, "Invoke Git Tools (create_checkpoint, git_status)")
         res_cp = agent.invoke_tool(
             db,
             run_id=run.id,
             tool_name="create_checkpoint",
-            arguments={"message": "Phase 8 verification checkpoint"},
+            arguments={"message": "Phase 9 verification checkpoint"},
         )
         print_kv("create_checkpoint Status", "SUCCESS" if res_cp.success else "FAILED")
         print_kv("Commit SHA", res_cp.data.get("commit_sha"))
@@ -662,8 +789,8 @@ def main():
         print_kv("git status porcelain", res_status.data.get("porcelain_output", "(clean)"))
         assert res_status.success
 
-        # 20. Tool Policy Safety Enforcement (Phase 2 Invariant)
-        print_step_header(20, "Policy Safety Enforcement (BLOCKED Policy Invariant)")
+        # 24. Tool Policy Safety Enforcement (Phase 2 Invariant)
+        print_step_header(24, "Policy Safety Enforcement (BLOCKED Policy Invariant)")
         agent.tools.policy.set_policy("delete_file", PolicyAction.BLOCKED, reason="Deletion of files is forbidden in this environment")
         res_blocked = agent.invoke_tool(
             db,
@@ -679,8 +806,8 @@ def main():
         assert (wt_path / "calculator.py").exists()
         print_kv("Filesystem Safety Invariant", "PASSED -> 'calculator.py' remains intact on disk; handler NEVER ran.")
 
-        # 21. Inspect Persisted Agent Events (PostgreSQL Audit)
-        print_step_header(21, "Inspect Persisted Agent Events Audit Log (Phases 1-8)")
+        # 25. Inspect Persisted Agent Events (PostgreSQL Audit)
+        print_step_header(25, "Inspect Persisted Agent Events Audit Log (Phases 1-9)")
         events = db.query(AgentEvent).filter(AgentEvent.agent_run_id == run.id).order_by(AgentEvent.id).all()
         print_kv("Total Events Recorded in Database", len(events))
         print(f"\n    {'ID':<5} | {'EVENT TYPE':<34} | {'MESSAGE'}")
@@ -689,8 +816,8 @@ def main():
             evt_name = evt.event_type.value if hasattr(evt.event_type, "value") else str(evt.event_type)
             print(f"    {evt.id:<5} | {evt_name:<34} | {evt.message}")
 
-        # 22. Lifecycle Completion & Terminal State Locking (Phase 1)
-        print_step_header(22, "Lifecycle Completion (EXECUTING -> VERIFYING -> COMPLETED)")
+        # 26. Lifecycle Completion & Terminal State Locking (Phase 1)
+        print_step_header(26, "Lifecycle Completion (EXECUTING -> VERIFYING -> COMPLETED)")
         agent.transition_state(db, run.id, to_state=AgentState.VERIFYING, reason="Running automated verification suite")
         agent.transition_state(db, run.id, to_state=AgentState.COMPLETED, reason="All goals and tests verified successfully")
         print_kv("Final Lifecycle State", run.current_state.value)
@@ -707,7 +834,7 @@ def main():
 
     db.close()
 
-    print_banner("ALL FLOWS (PHASES 1, 2, 3, 4, 5, 6, 7 & 8) VERIFIED AND PASSED SUCCESSFULLY!")
+    print_banner("ALL FLOWS (PHASES 1 THROUGH 9) VERIFIED AND PASSED SUCCESSFULLY!")
 
 
 if __name__ == "__main__":

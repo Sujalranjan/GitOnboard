@@ -44,12 +44,23 @@ from backend.agent.tools.contracts import (
 )
 from backend.agent.tools.registry import AgentToolRegistry
 from backend.agent.tools import create_default_tool_registry
+from backend.agent.safety import (
+    ApprovalActionType,
+    ApprovalController,
+    ApprovalStatus,
+    CancellationController,
+    CancellationToken,
+    ExecutionPolicy,
+    PolicyAction,
+    RiskLevel,
+)
 from backend.models.implementation import (
     AgentEventType,
     AgentRun,
     AgentRunStatus,
     AgentState,
     AgentStateTransition,
+    ApprovalRequest,
     map_agent_state_to_legacy_status,
 )
 from backend.repository_tools.tools import RepositoryToolLayer
@@ -78,12 +89,23 @@ class EngineeringAgent:
         tool_registry: Optional[AgentToolRegistry] = None,
         llm_service: Optional[Any] = None,
         task_orchestrator: Optional[TaskOrchestrator] = None,
+        approval_controller: Optional[ApprovalController] = None,
+        cancellation_controller: Optional[CancellationController] = None,
     ):
         self.events = event_coordinator or AgentEventCoordinator()
         self.state_machine = AgentStateMachine()
         self.tools = tool_registry or create_default_tool_registry()
         self.llm_service = llm_service
         self.task_orchestrator = task_orchestrator or TaskOrchestrator()
+        self.approval_controller = approval_controller or ApprovalController(event_coordinator=self.events)
+        self.cancellation_controller = cancellation_controller or CancellationController(event_coordinator=self.events)
+
+    def _get_run(self, db: Session, run_id: str) -> AgentRun:
+        """Retrieves an AgentRun by ID or raises RunNotFoundError."""
+        run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        if not run:
+            raise RunNotFoundError(f"AgentRun '{run_id}' not found")
+        return run
 
 
     def create_run(
@@ -1093,4 +1115,110 @@ class EngineeringAgent:
             logger.info(f"EngineeringAgent recovery: Successfully recovered {len(recovered_ids)} interrupted run(s)")
 
         return recovered_ids
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Phase 9: Human Action Approval & Safety Control
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def request_action_approval(
+        self,
+        db: Session,
+        run_id: str,
+        action_description: str,
+        risk_level: RiskLevel = RiskLevel.MEDIUM,
+        action_type: ApprovalActionType = ApprovalActionType.TOOL_EXECUTION,
+        task_id: Optional[str] = None,
+        tool_call_id: Optional[str] = None,
+        requested_operation: Optional[Dict[str, Any]] = None,
+        affected_files: Optional[List[str]] = None,
+        command: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> ApprovalRequest:
+        """
+        Creates and persists a first-class ApprovalRequest.
+        Pauses run lifecycle state to AWAITING_APPROVAL if currently EXECUTING.
+        """
+        run = self._get_run(db, run_id)
+        if run.current_state == AgentState.EXECUTING:
+            self.transition_state(
+                db, run_id, to_state=AgentState.AWAITING_APPROVAL, reason=f"Action requires human approval: {action_description}"
+            )
+
+        req = self.approval_controller.create_approval_request(
+            db=db,
+            agent_run_id=run_id,
+            action_type=action_type,
+            action_description=action_description,
+            risk_level=risk_level,
+            task_id=task_id,
+            tool_call_id=tool_call_id,
+            requested_operation=requested_operation,
+            affected_files=affected_files,
+            command=command,
+            reason=reason,
+            run_model=run,
+        )
+        return req
+
+    def approve_action(
+        self,
+        db: Session,
+        approval_id: str,
+        resolved_by: str = "human_user",
+    ) -> ApprovalRequest:
+        """
+        Approves a pending action request.
+        Resumes run state from AWAITING_APPROVAL -> EXECUTING once all approvals are resolved.
+        """
+        req = self.approval_controller.approve_request(
+            db=db, approval_id=approval_id, resolved_by=resolved_by
+        )
+        run = self._get_run(db, req.agent_run_id)
+        if run.current_state == AgentState.AWAITING_APPROVAL:
+            pending = self.approval_controller.get_pending_approvals(db, req.agent_run_id)
+            if not pending:
+                self.transition_state(
+                    db, req.agent_run_id, to_state=AgentState.EXECUTING, reason="Action approved by user"
+                )
+        return req
+
+    def reject_action(
+        self,
+        db: Session,
+        approval_id: str,
+        reason: str,
+        resolved_by: str = "human_user",
+    ) -> ApprovalRequest:
+        """
+        Rejects a pending action request.
+        Resumes run state from AWAITING_APPROVAL -> EXECUTING so agent can adapt with a structured rejection observation.
+        """
+        req = self.approval_controller.reject_request(
+            db=db, approval_id=approval_id, reason=reason, resolved_by=resolved_by
+        )
+        run = self._get_run(db, req.agent_run_id)
+        if run.current_state == AgentState.AWAITING_APPROVAL:
+            pending = self.approval_controller.get_pending_approvals(db, req.agent_run_id)
+            if not pending:
+                self.transition_state(
+                    db, req.agent_run_id, to_state=AgentState.EXECUTING, reason=f"Action rejected by user: {reason}"
+                )
+        return req
+
+    def get_pending_approvals(self, db: Session, run_id: str) -> List[ApprovalRequest]:
+        """Queries all pending approval requests for a run."""
+        return self.approval_controller.get_pending_approvals(db, run_id)
+
+    def cancel_run(
+        self,
+        db: Session,
+        run_id: str,
+        reason: str = "User requested cancellation",
+    ) -> bool:
+        """
+        Requests cancellation across all active subsystems for the run.
+        """
+        run = self._get_run(db, run_id)
+        return self.cancellation_controller.cancel_run(db, run_id, reason=reason, run_model=run)
+
 
