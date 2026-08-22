@@ -402,9 +402,103 @@ class AgentRun(Base):
         "AgentStateTransition", back_populates="agent_run", cascade="all, delete-orphan",
         order_by="AgentStateTransition.timestamp",
     )
+    approvals = relationship(
+        "ApprovalRequest", back_populates="agent_run", cascade="all, delete-orphan",
+        order_by="ApprovalRequest.requested_at",
+    )
+    policy_decisions = relationship(
+        "PolicyDecisionRecord", back_populates="agent_run", cascade="all, delete-orphan",
+        order_by="PolicyDecisionRecord.created_at",
+    )
 
     def __repr__(self) -> str:
         return f"<AgentRun id={self.id!r} state={self.current_state.value!r} status={self.status.value!r}>"
+
+
+class ApprovalRequest(Base):
+    """
+    Durable, first-class human approval request.
+    Created when policy evaluates to APPROVAL_REQUIRED or when a plan requires approval.
+    """
+    __tablename__ = "approval_requests"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    agent_run_id = Column(
+        String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    task_id = Column(String, nullable=True, index=True)
+    tool_call_id = Column(String, nullable=True)
+
+    action_type = Column(
+        SAEnum(ApprovalActionType, name="approval_action_type"),
+        nullable=False,
+        default=ApprovalActionType.TOOL_EXECUTION,
+        index=True,
+    )
+    action_description = Column(Text, nullable=False)
+    risk_level = Column(
+        SAEnum(RiskLevel, name="risk_level"),
+        nullable=False,
+        default=RiskLevel.MEDIUM,
+        index=True,
+    )
+    requested_operation = Column(JSONType, nullable=False, default=dict)
+    affected_files = Column(JSONType, nullable=False, default=list)
+    command = Column(Text, nullable=True)
+    reason = Column(Text, nullable=True)
+
+    status = Column(
+        SAEnum(ApprovalStatus, name="approval_status"),
+        nullable=False,
+        default=ApprovalStatus.PENDING,
+        index=True,
+    )
+    requested_at = Column(DateTime(timezone=True), default=_now, nullable=False, index=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by = Column(String, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    metadata_json = Column("metadata", JSONType, nullable=True, default=dict)
+
+    agent_run = relationship("AgentRun", back_populates="approvals")
+
+    def __repr__(self) -> str:
+        return f"<ApprovalRequest id={self.id!r} action={self.action_type.value} risk={self.risk_level.value} status={self.status.value}>"
+
+
+class PolicyDecisionRecord(Base):
+    """
+    Append-only audit record of safety policy decisions.
+    Answers: 'Why was this command blocked / required approval?'
+    """
+    __tablename__ = "policy_decisions"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    agent_run_id = Column(
+        String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    task_id = Column(String, nullable=True, index=True)
+    tool_call_id = Column(String, nullable=True)
+    tool_name = Column(String, nullable=False)
+    arguments_summary = Column(Text, nullable=True)
+    decision = Column(
+        SAEnum(PolicyAction, name="policy_action_decision"),
+        nullable=False,
+        index=True,
+    )
+    risk_level = Column(
+        SAEnum(RiskLevel, name="policy_risk_level"),
+        nullable=False,
+        default=RiskLevel.LOW,
+    )
+    reason = Column(Text, nullable=True)
+    policy_version = Column(String, nullable=False, default="1.0")
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False, index=True)
+    metadata_json = Column("metadata", JSONType, nullable=True, default=dict)
+
+    agent_run = relationship("AgentRun", back_populates="policy_decisions")
+
+    def __repr__(self) -> str:
+        return f"<PolicyDecisionRecord id={self.id!r} tool={self.tool_name!r} decision={self.decision.value}>"
 
 
 class AgentStateTransition(Base):

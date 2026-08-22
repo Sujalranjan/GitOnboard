@@ -25,6 +25,12 @@ from .implementation import (
     AgentRunStatus,
     AgentEventType,
     FileChangeType,
+    PolicyAction,
+    RiskLevel,
+    ApprovalStatus,
+    ApprovalActionType,
+    ApprovalRequest,
+    PolicyDecisionRecord,
 )
 
 __all__ = [
@@ -35,6 +41,8 @@ __all__ = [
     "Implementation", "ImplementationContract", "ImplementationPlan",
     "ImplementationStatus", "PlanStepStatus", "ComponentType",
     "AgentRun", "AgentEvent", "AgentStateTransition", "FileChange",
+    "ApprovalRequest", "PolicyDecisionRecord",
     "AgentState", "AgentRunStatus", "AgentEventType", "FileChangeType",
+    "PolicyAction", "RiskLevel", "ApprovalStatus", "ApprovalActionType",
 ]
 

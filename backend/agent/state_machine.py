@@ -65,6 +65,7 @@ VALID_TRANSITIONS: Dict[AgentState, Set[AgentState]] = {
         AgentState.CANCELLED,
     },
     AgentState.EXECUTING: {
+        AgentState.AWAITING_APPROVAL,  # Action-level approval pause
         AgentState.VERIFYING,
         AgentState.COMPLETED,  # Direct completion if action verification is built-in
         AgentState.FAILED,

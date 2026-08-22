@@ -139,8 +139,10 @@ class AgentToolRegistry:
                 details={"arguments": arguments},
             )
 
-        # 4. Timeout configuration
-        timeout_sec = decision.timeout_override_sec or tool.default_timeout_sec
+        # 4. Timeout configuration (Policy-controlled upper bound)
+        timeout_sec = tool.default_timeout_sec
+        if decision.timeout_override_sec is not None:
+            timeout_sec = min(tool.default_timeout_sec, decision.timeout_override_sec)
 
         # 5. Handler execution with timeout protection
         try:
