@@ -53,11 +53,33 @@ class TaskStateMachine:
         PlanTaskStatus.VERIFYING: {
             PlanTaskStatus.PASSED,
             PlanTaskStatus.FAILED,
+            PlanTaskStatus.DIAGNOSING,
             PlanTaskStatus.BLOCKED,
         },
-        # Terminal states have no forward transitions in Phase 5
+        PlanTaskStatus.DIAGNOSING: {
+            PlanTaskStatus.REPAIRING,
+            PlanTaskStatus.BLOCKED,
+            PlanTaskStatus.FAILED,
+        },
+        PlanTaskStatus.REPAIRING: {
+            PlanTaskStatus.REVERIFYING,
+            PlanTaskStatus.BLOCKED,
+            PlanTaskStatus.FAILED,
+        },
+        PlanTaskStatus.REVERIFYING: {
+            PlanTaskStatus.PASSED,
+            PlanTaskStatus.DIAGNOSING,
+            PlanTaskStatus.FAILED,
+            PlanTaskStatus.BLOCKED,
+        },
+        PlanTaskStatus.FAILED: {
+            PlanTaskStatus.DIAGNOSING,
+            PlanTaskStatus.REPAIRING,
+            PlanTaskStatus.BLOCKED,
+            PlanTaskStatus.PASSED,
+        },
+        # Terminal states have no forward transitions
         PlanTaskStatus.PASSED: set(),
-        PlanTaskStatus.FAILED: set(),
         PlanTaskStatus.BLOCKED: set(),
         PlanTaskStatus.SKIPPED: set(),
     }
@@ -96,15 +118,14 @@ class TaskStateMachine:
         if from_status == to_status:
             return
 
-        if cls.is_terminal(from_status):
-            raise InvalidTaskStateTransitionError(
-                task_id=task_id,
-                from_status=from_status,
-                to_status=to_status,
-                reason=f"Task '{task_id}' is in terminal status '{from_status.value}' and cannot transition further",
-            )
-
         if not cls.can_transition(from_status, to_status):
+            if cls.is_terminal(from_status) and not cls.ALLOWED_TRANSITIONS.get(from_status):
+                raise InvalidTaskStateTransitionError(
+                    task_id=task_id,
+                    from_status=from_status,
+                    to_status=to_status,
+                    reason=f"Task '{task_id}' is in terminal status '{from_status.value}' and cannot transition further",
+                )
             raise InvalidTaskStateTransitionError(
                 task_id=task_id,
                 from_status=from_status,

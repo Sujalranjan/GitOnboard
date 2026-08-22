@@ -252,6 +252,46 @@ class TaskOrchestrator:
         self.evaluate_dependencies(plan)
         return task
 
+    def record_repair_result(
+        self,
+        plan: Plan,
+        task_id: str,
+        repair_result: Any,
+    ) -> PlanTask:
+        """
+        Records the outcome of a Phase 8 repair loop execution.
+        Transitions task to PASSED, BLOCKED, or FAILED and propagates dependencies.
+        """
+        task = self._find_task(plan, task_id)
+        
+        target_status = PlanTaskStatus.FAILED
+        if getattr(repair_result, "passed", False) or getattr(repair_result, "status", None) == "PASSED":
+            target_status = PlanTaskStatus.PASSED
+        elif getattr(repair_result, "status", None) == "BLOCKED":
+            target_status = PlanTaskStatus.BLOCKED
+        elif getattr(repair_result, "status", None) == "CANCELLED":
+            target_status = PlanTaskStatus.FAILED
+
+        self.state_machine.validate_transition(task.task_id, task.status, target_status)
+        task.status = target_status
+        task.completed_at = datetime.now(timezone.utc)
+        task.metadata["last_repair_result"] = (
+            repair_result.model_dump(mode="json") if hasattr(repair_result, "model_dump") else str(repair_result)
+        )
+
+        if target_status == PlanTaskStatus.PASSED:
+            task.failure_reason = None
+            logger.info(f"TaskOrchestrator: Task '{task.task_id}' repaired and verified -> PASSED")
+        elif target_status == PlanTaskStatus.BLOCKED:
+            task.blocked_reason = getattr(repair_result, "stop_reason", None) or getattr(repair_result, "summary", "Repair limit exhausted")
+            logger.warning(f"TaskOrchestrator: Task '{task.task_id}' repair blocked -> BLOCKED: {task.blocked_reason}")
+        else:
+            task.failure_reason = getattr(repair_result, "summary", "Repair failed")
+            logger.warning(f"TaskOrchestrator: Task '{task.task_id}' repair failed -> FAILED: {task.failure_reason}")
+
+        self.evaluate_dependencies(plan)
+        return task
+
     def is_plan_complete(self, plan: Plan) -> bool:
         """Returns True if all tasks in the plan are in a terminal state."""
         return all(self.state_machine.is_terminal(t.status) for t in plan.tasks)
