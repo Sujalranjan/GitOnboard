@@ -23,6 +23,9 @@ GREETING_PATTERNS = [
     r"^what\s+can\s+you\s+do\??$",
     r"^who\s+are\s+you\??$",
     r"^help\??$",
+    r"^(i'?m|i\s+am)\s+(just\s+)?(exploring|looking|testing|checking|trying)\b",
+    r"^just\s+(exploring|looking\s+around|looking|testing|checking)\b",
+    r"^no\s+task\b",
 ]
 
 EXPLORE_PATTERNS = [
@@ -94,7 +97,7 @@ def classify_deterministic(requirement: str) -> Optional[IntentResult]:
             classification_method="deterministic",
         )
 
-    norm = requirement.strip().lower()
+    norm = requirement.strip().lower().replace("’", "'").replace("`", "'")
 
     # Invariant: Negative constraint ("do not change/modify anything, just explain...")
     if re.search(r"\b(do\s+not|don't|without)\s+(change|modify|edit|alter|touch)\b", norm):

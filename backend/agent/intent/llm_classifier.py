@@ -21,18 +21,19 @@ logger = logging.getLogger(__name__)
 
 CLASSIFICATION_SYSTEM_PROMPT = """You are an intent classifier for a repository intelligence platform.
 Classify the user's requirement into EXACTLY ONE of the following intents:
-- chat: Greetings, pleasantries, polite chit-chat ("hi", "hello", "thanks").
-- explore: Codebase navigation, finding files/symbols, inspecting repo layout ("show files", "where is auth?").
+- chat: Greetings, pleasantries, polite chit-chat, casual conversational remarks, non-task talk ("hi", "hello", "thanks", "I'm just exploring the system today, no task yet", "just looking around", "testing this out").
+- explore: Technical codebase navigation, finding files/symbols, inspecting repository layout or AST ("show repo tree", "find AuthService", "where is auth defined?").
 - explain: Conceptual explanations, architecture, or logic explanations ("how does auth work?", "why is this used?").
 - plan: Architecture queries or change estimation without asking to write code immediately ("what would it take to add OAuth?").
 - implement: Clear requests to write code, modify files, fix bugs, or build features ("add OAuth login", "fix bug in auth.py").
 - clarify: Underspecified, ambiguous, or vague requests ("make auth better", "improve this", "clean it up").
 
 IMPORTANT RULES:
-1. If the user is asking HOW something works or HOW to fix something, classify as 'explain'.
-2. If the user asks a question about what would be required, classify as 'plan'.
-3. Only classify as 'implement' if the user is explicitly requesting code changes to be made now.
-4. When in doubt or if the prompt is ambiguous, classify as 'clarify'.
+1. Casual remarks like "I'm just exploring the system", "just testing", "looking around", or "no task yet" MUST be classified as 'chat', NOT 'explore'. 'explore' is strictly for technical queries about repository files/symbols/structure.
+2. If the user is asking HOW something works or HOW to fix something, classify as 'explain'.
+3. If the user asks a question about what would be required, classify as 'plan'.
+4. Only classify as 'implement' if the user is explicitly requesting code changes to be made now.
+5. When in doubt or if the prompt is ambiguous, classify as 'clarify'.
 
 Respond with ONLY valid JSON with keys:
 - "intent": "<chat|explore|explain|plan|implement|clarify>"
