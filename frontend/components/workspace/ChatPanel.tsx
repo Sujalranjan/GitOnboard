@@ -84,12 +84,6 @@ export function ChatPanel({ onStartRun, snapshot, repoId }: ChatPanelProps) {
     setIsSubmitting(true);
 
     try {
-      if (onStartRun) {
-        try {
-          onStartRun(trimmed);
-        } catch {}
-      }
-
       // Step 1: INSTANT Intent Classification (<15ms)
       // Display the Intent Card right away while synthesizing response
       let detectedIntent: IntentData | undefined = undefined;
