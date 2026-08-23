@@ -30,6 +30,7 @@ from backend.intelligence.retrieval.retriever import HybridRetriever
 from backend.models.fact_store import (
     FactCapability,
     FactDatabaseObject,
+    FactFile,
     FactRelationship,
     FactRoute,
     FactSymbol,
@@ -40,13 +41,82 @@ from backend.repository_tools.tools import RepositoryToolLayer
 logger = logging.getLogger(__name__)
 
 
+def extract_domain_concepts(requirement: str) -> List[str]:
+    """
+    Extracts high-signal domain concepts and removes generic planning language noise.
+    E.g. 'what would it take to add Google OAuth' -> ['google oauth', 'google', 'oauth', 'auth', 'login']
+         'what would it take to add pagination to the users API' -> ['pagination users api', 'pagination', 'users', 'api']
+         'what would it take to add dark mode' -> ['dark mode', 'dark', 'mode', 'theme', 'tailwind', 'color', 'style']
+    """
+    import re
+    planning_noise = {
+        "what", "would", "it", "take", "to", "add", "implement", "feature", "system",
+        "please", "could", "should", "want", "need", "like", "about", "into", "make",
+        "help", "this", "that", "with", "from", "have", "tell", "show", "give", "step",
+        "steps", "plan", "estimate", "changes", "files", "file", "for", "and", "the", "a", "an",
+        "require", "require?", "take?", "add?", "create", "setup", "new", "do", "we", "of", "in"
+    }
+    cleaned = re.sub(r"[^\w\s-]", " ", requirement)
+    words = cleaned.split()
+    meaningful_words = [w.lower() for w in words if w.lower() not in planning_noise and len(w) > 1]
+    
+    concepts: List[str] = []
+    if meaningful_words:
+        concepts.append(" ".join(meaningful_words))
+    for w in meaningful_words:
+        if w not in concepts:
+            concepts.append(w)
+            
+    req_lower = requirement.lower()
+    if "oauth" in req_lower or "google" in req_lower or "auth" in req_lower:
+        for syn in ["auth", "login", "oauth", "session", "user"]:
+            if syn not in concepts:
+                concepts.append(syn)
+    if "dark" in req_lower or "mode" in req_lower or "theme" in req_lower:
+        for syn in ["theme", "dark", "tailwind", "color", "style", "provider"]:
+            if syn not in concepts:
+                concepts.append(syn)
+    if "pagination" in req_lower or "page" in req_lower:
+        for syn in ["pagination", "page", "limit", "offset", "cursor", "api"]:
+            if syn not in concepts:
+                concepts.append(syn)
+    if "payment" in req_lower or "stripe" in req_lower or "billing" in req_lower:
+        for syn in ["payment", "stripe", "billing", "checkout", "subscription"]:
+            if syn not in concepts:
+                concepts.append(syn)
+    if "redis" in req_lower or "cache" in req_lower or "caching" in req_lower:
+        for syn in ["redis", "cache", "caching", "store"]:
+            if syn not in concepts:
+                concepts.append(syn)
+    if "user" in req_lower or "users" in req_lower:
+        for syn in ["user", "users", "account", "profile"]:
+            if syn not in concepts:
+                concepts.append(syn)
+
+    return concepts or [requirement]
+
+
+def _extract_symbol_file_path(sym: FactSymbol) -> str:
+    if sym.file and sym.file.path:
+        return sym.file.path
+    if sym.id:
+        import re
+        match = re.search(r":urn:[^:]+:(.+?)#", sym.id)
+        if match:
+            return match.group(1)
+    if sym.file_id:
+        return sym.file_id.split(":")[-1]
+    return ""
+
+
 class ContextAssembler:
     """
     Assembles bounded, structured, and deduplicated repository evidence for an agent requirement.
     """
 
-    def __init__(self, llm_service: Optional[Any] = None):
+    def __init__(self, llm_service: Optional[Any] = None, worktree_path: Optional[str] = None):
         self.llm_service = llm_service
+        self.worktree_path = worktree_path
 
     def assemble(
         self,
@@ -75,46 +145,17 @@ class ContextAssembler:
         # ──────────────────────────────────────────────────────────────────────
         # 1. Requirement Analysis (Intent & Keyword Extraction)
         # ──────────────────────────────────────────────────────────────────────
-        analyzed_req: Optional[AnalyzedRequirement] = None
-        if self.llm_service:
-            try:
-                import asyncio
-                import concurrent.futures
-                req_analyzer = RequirementAnalyzer(llm_service=self.llm_service)
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = None
-
-                if loop and loop.is_running():
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        analyzed_req = pool.submit(asyncio.run, req_analyzer.analyze(request.requirement)).result()
-                else:
-                    analyzed_req = asyncio.run(req_analyzer.analyze(request.requirement))
-            except Exception as err:
-                logger.warning(f"RequirementAnalyzer LLM execution failed, using fallback: {err}")
-
-        if not analyzed_req:
-            import re
-            from backend.planning.requirements import AcceptanceCriterion
-            raw_words = re.findall(r"[a-zA-Z0-9_-]+", request.requirement)
-            stop_words = {"this", "that", "with", "from", "have", "need", "want", "should", "could", "would", "about", "into"}
-            filtered_kws = [w.lower() for w in raw_words if len(w) > 3 and w.lower() not in stop_words]
-            analyzed_req = AnalyzedRequirement(
-                title=request.requirement[:60],
-                goals=[request.requirement],
-                acceptance_criteria=[
-                    AcceptanceCriterion(id="AC-01", description=f"Implement: {request.requirement}")
-                ],
-                security_considerations=[],
-                tests_required=[f"Test {request.requirement}"],
-            )
-            keywords = filtered_kws or [request.requirement]
-        else:
-            import re
-            raw_words = re.findall(r"[a-zA-Z0-9_-]+", f"{analyzed_req.title} {' '.join(analyzed_req.goals)}")
-            stop_words = {"this", "that", "with", "from", "have", "need", "want", "should", "could", "would", "about", "into"}
-            keywords = [w.lower() for w in raw_words if len(w) > 3 and w.lower() not in stop_words] or [request.requirement]
+        keywords = extract_domain_concepts(request.requirement)
+        from backend.planning.requirements import AcceptanceCriterion
+        analyzed_req = AnalyzedRequirement(
+            title=request.requirement[:60],
+            goals=[request.requirement],
+            acceptance_criteria=[
+                AcceptanceCriterion(id="AC-01", description=f"Implement: {request.requirement}")
+            ],
+            security_considerations=[],
+            tests_required=[f"Test {request.requirement}"],
+        )
 
         evidence_items.append(
             ContextEvidence(
@@ -122,7 +163,7 @@ class ContextAssembler:
                 source_id="req_analysis",
                 relevance=1.0,
                 confidence=1.0,
-                summary=f"Requirement Title: {analyzed_req.title}, extracted {len(analyzed_req.acceptance_criteria)} criteria, keywords: {keywords}",
+                summary=f"Requirement Title: {analyzed_req.title}, extracted domain concepts: {keywords}",
                 data={
                     "title": analyzed_req.title,
                     "goals": analyzed_req.goals,
@@ -135,10 +176,8 @@ class ContextAssembler:
             )
         )
 
-
-
         # ──────────────────────────────────────────────────────────────────────
-        # 2. Candidate Discovery (HybridRetriever & RepositoryToolLayer)
+        # 2. Candidate Discovery (HybridRetriever & Direct Fact Store)
         # ──────────────────────────────────────────────────────────────────────
         seen_files: Set[str] = set()
         seen_symbols: Set[str] = set()
@@ -146,7 +185,36 @@ class ContextAssembler:
         if db and request.analysis_id:
             try:
                 retriever = HybridRetriever(db=db, analysis_id=request.analysis_id)
-                for kw in keywords[:5]:
+                for kw in keywords[:8]:
+                    # Exact file match in FactFile
+                    exact_files = db.query(FactFile).filter(
+                        FactFile.analysis_id == request.analysis_id,
+                        FactFile.path.ilike(f"%{kw}%")
+                    ).limit(5).all()
+                    for f in exact_files:
+                        if f.path not in seen_files:
+                            seen_files.add(f.path)
+                            relevant_files.append(f.path)
+
+                    # Exact symbol match in FactSymbol
+                    exact_symbols = db.query(FactSymbol).filter(
+                        FactSymbol.analysis_id == request.analysis_id,
+                        FactSymbol.name.ilike(f"%{kw}%")
+                    ).limit(5).all()
+                    for s in exact_symbols:
+                        f_path = _extract_symbol_file_path(s)
+                        if f_path and f_path not in seen_files:
+                            seen_files.add(f_path)
+                            relevant_files.append(f_path)
+                        if s.name not in seen_symbols:
+                            seen_symbols.add(s.name)
+                            relevant_symbols.append({
+                                "name": s.name,
+                                "file_path": f_path,
+                                "kind": s.symbol_type,
+                            })
+
+                    # Hybrid lexical BM25 / vector retrieval
                     retrieved = retriever.retrieve(query=kw, top_k=5, expand_with_fact_store=True)
                     for item in retrieved:
                         f_path = item.get("file_path", "")
@@ -168,10 +236,10 @@ class ContextAssembler:
                         evidence_items.append(
                             ContextEvidence(
                                 source_type="retrieval",
-                                source_id=f"{f_path}:{sym_name or 'match'}",
-                                relevance=float(item.get("score", 0.9)),
+                                source_id=f"{f_path or 'match'}:{sym_name or 'match'}",
+                                relevance=float(item.get("score", 0.9) or 0.9),
                                 confidence=0.85,
-                                summary=f"Discovered candidate '{f_path}' (relevance: {item.get('score', 0.9):.2f})",
+                                summary=f"Discovered candidate '{f_path or sym_name}' (relevance: {float(item.get('score', 0.9) or 0.9):.2f})",
                                 data=item,
                             )
                         )
@@ -370,9 +438,21 @@ class ContextAssembler:
         # ──────────────────────────────────────────────────────────────────────
         if db and request.analysis_id:
             try:
+                import asyncio
+                import concurrent.futures
                 from backend.planning.impact_analysis import ImpactAnalyzer
                 analyzer = ImpactAnalyzer(db=db, analysis_id=request.analysis_id)
-                impact_res = analyzer.analyze(keywords=keywords)
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        impact_res = pool.submit(asyncio.run, analyzer.analyze(keywords=keywords)).result()
+                else:
+                    impact_res = asyncio.run(analyzer.analyze(keywords=keywords))
+
                 if impact_res:
                     impact_context = {
                         "affected_files": impact_res.affected_files,
@@ -403,10 +483,19 @@ class ContextAssembler:
         dedup_deps = relevant_dependencies[:budget.max_dependencies]
 
         # ──────────────────────────────────────────────────────────────────────
-        # 9. Understanding Contract Evaluation
+        # 9. Understanding Contract Evaluation (Tech-Stack Aware)
         # ──────────────────────────────────────────────────────────────────────
         satisfied_cats: List[str] = []
         missing_cats: List[str] = []
+
+        is_frontend = False
+        is_backend = False
+        repo_files = db.query(FactFile).filter(FactFile.analysis_id == request.analysis_id).all() if db and request.analysis_id else []
+        file_paths = [f.path.lower() for f in repo_files]
+        if any("package.json" in p or "next.config" in p or p.endswith(".tsx") or p.endswith(".jsx") or p.endswith(".ts") for p in file_paths):
+            is_frontend = True
+        if any("requirements.txt" in p or "pyproject.toml" in p or p.endswith(".py") for p in file_paths):
+            is_backend = True
 
         if capabilities or unknowns:
             satisfied_cats.append("capabilities")
@@ -423,7 +512,9 @@ class ContextAssembler:
         else:
             missing_cats.append("symbols_or_files")
 
-        if dedup_deps or dedup_db or (request.worktree_path and Path(request.worktree_path).exists()):
+        if dedup_deps or dedup_db or (request.worktree_path and Path(request.worktree_path).exists()) or (is_frontend and any("package.json" in p for p in file_paths)):
+            satisfied_cats.append("dependencies_or_models")
+        elif is_frontend and not is_backend:
             satisfied_cats.append("dependencies_or_models")
         else:
             missing_cats.append("dependencies_or_models")

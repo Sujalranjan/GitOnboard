@@ -366,6 +366,7 @@ def execute_plan(
     repository_id: Optional[str] = None,
     user_id: Optional[int] = None,
     agent_run_id: Optional[str] = None,
+    analysis_id: Optional[int] = None,
     db: Optional[Session] = None,
     llm_service: Optional[LLMService] = None,
 ) -> Dict[str, Any]:
@@ -389,9 +390,8 @@ def execute_plan(
 
     try:
         # 1. Resolve repository and analysis_id strictly scoped to user
-        analysis_id = None
         repo_name_resolved = repository_id or "default"
-        if repository_id:
+        if not analysis_id and repository_id:
             from backend.models.repository import Repository
             query = db.query(Repository)
             if user_id is not None:
