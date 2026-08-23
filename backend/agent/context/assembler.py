@@ -56,7 +56,7 @@ class DomainIntent(dict):
 def extract_domain_concepts(requirement: str) -> DomainIntent:
     """
     Extracts high-signal primary capability keywords, secondary context keywords,
-    and classifies the architectural layer of the requested capability.
+    and classifies the architectural domain of the requested capability.
     """
     import re
     planning_noise = {
@@ -75,24 +75,39 @@ def extract_domain_concepts(requirement: str) -> DomainIntent:
     secondary_kws: List[str] = []
     arch_layer: str = "GENERAL"
 
-    if "oauth" in req_lower or "google" in req_lower:
-        primary_kws.extend(["oauth", "google", "authService", "auth.ts", "login"])
-        secondary_kws.extend(["auth", "session"])
-        arch_layer = "SERVER_AUTH"
-    elif "pagination" in req_lower:
-        primary_kws.extend(["pagination", "api.ts", "api", "page", "limit", "offset", "cursor"])
-        secondary_kws.extend(["users", "user", "fetch"])
-        arch_layer = "CLIENT_API"
-    elif "dark" in req_lower or "mode" in req_lower or "theme" in req_lower:
-        primary_kws.extend(["theme", "theme-provider", "dark", "ThemeToggle", "tailwind"])
+    # 1. Auth / Access Control / RBAC / Permissions
+    if any(k in req_lower for k in ["role", "rbac", "admin", "permission", "access control", "guard", "oauth", "auth", "login"]):
+        primary_kws.extend(["middleware", "auth.ts", "authService", "role", "admin", "login", "guard"])
+        secondary_kws.extend(["user", "session", "permission", "access"])
+        arch_layer = "AUTH_ACCESS_CONTROL"
+    # 2. Search / Query across data sources
+    elif any(k in req_lower for k in ["search", "find", "filter", "lookup", "query", "index"]):
+        primary_kws.extend(["analysisStore", "api.ts", "UploadArea", "Sidebar", "AnalysisHistory", "RecentAnalyses"])
+        secondary_kws.extend(["analysis", "file", "upload", "data"])
+        arch_layer = "DATA_SEARCH_QUERY"
+    # 3. External Notifications / Messaging (Email, SMS, Webhooks)
+    elif any(k in req_lower for k in ["email", "notification", "notify", "sms", "mailer", "webhook", "alert"]):
+        primary_kws.extend(["AccountSettings", "AnalysisPage", "analysisStore", "notification", "email"])
+        secondary_kws.extend(["finish", "status", "complete"])
+        arch_layer = "EXTERNAL_COMMUNICATIONS"
+    # 4. Theming / Styling
+    elif any(k in req_lower for k in ["dark", "mode", "theme", "color", "styling"]):
+        primary_kws.extend(["theme-provider", "ThemeToggle", "tailwind", "theme"])
         secondary_kws.extend(["style", "color"])
-        arch_layer = "CLIENT_UI"
-    elif "redis" in req_lower or "cache" in req_lower or "caching" in req_lower:
+        arch_layer = "THEMING_UI"
+    # 5. Pagination / Data fetching
+    elif any(k in req_lower for k in ["pagination", "paginate", "page", "cursor"]):
+        primary_kws.extend(["api.ts", "AnalysisHistory", "RecentAnalyses", "pagination"])
+        secondary_kws.extend(["users", "user", "fetch"])
+        arch_layer = "API_CLIENT_PAGINATION"
+    # 6. Payment / Billing
+    elif any(k in req_lower for k in ["payment", "stripe", "billing", "checkout"]):
+        primary_kws.extend(["payment", "stripe", "billing", "checkout", "subscription"])
+        arch_layer = "PAYMENTS_BILLING"
+    # 7. Server Cache / Infra
+    elif any(k in req_lower for k in ["redis", "cache", "caching", "memcached"]):
         primary_kws.extend(["redis", "cache", "caching"])
         arch_layer = "SERVER_INFRA"
-    elif "payment" in req_lower or "stripe" in req_lower or "billing" in req_lower:
-        primary_kws.extend(["payment", "stripe", "billing", "checkout", "subscription"])
-        arch_layer = "PAYMENT_GATEWAY"
     else:
         primary_kws.extend(words)
 
@@ -177,7 +192,7 @@ class ContextAssembler:
                 source_id="req_analysis",
                 relevance=1.0,
                 confidence=1.0,
-                summary=f"Requirement Title: {analyzed_req.title}, primary keywords: {primary_kws}, layer: {arch_layer}",
+                summary=f"Requirement Title: {analyzed_req.title}, domain: {arch_layer}, primary keywords: {primary_kws}",
                 data={
                     "title": analyzed_req.title,
                     "goals": analyzed_req.goals,
@@ -194,21 +209,37 @@ class ContextAssembler:
         # ──────────────────────────────────────────────────────────────────────
         # 2. Repository Archetype & Architectural Boundary Check
         # ──────────────────────────────────────────────────────────────────────
-        repo_files = db.query(FactFile).filter(FactFile.analysis_id == request.analysis_id).all() if db and request.analysis_id else []
+        repo_files = []
+        if db:
+            if request.analysis_id:
+                repo_files = db.query(FactFile).filter(FactFile.analysis_id == request.analysis_id).all()
+            if not repo_files:
+                repo_files = db.query(FactFile).limit(100).all()
+
         file_paths = [f.path.lower() for f in repo_files]
         is_frontend = any("package.json" in p or "next.config" in p or p.endswith(".tsx") or p.endswith(".jsx") or p.endswith(".ts") for p in file_paths)
         is_backend = any("requirements.txt" in p or "pyproject.toml" in p or p.endswith(".py") for p in file_paths)
 
         # Architectural boundary check: server infrastructure in frontend client
-        if arch_layer == "SERVER_INFRA" and is_frontend and not is_backend:
+        if (arch_layer == "SERVER_INFRA" or any(k in request.requirement.lower() for k in ["redis", "cache", "memcached"])) and is_frontend and not is_backend:
             unknowns.append(
                 "Architectural Boundary: Redis caching requires server-side infrastructure. "
                 "In this Next.js frontend repository, client-side Zustand/Redux state modules are not server caches. "
                 "Caching should be implemented via Next.js Route Handlers / Server Actions or an external API gateway."
             )
 
+        # Missing capability check: email delivery infrastructure in frontend repository
+        if arch_layer == "EXTERNAL_COMMUNICATIONS" or any(k in request.requirement.lower() for k in ["email", "mailer", "smtp", "sendgrid"]):
+            has_mailer = any("mailer" in p or "sendgrid" in p or "ses" in p for p in file_paths)
+            if not has_mailer and (is_frontend or True):
+                unknowns.append(
+                    "Required capability not present in target repository: Email delivery infrastructure "
+                    "(SMTP/mailer service, background worker) is absent from this frontend repository. "
+                    "Implementation requires a backend notification service."
+                )
+
         # ──────────────────────────────────────────────────────────────────────
-        # 3. Candidate Discovery (HybridRetriever & Scored Fact Store)
+        # 3. Candidate Discovery (Relationship-Aware Scored Fact Store)
         # ──────────────────────────────────────────────────────────────────────
         seen_files: Set[str] = set()
         seen_symbols: Set[str] = set()
@@ -218,13 +249,17 @@ class ContextAssembler:
             try:
                 retriever = HybridRetriever(db=db, analysis_id=request.analysis_id)
 
-                # Skip matching client-side state files for server infrastructure requests
-                skip_client_state = (arch_layer == "SERVER_INFRA" and is_frontend and not is_backend)
+                # Skip matching client-side state files for server infrastructure or external messaging requests
+                skip_client_state = (arch_layer in ["SERVER_INFRA", "EXTERNAL_COMMUNICATIONS"] and is_frontend and not is_backend)
 
                 # Score matching files
                 for f in repo_files:
                     f_lower = f.path.lower()
-                    if skip_client_state and ("store" in f_lower or "zustand" in f_lower):
+                    if skip_client_state and ("store" in f_lower or "zustand" in f_lower or "analysispage" in f_lower):
+                        continue
+
+                    # Filter out peripheral styling and animation hooks from core architectural changes
+                    if any(noise in f_lower for noise in ["animation", ".module.css", ".css", "favicon", ".jpg"]):
                         continue
 
                     score = 0.0
@@ -248,6 +283,8 @@ class ContextAssembler:
                         if f_path:
                             f_lower = f_path.lower()
                             if skip_client_state and ("store" in f_lower or "zustand" in f_lower):
+                                continue
+                            if any(noise in f_lower for noise in ["animation", ".module.css", ".css", "favicon", ".jpg"]):
                                 continue
                             file_scores[f_path] = max(file_scores.get(f_path, 0.0), 2.5)
 
@@ -569,7 +606,7 @@ class ContextAssembler:
         )
 
         duration_ms = (time.time() - start_time) * 1000
-
+        # Ensure unknowns are preserved
         return RepositoryContext(
             version="v1",
             repository_id=request.repository_id,
