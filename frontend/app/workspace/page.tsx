@@ -50,7 +50,7 @@ function RootWorkspaceContent() {
     }
 
     initWorkspace();
-  }, [queryRepo, router]);
+  }, [queryRepo, authLoading, isAuthenticated, router]);
 
   if (loading) {
     return (

@@ -56,7 +56,7 @@ export default function RepositoryOverviewPage() {
       cancelled = true;
       if (pollInterval) clearTimeout(pollInterval);
     };
-  }, [repoName]);
+  }, [repoName, authLoading, isAuthenticated, router]);
 
   if (isLoading && !data) {
     return <div className="p-8 text-center text-slate-500">Loading overview...</div>;
