@@ -368,7 +368,7 @@ export function CodeEditorPanel({
               {fileError}
             </div>
             <button
-              onClick={fetchActiveFile}
+              onClick={loadFile}
               className="px-3 py-1.5 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 border border-purple-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all"
             >
               <RefreshCw className="w-3.5 h-3.5" />

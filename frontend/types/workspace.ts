@@ -136,6 +136,7 @@ export interface PlanTaskItem {
   acceptance_criteria: string[];
   dependencies: string[];
   verification_strategy: string;
+  component_type?: string;
   status: string;
   assigned_to?: string;
   error_message?: string;
