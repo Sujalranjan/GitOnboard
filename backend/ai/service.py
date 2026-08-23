@@ -30,6 +30,13 @@ def build_default_service() -> "LLMService":
     deployment_type = os.environ.get("DEPLOYMENT_TYPE", "LOCAL").strip().upper()
     providers: List[LLMProvider] = []
 
+    # Automated test environment detection: use deterministic mock provider to avoid 300s Ollama waits
+    if deployment_type == "TEST" or "PYTEST_CURRENT_TEST" in os.environ:
+        from .providers.mock_test import DeterministicTestProvider
+        providers.append(DeterministicTestProvider())
+        logger.info("LLMService: TEST mode - DeterministicTestProvider registered.")
+        return LLMService(providers=providers)
+
     if deployment_type == "PROD":
         # 1. Gemini (Priority 1 in PROD)
         gemini_key = os.environ.get("GEMINI_API_KEY", "")

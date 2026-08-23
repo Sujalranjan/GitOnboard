@@ -15,7 +15,13 @@ from typing import Dict, Optional
 from sqlalchemy.orm import Session
 
 from backend.agent.event_coordinator import AgentEventCoordinator
-from backend.models.implementation import AgentEventType, AgentRun, AgentState
+from backend.models.implementation import (
+    AgentEventType,
+    AgentRun,
+    AgentRunStatus,
+    AgentState,
+    map_agent_state_to_legacy_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,38 +108,70 @@ class CancellationController:
         run_id: str,
         reason: str = "User requested cancellation",
         run_model: Optional[AgentRun] = None,
-    ) -> bool:
+    ) -> AgentRun:
         """
         Requests cancellation across all executing subsystems for the run.
         Emits CANCELLATION_REQUESTED and CANCELLED events and updates database state.
+        Returns the cancelled AgentRun model instance.
         """
+        run = run_model or db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        if not run:
+            from backend.agent.exceptions import RunNotFoundError
+            raise RunNotFoundError(f"AgentRun '{run_id}' not found")
+
+        # Idempotency: already cancelled runs return cleanly
+        if run.current_state == AgentState.CANCELLED:
+            logger.info(f"CancellationController: Run '{run_id}' is already CANCELLED (idempotent request)")
+            return run
+
+        # Reject cancellation of completed or failed runs
+        if run.current_state in (AgentState.COMPLETED, AgentState.FAILED):
+            from backend.agent.state_machine import InvalidStateTransitionError
+            raise InvalidStateTransitionError(
+                from_state=run.current_state,
+                to_state=AgentState.CANCELLED,
+                message=f"Cannot cancel run '{run_id}' already in terminal state '{run.current_state.value}'",
+            )
+
         token = self.get_or_create_token(run_id)
         token.cancel(reason=reason)
 
-        run = run_model or db.query(AgentRun).filter(AgentRun.id == run_id).first()
-        if run:
-            self.event_coordinator.emit_event(
-                db=db,
-                agent_run=run,
-                event_type=AgentEventType.CANCELLATION_REQUESTED,
-                message=f"Cancellation requested for run '{run_id}': {reason}",
-                payload={"run_id": run_id, "reason": reason},
-            )
+        self.event_coordinator.emit_event(
+            db=db,
+            agent_run=run,
+            event_type=AgentEventType.CANCELLATION_REQUESTED,
+            message=f"Cancellation requested for run '{run_id}': {reason}",
+            payload={"run_id": run_id, "reason": reason},
+        )
 
-        if run and run.current_state != AgentState.CANCELLED:
-            run.current_state = AgentState.CANCELLED
-            run.cancellation_reason = reason
-            run.completed_at = _now()
-            db.add(run)
-            db.commit()
+        # Update in-flight plan tasks to BLOCKED in metadata if plan exists
+        meta = run.metadata_json or {}
+        plan_dict = meta.get("plan")
+        if plan_dict and isinstance(plan_dict, dict):
+            tasks = plan_dict.get("tasks", [])
+            for t in tasks:
+                if t.get("status") in ("PENDING", "IN_PROGRESS", "READY"):
+                    t["status"] = "BLOCKED"
+            meta["plan"] = plan_dict
+            from sqlalchemy.orm.attributes import flag_modified
+            run.metadata_json = meta
+            flag_modified(run, "metadata_json")
 
-            self.event_coordinator.emit_event(
-                db=db,
-                agent_run=run,
-                event_type=AgentEventType.CANCELLED,
-                message=f"Run '{run_id}' transitioned to CANCELLED: {reason}",
-                payload={"run_id": run_id, "reason": reason},
-            )
+        run.current_state = AgentState.CANCELLED
+        run.status = map_agent_state_to_legacy_status(AgentState.CANCELLED)
+        run.cancellation_reason = reason
+        run.completed_at = _now()
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+
+        self.event_coordinator.emit_event(
+            db=db,
+            agent_run=run,
+            event_type=AgentEventType.CANCELLED,
+            message=f"Run '{run_id}' transitioned to CANCELLED: {reason}",
+            payload={"run_id": run_id, "reason": reason},
+        )
 
         logger.info(f"CancellationController: Cancelled run '{run_id}' successfully")
-        return True
+        return run

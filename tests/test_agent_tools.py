@@ -24,20 +24,34 @@ from backend.agent.tools.policy import PolicyAction
 from backend.agent.tools.registry import AgentToolRegistry
 from backend.agent.tools import create_default_tool_registry
 from backend.database import Base, SessionLocal, engine
+from backend.dependencies.auth import get_current_user
 from backend.main import app
+from backend.models.user import User
 from backend.models.implementation import AgentEvent, AgentEventType, AgentRun, AgentState
 
 
 @pytest.fixture(autouse=True)
 def init_db():
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.id == 1).first()
+        if not user:
+            user = User(id=1, github_id="gh_tool_test", username="tool_tester", email="tool@example.com")
+            db.add(user)
+            db.commit()
     yield
 
 
 @pytest.fixture
 def client():
+    def override_get_current_user():
+        with SessionLocal() as db:
+            return db.query(User).filter(User.id == 1).first()
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
     with TestClient(app) as test_client:
         yield test_client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

@@ -31,20 +31,16 @@ def scan_repo(repo_name: str, db: Session = Depends(get_db), current_user: User 
         ).order_by(Analysis.created_at.desc()).first()
         
         if safe_analysis:
-            # Revert changes: clean up the failed/cancelled analyses
-            failed_analyses = db.query(Analysis).filter(
-                Analysis.repository_id == repo.id,
-                Analysis.id > safe_analysis.id
-            ).all()
-            for fa in failed_analyses:
-                db.delete(fa)
-            db.commit()
             analysis = safe_analysis
         else:
-            # First scan failed, clear the scan entirely
-            db.delete(repo)
-            db.commit()
-            return {"status": "failed", "message": f"Analysis {analysis.status.lower()} due to a network or processing error. The repository has been removed."}
+            job = db.query(AnalysisJob).filter(AnalysisJob.analysis_id == analysis.id).first()
+            err_detail = job.error if job and job.error else "Analysis encountered an error."
+            return {
+                "status": "failed",
+                "job_status": analysis.status,
+                "message": f"Analysis {analysis.status.lower()}: {err_detail}",
+                "error": err_detail,
+            }
 
     if analysis.status != "Completed":
         job = db.query(AnalysisJob).filter(AnalysisJob.analysis_id == analysis.id).first()
