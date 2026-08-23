@@ -4,7 +4,7 @@ import logging
 from typing import Type, TypeVar
 
 from backend.ai.interfaces import LLMProvider
-from backend.ai.schemas import LLMRequest, LLMResponse, LLMUsage, NonRetriableError
+from backend.ai.schemas import LLMRequest, LLMResponse, TokenUsage, NonRetriableError
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -19,10 +19,10 @@ class DeterministicTestProvider(LLMProvider):
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         return LLMResponse(
-            content=f"Deterministic test response for: {request.prompt[:60]}",
+            content=f"Deterministic test response for: {request.messages[-1].content[:60] if request.messages else ''}",
             provider=self.provider_name,
             model="mock-test-model",
-            usage=LLMUsage(prompt_tokens=10, completion_tokens=10, total_tokens=20),
+            usage=TokenUsage(prompt_tokens=10, completion_tokens=10, total_tokens=20),
         )
 
     async def generate_structured(self, request: LLMRequest, schema: Type[T]) -> T:

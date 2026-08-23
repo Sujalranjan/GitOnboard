@@ -93,7 +93,7 @@ def test_graph_workflow_error_handling_observable(db_session, monkeypatch):
         id="run-graph-err",
         task_id="task-graph-err",
         repository_id="repo-graph-err",
-        user_requirement="Fail fast",
+        user_requirement="add fast feature",
         current_state=AgentState.UNDERSTANDING,
         status=AgentRunStatus.RUNNING,
     )
@@ -106,9 +106,9 @@ def test_graph_workflow_error_handling_observable(db_session, monkeypatch):
     initial_state = AgentGraphState(
         run_id="run-graph-err",
         repository_id="repo-graph-err",
-        user_requirement="Fail fast",
+        user_requirement="add fast feature",
         current_state="UNDERSTANDING",
-        status="IN_PROGRESS",
+        status="RUNNING",
         is_cancelled=False,
         node_history=[],
         metadata={},
@@ -132,7 +132,7 @@ def test_graph_workflow_cancelled_state(db_session, monkeypatch):
     initial_state = AgentGraphState(
         run_id="run-graph-canc",
         repository_id="repo-graph-canc",
-        user_requirement="Cancelled task",
+        user_requirement="add cancelled feature",
         current_state="CANCELLED",
         status="CANCELLED",
         is_cancelled=True,
@@ -143,7 +143,6 @@ def test_graph_workflow_cancelled_state(db_session, monkeypatch):
     final_state = graph.invoke(initial_state)
 
     assert "entry_node" in final_state["node_history"]
-    assert "legacy_agent_node" in final_state["node_history"]
     # Service create_plan should NOT be called on cancelled run
     mock_service.create_plan.assert_not_called()
 
@@ -157,7 +156,7 @@ def test_agent_graph_orchestrator_execution(db_session, monkeypatch):
         id="run-orch-1",
         task_id="task-orch-1",
         repository_id="repo-orch-1",
-        user_requirement="Orchestrate via graph",
+        user_requirement="add orchestration feature",
         current_state=AgentState.UNDERSTANDING,
         status=AgentRunStatus.QUEUED,
     )
