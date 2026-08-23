@@ -30,6 +30,10 @@ from backend.ai.schemas import LLMResponse, TokenUsage
         ("what can you do?", Intent.CHAT),
         ("who are you?", Intent.CHAT),
         ("help", Intent.CHAT),
+        ("I'm just exploring the system today, no task yet.", Intent.CHAT),
+        ("just looking around", Intent.CHAT),
+        ("just testing the system", Intent.CHAT),
+        ("no task today", Intent.CHAT),
     ],
 )
 def test_deterministic_chat_greetings(prompt, expected_intent):
