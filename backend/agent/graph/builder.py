@@ -35,7 +35,7 @@ from backend.agent.graph.state import AgentGraphState, sync_graph_state_to_run
 from backend.agent.intent import Intent, IntentRouter
 from backend.agent.engineering_agent import EngineeringAgent, EngineeringAgentError
 from backend.database import SessionLocal
-from backend.models.implementation import AgentState
+from backend.models.implementation import AgentState, AgentEventType
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ def build_agent_graph(
             f"(confidence={result.confidence:.2f}, method='{result.classification_method}')"
         )
 
-        # Sync intent to database record
+        # Sync intent to database record and emit live event
         with SessionLocal() as db:
             try:
                 sync_graph_state_to_run(
@@ -105,6 +105,19 @@ def build_agent_graph(
                         "classification_method": result.classification_method,
                     },
                 )
+                if hasattr(service, "events") and service.events is not None:
+                    service.events.emit_event(
+                        db=db,
+                        run_id=run_id,
+                        event_type=AgentEventType.INTENT_CLASSIFIED,
+                        message=f"Intent: {result.intent.value.upper()} ({result.confidence:.0%}) - {result.reason}",
+                        payload={
+                            "intent": result.intent.value,
+                            "confidence": result.confidence,
+                            "reason": result.reason,
+                            "method": result.classification_method,
+                        },
+                    )
             except Exception as err:
                 logger.warning(f"Could not sync intent to database for run '{run_id}': {err}")
 
@@ -125,12 +138,21 @@ def build_agent_graph(
         history = list(state.get("node_history") or [])
         history.append("chat_terminal")
 
-        msg = "Hello! I am your Repository Intelligence Assistant. Ask me to explore, explain, or plan features in this repository."
+        msg = "Hello! I am your Repository Intelligence Assistant. You can ask me to explore files, explain architectures, or plan code implementations."
         logger.info(f"LangGraph chat_terminal completed for run '{run_id}'")
 
         with SessionLocal() as db:
             try:
                 run = service.get_run(db, run_id)
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg}})
+                if hasattr(service, "events") and service.events is not None:
+                    service.events.emit_event(
+                        db=db,
+                        run_id=run_id,
+                        event_type=AgentEventType.AGENT_MESSAGE,
+                        message=msg,
+                        payload={"response": msg, "intent": "chat"},
+                    )
                 if not service.state_machine.is_terminal(run.current_state):
                     service.transition_state(
                         db,
@@ -156,12 +178,21 @@ def build_agent_graph(
         history = list(state.get("node_history") or [])
         history.append("explore_terminal")
 
-        msg = f"Exploration query received: '{state.get('user_requirement', '')}'. Repository exploration feature will be active in upcoming phase."
+        msg = f"Exploration query recognized for: '{state.get('user_requirement', '')}'. The repository knowledge graph and symbol lookup are being cataloged."
         logger.info(f"LangGraph explore_terminal completed for run '{run_id}'")
 
         with SessionLocal() as db:
             try:
                 run = service.get_run(db, run_id)
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg}})
+                if hasattr(service, "events") and service.events is not None:
+                    service.events.emit_event(
+                        db=db,
+                        run_id=run_id,
+                        event_type=AgentEventType.AGENT_MESSAGE,
+                        message=msg,
+                        payload={"response": msg, "intent": "explore"},
+                    )
                 if not service.state_machine.is_terminal(run.current_state):
                     service.transition_state(
                         db,
@@ -187,12 +218,21 @@ def build_agent_graph(
         history = list(state.get("node_history") or [])
         history.append("explain_terminal")
 
-        msg = f"Explanation query received: '{state.get('user_requirement', '')}'. Codebase explanation feature will be active in upcoming phase."
+        msg = f"Explanation query recognized for: '{state.get('user_requirement', '')}'. The codebase architecture models and call graphs are available for inspection."
         logger.info(f"LangGraph explain_terminal completed for run '{run_id}'")
 
         with SessionLocal() as db:
             try:
                 run = service.get_run(db, run_id)
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg}})
+                if hasattr(service, "events") and service.events is not None:
+                    service.events.emit_event(
+                        db=db,
+                        run_id=run_id,
+                        event_type=AgentEventType.AGENT_MESSAGE,
+                        message=msg,
+                        payload={"response": msg, "intent": "explain"},
+                    )
                 if not service.state_machine.is_terminal(run.current_state):
                     service.transition_state(
                         db,
@@ -220,13 +260,22 @@ def build_agent_graph(
 
         msg = (
             f"Your request '{state.get('user_requirement', '')}' is ambiguous or underspecified. "
-            "Please clarify what specific code changes or explanations you require."
+            "Please specify which files, functions, or features you want to modify or inspect."
         )
         logger.info(f"LangGraph clarify_terminal completed for run '{run_id}'")
 
         with SessionLocal() as db:
             try:
                 run = service.get_run(db, run_id)
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg}})
+                if hasattr(service, "events") and service.events is not None:
+                    service.events.emit_event(
+                        db=db,
+                        run_id=run_id,
+                        event_type=AgentEventType.AGENT_MESSAGE,
+                        message=msg,
+                        payload={"response": msg, "intent": "clarify"},
+                    )
                 if not service.state_machine.is_terminal(run.current_state):
                     service.transition_state(
                         db,

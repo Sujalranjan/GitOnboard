@@ -11,18 +11,17 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Compass,
   FileCode,
   FileDiff,
-  FileMinus,
-  FilePlus,
-  GitBranch,
+  HelpCircle,
+  Info,
   Layers,
+  MessageSquare,
   Mic,
   MoreHorizontal,
-  PauseCircle,
-  Play,
   Plus,
-  RotateCw,
+  RefreshCw,
   Search,
   Send,
   ShieldAlert,
@@ -32,8 +31,6 @@ import {
   Terminal,
   User,
   Wrench,
-  X,
-  XCircle,
   Zap,
 } from "lucide-react";
 import { EventStreamItem, WorkspaceSnapshot } from "@/types/workspace";
@@ -50,6 +47,13 @@ interface ChatPanelProps {
   isLoading?: boolean;
 }
 
+interface IntentInfo {
+  intent: "chat" | "explore" | "explain" | "plan" | "implement" | "clarify" | string;
+  confidence: number;
+  reason?: string;
+  method?: string;
+}
+
 export function ChatPanel({
   snapshot,
   onStartRun,
@@ -62,7 +66,7 @@ export function ChatPanel({
   isLoading = false,
 }: ChatPanelProps) {
   const [inputPrompt, setInputPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState("Gemini 3.7 Flash Medium");
+  const [selectedModel, setSelectedModel] = useState("Gemini 3.7 Flash");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -75,6 +79,7 @@ export function ChatPanel({
   const isAwaitingApproval =
     run?.current_state === "AWAITING_APPROVAL" ||
     plan?.status === "READY_FOR_APPROVAL";
+
   const isRunning = Boolean(
     run?.id &&
     run.current_state !== "COMPLETED" &&
@@ -82,23 +87,66 @@ export function ChatPanel({
     run.current_state !== "FAILED"
   );
 
-  const availableModels = [
-    "Gemini 3.7 Flash Medium",
-    "Gemini 2.5 Pro",
-    "Claude 3.7 Sonnet (Thinking)",
-    "Ollama: Qwen-2.5-Coder-7B",
-    "Ollama: DeepSeek-R1-14B",
+  // Extract classified intent from events or run metadata
+  const intentEvent = events.find((e) => e.event_type === "INTENT_CLASSIFIED");
+  const agentMessageEvent = events.find((e) => e.event_type === "AGENT_MESSAGE");
+
+  const classifiedIntent: IntentInfo | null = (() => {
+    if (intentEvent?.payload?.intent) {
+      return {
+        intent: String(intentEvent.payload.intent).toLowerCase(),
+        confidence: Number(intentEvent.payload.confidence ?? 1.0),
+        reason: intentEvent.payload.reason || intentEvent.message,
+        method: intentEvent.payload.method || "deterministic",
+      };
+    }
+    const metaIntent = run?.metadata?.intent;
+    if (metaIntent?.intent) {
+      return {
+        intent: String(metaIntent.intent).toLowerCase(),
+        confidence: Number(metaIntent.confidence ?? 1.0),
+        reason: metaIntent.reason,
+        method: metaIntent.classification_method || "deterministic",
+      };
+    }
+    return null;
+  })();
+
+  const agentResponseText: string | null = (() => {
+    if (agentMessageEvent?.payload?.response || agentMessageEvent?.message) {
+      return agentMessageEvent.payload?.response || agentMessageEvent.message;
+    }
+    if (run?.metadata?.response) {
+      return String(run.metadata.response);
+    }
+    return null;
+  })();
+
+  // Sample prompt test presets for instant user evaluation
+  const testPresets = [
+    { label: "Greeting", prompt: "hi", icon: Sparkles, intent: "chat" },
+    { label: "Explain", prompt: "how does authentication work?", icon: Info, intent: "explain" },
+    { label: "Explore", prompt: "show repo tree", icon: Compass, intent: "explore" },
+    { label: "Plan", prompt: "what would it take to add payments?", icon: Layers, intent: "plan" },
+    { label: "Implement", prompt: "add Google OAuth", icon: Zap, intent: "implement" },
+    { label: "Clarify", prompt: "make auth better", icon: HelpCircle, intent: "clarify" },
   ];
 
   // Auto-scroll to bottom on new events
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [events.length, isAwaitingApproval, pendingApprovals.length]);
+  }, [events.length, isAwaitingApproval, classifiedIntent?.intent]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputPrompt.trim() || isLoading) return;
+    if (!inputPrompt.trim() || isLoading || isRunning) return;
     onStartRun(inputPrompt.trim());
+    setInputPrompt("");
+  };
+
+  const handlePresetClick = (presetPrompt: string) => {
+    if (isLoading || isRunning) return;
+    onStartRun(presetPrompt);
     setInputPrompt("");
   };
 
@@ -106,13 +154,84 @@ export function ChatPanel({
     setExpandedEvents((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Render Antigravity-style activity / stream cards
+  // Helper for Intent theme styles
+  const getIntentStyle = (intentKey?: string) => {
+    switch (intentKey?.toLowerCase()) {
+      case "chat":
+        return {
+          bg: "bg-emerald-500/10",
+          border: "border-emerald-500/30",
+          text: "text-emerald-400",
+          badgeBg: "bg-emerald-500/20",
+          title: "CHAT INTENT",
+          desc: "Conversational greeting or chit-chat (Zero mutation, safe terminal)",
+          icon: Sparkles,
+        };
+      case "explore":
+        return {
+          bg: "bg-cyan-500/10",
+          border: "border-cyan-500/30",
+          text: "text-cyan-400",
+          badgeBg: "bg-cyan-500/20",
+          title: "EXPLORE INTENT",
+          desc: "Codebase exploration & symbol lookup (Read-only terminal)",
+          icon: Compass,
+        };
+      case "explain":
+        return {
+          bg: "bg-blue-500/10",
+          border: "border-blue-500/30",
+          text: "text-blue-400",
+          badgeBg: "bg-blue-500/20",
+          title: "EXPLAIN INTENT",
+          desc: "Architecture & conceptual explanation (Read-only terminal)",
+          icon: Info,
+        };
+      case "plan":
+        return {
+          bg: "bg-amber-500/10",
+          border: "border-amber-500/30",
+          text: "text-amber-400",
+          badgeBg: "bg-amber-500/20",
+          title: "PLAN INTENT",
+          desc: "High-level change estimation & DAG plan synthesis",
+          icon: Layers,
+        };
+      case "implement":
+        return {
+          bg: "bg-purple-500/10",
+          border: "border-purple-500/30",
+          text: "text-purple-400",
+          badgeBg: "bg-purple-500/20",
+          title: "IMPLEMENT INTENT",
+          desc: "Concrete code modification & feature implementation",
+          icon: Zap,
+        };
+      case "clarify":
+      default:
+        return {
+          bg: "bg-rose-500/10",
+          border: "border-rose-500/30",
+          text: "text-rose-400",
+          badgeBg: "bg-rose-500/20",
+          title: "CLARIFY INTENT",
+          desc: "Ambiguous or underspecified request (Safe clarification prompt)",
+          icon: HelpCircle,
+        };
+    }
+  };
+
   const renderEventCard = (evt: EventStreamItem, idx: number) => {
     const type = String(evt?.event_type || (evt as any)?.type || "");
     const evtId = evt.event_id || `evt-${idx}`;
     const isExpanded = Boolean(expandedEvents[evtId]);
 
-    // 1. Tool Call / Terminal Execution Card (e.g. npm run build, AST extraction)
+    // Skip redundant intent or message events in raw timeline since they are highlighted in dedicated cards
+    if (type === "INTENT_CLASSIFIED" || type === "AGENT_MESSAGE") {
+      return null;
+    }
+
+    // 1. Tool Call Execution Card
     if (type === "TOOL_CALL_STARTED" || type === "TOOL_CALL_COMPLETED" || evt.payload?.command) {
       const cmd = evt.payload?.command || evt.payload?.tool_name || evt.message;
       return (
@@ -150,7 +269,7 @@ export function ChatPanel({
       );
     }
 
-    // 2. State Transition / Progress pill
+    // 2. State Transition pill
     if (type === "STATE_TRANSITION") {
       return (
         <div
@@ -163,7 +282,7 @@ export function ChatPanel({
       );
     }
 
-    // 3. Plan / Milestone completed
+    // 3. Plan Ready for Approval
     if (type === "PLANNING_COMPLETED" || type === "PLAN_READY_FOR_APPROVAL") {
       return (
         <div
@@ -179,91 +298,45 @@ export function ChatPanel({
       );
     }
 
-    // 4. Verification Passed / Defect Cards
-    if (type === "VERIFICATION_PASSED") {
-      return (
-        <div
-          key={evtId}
-          className="bg-emerald-950/20 border border-emerald-500/30 rounded-lg p-3 my-2 space-y-1 font-sans"
-        >
-          <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
-            <ShieldCheck className="w-4 h-4" />
-            <span>Verification Succeeded</span>
-          </div>
-          <p className="text-xs text-zinc-300 font-mono">{evt.message}</p>
-        </div>
-      );
-    }
-
-    if (type === "VERIFICATION_FAILED" || type === "VERIFICATION_CHECK_FAILED") {
-      return (
-        <div
-          key={evtId}
-          className="bg-rose-950/20 border border-rose-500/30 rounded-lg p-3 my-2 space-y-1 font-sans"
-        >
-          <div className="flex items-center gap-2 text-rose-400 text-xs font-semibold">
-            <ShieldAlert className="w-4 h-4" />
-            <span>Defect Detected (Entering Self-Repair)</span>
-          </div>
-          <p className="text-xs text-zinc-300 font-mono">{evt.message}</p>
-        </div>
-      );
-    }
-
-    // Default message
+    // Default minor timeline event
     return (
       <div
         key={evtId}
-        className="flex gap-2 text-xs py-1.5 px-2 bg-[#18181B]/50 rounded border border-[#27272A]/50 my-1 font-sans"
+        className="flex gap-2 text-xs py-1 px-2 bg-[#18181B]/40 rounded border border-[#27272A]/40 my-1 font-sans"
       >
-        <div className="w-4 h-4 rounded bg-zinc-800 text-zinc-400 flex items-center justify-center shrink-0 mt-0.5">
-          <Activity className="w-2.5 h-2.5" />
+        <div className="w-3.5 h-3.5 rounded bg-zinc-800 text-zinc-400 flex items-center justify-center shrink-0 mt-0.5">
+          <Activity className="w-2 h-2" />
         </div>
-        <div className="flex-1 text-zinc-300 font-mono text-[11px] leading-relaxed">
+        <div className="flex-1 text-zinc-400 font-mono text-[10px] leading-relaxed">
           {evt.message}
         </div>
       </div>
     );
   };
 
-  const totalFilesChanged =
-    (changes?.modified_files?.length || 0) +
-    (changes?.added_files?.length || 0) +
-    (changes?.deleted_files?.length || 0);
-
   return (
     <div className="flex flex-col h-full bg-[#0F0F12] text-zinc-200 font-sans select-none">
       {/* Top Conversation Header */}
       <div className="px-3.5 py-2.5 border-b border-[#27272A] bg-[#141417] flex items-center justify-between">
         <div className="flex items-center gap-2 truncate">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-xs font-medium text-zinc-100 truncate">
-            {run?.user_requirement ? run.user_requirement.slice(0, 45) + "..." : "Engineering Agent Session"}
+            {run?.user_requirement ? run.user_requirement.slice(0, 45) + "..." : "Intent Classification Session"}
           </span>
         </div>
         <div className="flex items-center gap-1 text-zinc-400">
           <button
             onClick={() => onStartRun("")}
-            title="New Chat / Reset"
-            className="p-1 hover:bg-[#27272A] hover:text-zinc-200 rounded transition-colors"
+            title="Reset Session"
+            className="p-1 hover:bg-[#27272A] hover:text-zinc-200 rounded transition-colors text-xs flex items-center gap-1"
           >
             <Plus className="w-3.5 h-3.5" />
-          </button>
-          <button
-            title="Search conversation"
-            className="p-1 hover:bg-[#27272A] hover:text-zinc-200 rounded transition-colors"
-          >
-            <Search className="w-3.5 h-3.5" />
-          </button>
-          <button
-            title="Options"
-            className="p-1 hover:bg-[#27272A] hover:text-zinc-200 rounded transition-colors"
-          >
-            <MoreHorizontal className="w-3.5 h-3.5" />
+            <span className="text-[10px]">New</span>
           </button>
         </div>
       </div>
 
-      {/* Main Conversation & Activity Scroll Area */}
+      {/* Main Conversation & Intent Display Scroll Area */}
       <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
         {/* User Prompt Message */}
         {run?.user_requirement ? (
@@ -278,32 +351,111 @@ export function ChatPanel({
                   {run.started_at ? new Date(run.started_at).toLocaleTimeString() : "just now"}
                 </span>
               </div>
-              <p className="text-xs text-zinc-300 leading-relaxed font-sans">
+              <p className="text-xs text-zinc-200 leading-relaxed font-sans">
                 {run.user_requirement}
               </p>
             </div>
           </div>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 space-y-3">
-            <div className="w-10 h-10 rounded-2xl bg-purple-600/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shadow-inner">
-              <Bot className="w-5 h-5" />
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-purple-600/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shadow-inner">
+              <Bot className="w-6 h-6" />
             </div>
-            <div className="space-y-1 max-w-xs">
-              <p className="text-xs font-semibold text-zinc-300">Engineering Agent Workspace</p>
-              <p className="text-[11px] text-zinc-500 leading-relaxed">
-                Describe a feature, refactor, or bug fix. The agent will analyze CST symbols, synthesize an execution contract, and stream verified changes.
+            <div className="space-y-1.5 max-w-sm">
+              <p className="text-sm font-semibold text-zinc-200">Intent Classification & Router</p>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Ask any question or command below. The system will classify your request into <span className="text-emerald-400 font-mono">CHAT</span>, <span className="text-cyan-400 font-mono">EXPLORE</span>, <span className="text-blue-400 font-mono">EXPLAIN</span>, <span className="text-amber-400 font-mono">PLAN</span>, <span className="text-purple-400 font-mono">IMPLEMENT</span>, or <span className="text-rose-400 font-mono">CLARIFY</span>.
+              </p>
+            </div>
+
+            {/* Quick Test Chips */}
+            <div className="w-full max-w-md pt-2">
+              <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-2">
+                Click a test question to test intent classification:
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-left">
+                {testPresets.map((preset) => {
+                  const style = getIntentStyle(preset.intent);
+                  const Icon = preset.icon;
+                  return (
+                    <button
+                      key={preset.prompt}
+                      onClick={() => handlePresetClick(preset.prompt)}
+                      disabled={isLoading || isRunning}
+                      className={`p-2 rounded-lg border ${style.border} ${style.bg} hover:brightness-125 transition-all text-left flex items-start gap-2 group cursor-pointer`}
+                    >
+                      <Icon className={`w-3.5 h-3.5 ${style.text} shrink-0 mt-0.5`} />
+                      <div className="truncate">
+                        <div className={`text-[10px] font-bold ${style.text}`}>
+                          {preset.label}
+                        </div>
+                        <div className="text-[11px] text-zinc-300 truncate font-mono">
+                          "{preset.prompt}"
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dedicated Classified Intent Badge & Card */}
+        {classifiedIntent && (
+          <div
+            className={`rounded-xl p-3.5 border ${
+              getIntentStyle(classifiedIntent.intent).border
+            } ${getIntentStyle(classifiedIntent.intent).bg} space-y-2 shadow-lg animate-in fade-in duration-200`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {React.createElement(getIntentStyle(classifiedIntent.intent).icon, {
+                  className: `w-4 h-4 ${getIntentStyle(classifiedIntent.intent).text}`,
+                })}
+                <span
+                  className={`text-xs font-bold font-mono tracking-wider ${
+                    getIntentStyle(classifiedIntent.intent).text
+                  }`}
+                >
+                  {getIntentStyle(classifiedIntent.intent).title}
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900/80 text-zinc-300 border border-zinc-700/60 font-mono">
+                  {(classifiedIntent.confidence * 100).toFixed(0)}% Confidence
+                </span>
+              </div>
+              <span className="text-[10px] text-zinc-400 font-mono capitalize">
+                {classifiedIntent.method || "deterministic"}
+              </span>
+            </div>
+
+            <p className="text-xs text-zinc-300 font-sans leading-relaxed">
+              {classifiedIntent.reason || getIntentStyle(classifiedIntent.intent).desc}
+            </p>
+          </div>
+        )}
+
+        {/* Assistant Response Message Card (For CHAT, EXPLORE, EXPLAIN, CLARIFY) */}
+        {agentResponseText && (
+          <div className="flex gap-3 bg-[#161B22] p-3.5 rounded-xl border border-[#30363D] shadow-sm">
+            <div className="w-6 h-6 rounded-full bg-purple-600/30 border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0 text-xs font-semibold">
+              <Bot className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-zinc-200">Repository Intelligence Assistant</span>
+                <span className="text-[10px] text-emerald-400 font-mono">Response Delivered</span>
+              </div>
+              <p className="text-xs text-zinc-200 leading-relaxed font-sans whitespace-pre-wrap">
+                {agentResponseText}
               </p>
             </div>
           </div>
         )}
 
-        {/* Timeline Events Feed */}
-        {events.map((evt, idx) => renderEventCard(evt, idx))}
-
-        {/* Antigravity-style Implementation Plan Card */}
+        {/* Implementation Plan Card (For PLAN and IMPLEMENT) */}
         {(isAwaitingApproval || plan) && (
           <div className="bg-[#161B22] border border-purple-500/50 rounded-xl p-4 space-y-3.5 shadow-xl my-3 animate-in fade-in duration-300">
-            {/* Plan Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-md bg-purple-600/30 text-purple-300 flex items-center justify-center border border-purple-500/40 shadow-inner">
@@ -332,7 +484,7 @@ export function ChatPanel({
               </span>
             </div>
 
-            {/* Clickable Antigravity Plan Artifact Pill (Opens implementation_plan.md in Code Editor) */}
+            {/* Clickable Plan Artifact Pill */}
             <button
               type="button"
               onClick={() => onSelectFile?.("implementation_plan.md")}
@@ -360,9 +512,9 @@ export function ChatPanel({
             {snapshot?.tasks && snapshot.tasks.length > 0 && (
               <div className="space-y-1.5 pt-1">
                 <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                  Task Execution Pipeline
+                  Task Pipeline Preview
                 </div>
-                <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
                   {snapshot.tasks.map((t, idx) => (
                     <div
                       key={t.task_id || idx}
@@ -393,135 +545,36 @@ export function ChatPanel({
                 </div>
               </div>
             )}
-
-            {/* Invariants & Acceptance Preview */}
-            {plan?.acceptance_criteria && plan.acceptance_criteria.length > 0 && (
-              <div className="text-[11px] text-zinc-400 font-sans space-y-1 bg-[#0D1117]/60 p-2 rounded border border-[#21262D]">
-                <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  <span>Acceptance Invariants</span>
-                </div>
-                <ul className="list-disc list-inside space-y-0.5 text-zinc-300 text-[10px]">
-                  {plan.acceptance_criteria.slice(0, 2).map((ac: string, i: number) => (
-                    <li key={i} className="truncate">{ac}</li>
-                  ))}
-                  {plan.acceptance_criteria.length > 2 && (
-                    <li className="text-zinc-500 italic">+{plan.acceptance_criteria.length - 2} more criteria</li>
-                  )}
-                </ul>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex items-center justify-between pt-1 border-t border-[#21262D]">
-              <button
-                type="button"
-                onClick={() => onSelectFile?.("implementation_plan.md")}
-                className="text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1 font-sans"
-              >
-                <FileCode className="w-3 h-3 text-purple-400" />
-                <span>View Full Spec</span>
-              </button>
-
-              <div className="flex items-center gap-2">
-                {onNavigateToPlan && (
-                  <button
-                    type="button"
-                    onClick={onNavigateToPlan}
-                    className="px-2.5 py-1.5 rounded-lg bg-[#21262D] hover:bg-[#30363D] text-zinc-300 text-xs font-medium transition-all"
-                  >
-                    <span>Plan Tab</span>
-                  </button>
-                )}
-                {isAwaitingApproval && onApprovePlan && (
-                  <button
-                    type="button"
-                    onClick={onApprovePlan}
-                    disabled={isLoading}
-                    className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Proceed (Approve)</span>
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
         )}
 
-        {/* Antigravity-style Diff Review & Approval Card (Files With Changes) */}
-        {totalFilesChanged > 0 && (
-          <div className="bg-[#18181B] border border-[#27272A] rounded-xl overflow-hidden shadow-lg my-3 font-mono text-xs">
-            <div className="p-3 bg-[#141417] border-b border-[#27272A] flex items-center justify-between">
-              <span className="text-xs font-semibold text-zinc-200">
-                {totalFilesChanged} Files With Changes
-              </span>
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                Worktree Patch
-              </span>
-            </div>
-
-            <div className="p-2.5 space-y-1.5 max-h-48 overflow-y-auto">
-              {changes?.modified_files?.map((file) => (
-                <div
-                  key={file}
-                  onClick={() => onSelectFile?.(file)}
-                  className="flex items-center justify-between p-1.5 rounded hover:bg-[#202024] cursor-pointer text-zinc-300 text-[11px]"
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <span className="text-amber-400 font-bold">M</span>
-                    <span className="truncate">{file}</span>
-                  </div>
-                  <span className="text-[10px] text-zinc-500">modified</span>
-                </div>
-              ))}
-
-              {changes?.added_files?.map((file) => (
-                <div
-                  key={file}
-                  onClick={() => onSelectFile?.(file)}
-                  className="flex items-center justify-between p-1.5 rounded hover:bg-[#202024] cursor-pointer text-zinc-300 text-[11px]"
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <span className="text-emerald-400 font-bold">+</span>
-                    <span className="truncate">{file}</span>
-                  </div>
-                  <span className="text-[10px] text-emerald-500">added</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Bottom Actions Bar */}
-            <div className="p-2.5 bg-[#141417] border-t border-[#27272A] flex items-center justify-between">
-              <div className="flex items-center gap-1 text-[11px] text-zinc-400">
-                <ArrowRight className="w-3 h-3" />
-                <span>{totalFilesChanged} Files Modified</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onRejectPlan?.("Changes rejected by user")}
-                  className="px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
-                >
-                  Reject all
-                </button>
-                <button
-                  onClick={onApprovePlan}
-                  className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-md text-xs font-semibold shadow-sm transition-all"
-                >
-                  Accept all
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Timeline Events Feed */}
+        {events.map((evt, idx) => renderEventCard(evt, idx))}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Antigravity Signature Chat Input Container */}
+      {/* Bottom Preset Chips for quick testing */}
+      <div className="px-3 py-1.5 border-t border-[#222226] bg-[#121215] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <span className="text-[10px] font-bold text-zinc-500 uppercase shrink-0">Test:</span>
+        {testPresets.map((preset) => {
+          const style = getIntentStyle(preset.intent);
+          return (
+            <button
+              key={preset.prompt}
+              onClick={() => handlePresetClick(preset.prompt)}
+              disabled={isLoading || isRunning}
+              className={`text-[10px] px-2 py-0.5 rounded-full border ${style.border} ${style.bg} ${style.text} hover:brightness-125 transition-all shrink-0 font-mono`}
+            >
+              {preset.label}: "{preset.prompt}"
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Signature Chat Input Container */}
       <div className="p-3 border-t border-[#27272A] bg-[#141417]">
         <div className="bg-[#18181B] border border-[#27272A] focus-within:border-purple-500/80 rounded-xl p-2.5 space-y-2 shadow-inner transition-colors">
-          {/* Main Input Textarea */}
           <form onSubmit={handleSubmit} className="space-y-2">
             <textarea
               rows={2}
@@ -533,37 +586,28 @@ export function ChatPanel({
                   handleSubmit(e);
                 }
               }}
-              placeholder="Ask anything, @ to mention, / for actions"
+              placeholder="Ask a question (e.g. 'hi', 'how does auth work?', 'show repo tree', 'add OAuth')..."
               disabled={isLoading || isRunning}
               className="w-full bg-transparent text-xs text-zinc-100 placeholder:text-zinc-500 font-sans focus:outline-none resize-none leading-relaxed"
             />
 
-            {/* Bottom Controls inside input card */}
+            {/* Bottom Controls */}
             <div className="flex items-center justify-between pt-1 border-t border-[#222226]">
-              {/* Left Model Selector & Plus Icon */}
+              {/* Left Model Selector */}
               <div className="flex items-center gap-1.5 relative">
-                <button
-                  type="button"
-                  title="Add context / attachment"
-                  className="w-5 h-5 rounded hover:bg-[#27272A] text-zinc-400 hover:text-zinc-200 flex items-center justify-center text-xs transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-
-                {/* Model Selector Pill */}
                 <button
                   type="button"
                   onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
                   className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded-md hover:bg-[#27272A] transition-colors font-sans"
                 >
+                  <Sparkles className="w-3 h-3 text-purple-400" />
                   <span>{selectedModel}</span>
                   <ChevronDown className="w-3 h-3 text-zinc-500" />
                 </button>
 
-                {/* Model Dropdown Menu */}
                 {isModelDropdownOpen && (
-                  <div className="absolute bottom-7 left-0 w-52 bg-[#18181B] border border-[#27272A] rounded-lg shadow-xl py-1 z-50 text-xs">
-                    {availableModels.map((m) => (
+                  <div className="absolute bottom-7 left-0 w-48 bg-[#18181B] border border-[#27272A] rounded-lg shadow-xl py-1 z-50 text-xs">
+                    {["Gemini 3.7 Flash", "Claude 3.7 Sonnet", "Ollama: Qwen-2.5-Coder"].map((m) => (
                       <div
                         key={m}
                         onClick={() => {
@@ -582,16 +626,8 @@ export function ChatPanel({
                 )}
               </div>
 
-              {/* Right Mic & Circular Send Button */}
+              {/* Right Send Button */}
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  title="Voice input"
-                  className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  <Mic className="w-3.5 h-3.5" />
-                </button>
-
                 <button
                   type="submit"
                   disabled={isLoading || !inputPrompt.trim() || isRunning}
@@ -599,12 +635,12 @@ export function ChatPanel({
                     inputPrompt.trim() && !isRunning
                       ? "bg-purple-600 hover:bg-purple-500 text-white shadow-sm"
                       : isRunning
-                      ? "bg-rose-500 text-white animate-pulse"
+                      ? "bg-purple-500 text-white animate-pulse"
                       : "bg-[#27272A] text-zinc-500 cursor-not-allowed"
                   }`}
                 >
                   {isRunning ? (
-                    <Square className="w-2.5 h-2.5 fill-current" />
+                    <div className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
                     <ArrowUp className="w-3.5 h-3.5" />
                   )}
