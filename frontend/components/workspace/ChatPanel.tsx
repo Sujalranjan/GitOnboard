@@ -17,6 +17,7 @@ import { WorkspaceSnapshot } from "@/types/workspace";
 
 interface ChatPanelProps {
   snapshot?: WorkspaceSnapshot | null;
+  repoId?: string;
   onStartRun?: (prompt: string) => void;
   onApprovePlan?: () => void;
   onRejectPlan?: (reason?: string) => void;
@@ -42,7 +43,7 @@ interface ChatMessage {
   timestamp: string;
 }
 
-export function ChatPanel({ onStartRun, snapshot }: ChatPanelProps) {
+export function ChatPanel({ onStartRun, snapshot, repoId }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputPrompt, setInputPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,7 +93,7 @@ export function ChatPanel({ onStartRun, snapshot }: ChatPanelProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requirement: trimmed,
-          repository_id: snapshot?.run?.repository_id || null,
+          repository_id: repoId || snapshot?.run?.repository_id || null,
         }),
       });
 

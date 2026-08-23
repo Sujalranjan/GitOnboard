@@ -226,10 +226,36 @@ def execute_explain(
         close_db = True
 
     try:
+        # Find matching repository analysis
+        analysis_id = None
+        repo_name_resolved = repository_id or "default"
+        if repository_id:
+            from backend.models.repository import Repository
+            repo = db.query(Repository).filter(
+                (Repository.id == (int(repository_id) if repository_id.isdigit() else -1)) |
+                (Repository.url.ilike(f"%/{repository_id}")) |
+                (Repository.url.ilike(f"%/{repository_id}.git")) |
+                (Repository.url.ilike(f"%{repository_id}%"))
+            ).first()
+            if repo:
+                repo_name_resolved = repo.url.split("/")[-1].replace(".git", "")
+                latest_analysis = db.query(Analysis).filter(
+                    Analysis.repository_id == repo.id,
+                    Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
+                ).order_by(Analysis.id.desc()).first()
+                if latest_analysis:
+                    analysis_id = latest_analysis.id
+
+        if not analysis_id:
+            latest_any_analysis = db.query(Analysis).order_by(Analysis.id.desc()).first()
+            if latest_any_analysis:
+                analysis_id = latest_any_analysis.id
+
         # Assemble bounded repository context
         assembler = ContextAssembler(llm_service=service)
         req = ContextAssemblyRequest(
-            repository_id=repository_id or "default",
+            repository_id=repo_name_resolved,
+            analysis_id=analysis_id,
             requirement=user_requirement,
             context_budget=ContextBudget(max_files=8, max_symbols=15, max_call_paths=5),
         )
