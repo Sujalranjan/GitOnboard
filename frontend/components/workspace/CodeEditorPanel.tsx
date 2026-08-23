@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Editor, { DiffEditor, OnMount, loader } from "@monaco-editor/react";
+import ReactMarkdown from "react-markdown";
 import {
   FileCode,
   X,
@@ -12,6 +13,11 @@ import {
   Save,
   RefreshCw,
   Check,
+  Eye,
+  Edit3,
+  Copy,
+  Layers,
+  Sparkles,
 } from "lucide-react";
 import { RunState } from "@/types/workspace";
 import { getFileContent, saveFileContent } from "@/services/repositoryApi";
@@ -50,6 +56,8 @@ export function CodeEditorPanel({
   const [fileError, setFileError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [planViewMode, setPlanViewMode] = useState<"preview" | "raw">("preview");
+  const [copySuccess, setCopySuccess] = useState<boolean>(false);
 
   const editorRef = useRef<any>(null);
 
@@ -325,21 +333,62 @@ export function CodeEditorPanel({
         )}
       </div>
 
-      {/* Temporary In-Memory Plan Banner */}
+      {/* Temporary In-Memory Plan Banner & Mode Switcher */}
       {isTempPlan && (
         <div className="bg-[#14181E] border-b border-[#2F343A] px-3 py-1.5 flex items-center justify-between text-xs text-zinc-300 font-mono select-none flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-[11px] font-semibold text-amber-300">Temporary In-Memory Plan View</span>
-            <span className="text-[10px] text-zinc-500">• Stored in local session cache only; will not write to repository files or disk.</span>
+            <span className="text-[11px] font-semibold text-amber-300">Implementation Plan (In-Memory Scratch)</span>
+            <span className="text-[10px] text-zinc-500 hidden md:inline">• Stored in local session cache only; will not write to repository files or disk.</span>
           </div>
-          <span className="text-[10px] text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/30">
-            ⚡ Local Cache Scratch
-          </span>
+
+          <div className="flex items-center gap-2">
+            {/* Preview vs Raw Editor Toggle */}
+            <div className="flex items-center bg-[#0D1117] p-0.5 rounded-lg border border-[#30363D]">
+              <button
+                type="button"
+                onClick={() => setPlanViewMode("preview")}
+                className={`px-2 py-0.5 text-[10px] font-semibold rounded flex items-center gap-1 transition-all cursor-pointer ${
+                  planViewMode === "preview"
+                    ? "bg-purple-600 text-white shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <Eye className="w-3 h-3" />
+                <span>Preview</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlanViewMode("raw")}
+                className={`px-2 py-0.5 text-[10px] font-semibold rounded flex items-center gap-1 transition-all cursor-pointer ${
+                  planViewMode === "raw"
+                    ? "bg-purple-600 text-white shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>Raw</span>
+              </button>
+            </div>
+
+            {/* Copy Button */}
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(fileContent);
+                setCopySuccess(true);
+                setTimeout(() => setCopySuccess(false), 2000);
+              }}
+              className="px-2 py-0.5 text-[10px] rounded bg-[#21262D] hover:bg-[#30363D] text-zinc-300 border border-[#30363D] flex items-center gap-1 transition-colors cursor-pointer font-mono"
+            >
+              {copySuccess ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-zinc-400" />}
+              <span>{copySuccess ? "Copied" : "Copy"}</span>
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Monaco Editor / Loading Skeleton / Empty State / Explicit Error Card */}
+      {/* Monaco Editor / Rich Preview Mode / Loading Skeleton / Empty State / Explicit Error Card */}
       <div className="flex-1 min-h-0 relative bg-[#0A0D10]">
         {!activeFile ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0A0D10] text-[#8B949E] text-xs font-mono p-6 select-none">
@@ -374,6 +423,116 @@ export function CodeEditorPanel({
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Retry Load</span>
             </button>
+          </div>
+        ) : isTempPlan && planViewMode === "preview" ? (
+          /* Proper Rich Document Preview Mode for Implementation Plan */
+          <div className="h-full overflow-y-auto bg-[#0D1117] p-6 lg:p-10 text-zinc-200">
+            <div className="max-w-4xl mx-auto space-y-6">
+              <div className="bg-[#161B22] border border-purple-500/40 rounded-2xl p-5 shadow-lg shadow-purple-950/20 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shadow-inner">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                      <span>Repository-Aware Implementation Plan</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
+                        Validated DAG
+                      </span>
+                    </h2>
+                    <p className="text-xs text-zinc-400 font-mono mt-0.5">
+                      Target: {repoName} • 0 Git Mutations (Read-Only Preview)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-amber-400 bg-amber-950/40 px-3 py-1 rounded-lg border border-amber-500/30 font-mono">
+                  ⚡ Session Scratch
+                </div>
+              </div>
+
+              <div className="bg-[#12161E] border border-[#30363D] rounded-2xl p-6 lg:p-8 shadow-md">
+                <ReactMarkdown
+                  components={{
+                    h1: ({ children }) => (
+                      <h1 className="text-lg font-bold text-white mt-4 mb-3 pb-2 border-b border-[#30363D] flex items-center gap-2">
+                        {children}
+                      </h1>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 className="text-sm font-bold text-purple-300 mt-6 mb-2.5 pb-1 border-b border-zinc-800 flex items-center gap-2">
+                        {children}
+                      </h2>
+                    ),
+                    h3: ({ children }) => (
+                      <h3 className="text-xs font-semibold text-zinc-100 mt-4 mb-2 flex items-center gap-1.5">
+                        {children}
+                      </h3>
+                    ),
+                    h4: ({ children }) => (
+                      <h4 className="text-xs font-semibold text-purple-400 mt-3 mb-1">
+                        {children}
+                      </h4>
+                    ),
+                    p: ({ children }) => (
+                      <p className="text-xs text-zinc-300 leading-relaxed my-2">
+                        {children}
+                      </p>
+                    ),
+                    ul: ({ children }) => (
+                      <ul className="list-disc pl-5 space-y-1.5 my-2.5 text-zinc-300 text-xs">
+                        {children}
+                      </ul>
+                    ),
+                    ol: ({ children }) => (
+                      <ol className="list-decimal pl-5 space-y-1.5 my-2.5 text-zinc-300 text-xs">
+                        {children}
+                      </ol>
+                    ),
+                    li: ({ children }) => (
+                      <li className="leading-relaxed">
+                        {children}
+                      </li>
+                    ),
+                    strong: ({ children }) => (
+                      <strong className="font-semibold text-white">
+                        {children}
+                      </strong>
+                    ),
+                    code: ({ className, children, ...props }: any) => {
+                      const isMultiline = String(children).includes("\n");
+                      if (!isMultiline) {
+                        return (
+                          <code
+                            className="bg-[#21262D] text-purple-300 px-1.5 py-0.5 rounded font-mono text-[11px] border border-zinc-700/60"
+                            {...props}
+                          >
+                            {children}
+                          </code>
+                        );
+                      }
+                      return (
+                        <pre className="bg-[#0D1117] border border-[#30363D] p-3.5 rounded-xl overflow-x-auto my-3 text-zinc-200 shadow-sm">
+                          <code
+                            className="font-mono text-xs leading-relaxed block text-zinc-200"
+                            {...props}
+                          >
+                            {children}
+                          </code>
+                        </pre>
+                      );
+                    },
+                    blockquote: ({ children }) => (
+                      <blockquote className="border-l-4 border-purple-500 bg-[#161B22] px-4 py-2.5 rounded-r-lg my-3 text-zinc-300 text-xs italic">
+                        {children}
+                      </blockquote>
+                    ),
+                  }}
+                >
+                  {fileContent}
+                </ReactMarkdown>
+              </div>
+            </div>
           </div>
         ) : editorMode === "diff" ? (
           <DiffEditor
