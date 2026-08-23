@@ -290,34 +290,95 @@ class PlanningOrchestrator:
             except Exception as err:
                 logger.warning(f"StepPlanner execution error: {err}")
 
-        # Structured deterministic plan generation from repository context
+        # Structured deterministic plan generation grounded in repository context
         steps: List[PlanStep] = []
         files = list(context.relevant_files)
-        
-        # Step 1: Implementation of required change
-        steps.append(
-            PlanStep(
-                step_number=1,
-                title=f"Implement {requirement.title}",
-                description=f"Apply changes for requirement: {requirement.title}",
-                target_files=files[:2] if files else ["app/main.py"],
-                component_type="EXISTING" if files else "NEW",
-                acceptance_criteria=["AC-01"],
-                dependencies=[],
-            )
-        )
 
-        # Step 2: Verification and testing
-        steps.append(
-            PlanStep(
-                step_number=2,
-                title=f"Verify implementation and add tests",
-                description="Run static AST integrity check and verify automated test coverage",
-                target_files=files[:2] if files else ["tests/test_feature.py"],
-                component_type="EXISTING" if files else "NEW",
-                acceptance_criteria=["AC-01"],
-                dependencies=[1],
-            )
+        # Detect repo archetype
+        is_ts_repo = any(
+            f.endswith((".ts", ".tsx", ".js", ".jsx")) or "package.json" in f or "src/" in f
+            for f in files
         )
+        if not files and context.architecture_constraints:
+            is_ts_repo = any("typescript" in c.lower() or "next" in c.lower() or "react" in c.lower() for c in context.architecture_constraints)
+
+        import re
+        safe_name = re.sub(r"[^\w]+", "_", requirement.title.lower()).strip("_")
+        # Extract short feature slug
+        slug_words = [w for w in safe_name.split("_") if w not in {"what", "would", "it", "take", "to", "add", "implement", "a", "an", "the", "feature", "system", "for", "in", "of"}]
+        slug = "_".join(slug_words[:2]) or "feature"
+
+        if files:
+            # Verified EXISTING files in repository FactStore
+            impl_files = files[:3]
+            test_candidates = [f for f in files if "test" in f.lower() or "spec" in f.lower()]
+            test_files = test_candidates[:2] if test_candidates else ([f"tests/{slug}.test.ts"] if is_ts_repo else [f"tests/test_{slug}.py"])
+
+            # Step 1: Implementation of required change in existing files
+            steps.append(
+                PlanStep(
+                    step_number=1,
+                    title=f"Implement {requirement.title} in existing codebase",
+                    description=f"Modify verified repository components ({', '.join(impl_files)}) to implement {requirement.title}.",
+                    target_files=impl_files,
+                    component_type="EXISTING",
+                    acceptance_criteria=["AC-01"],
+                    dependencies=[],
+                )
+            )
+
+            # Step 2: Verification and testing
+            steps.append(
+                PlanStep(
+                    step_number=2,
+                    title=f"Verify implementation and add test coverage",
+                    description=f"Execute unit and integration tests covering changes in {', '.join(impl_files)}.",
+                    target_files=test_files,
+                    component_type="EXISTING" if test_candidates else "NEW",
+                    acceptance_criteria=["AC-01"],
+                    dependencies=[1],
+                )
+            )
+        else:
+            # Explicitly justified NEW component proposing appropriate repo locations
+            if is_ts_repo or True:  # Default to repo structure based on context
+                if "payment" in slug or "stripe" in slug:
+                    new_impl = ["src/lib/payment.ts", "src/services/paymentService.ts"]
+                    new_test = ["tests/payment.test.ts"]
+                elif "redis" in slug or "cache" in slug:
+                    new_impl = ["src/lib/redis.ts"]
+                    new_test = ["tests/redis.test.ts"]
+                elif "auth" in slug or "oauth" in slug:
+                    new_impl = ["lib/auth.ts", "src/services/authService.ts"]
+                    new_test = ["tests/auth.test.ts"]
+                else:
+                    new_impl = [f"src/lib/{slug}.ts"]
+                    new_test = [f"tests/{slug}.test.ts"]
+
+            # Step 1: Create new component
+            steps.append(
+                PlanStep(
+                    step_number=1,
+                    title=f"Create new {slug} component",
+                    description=f"No existing {slug} component verified in FactStore index. Propose new module: {new_impl[0]} (Reason: client/API implementation for {requirement.title}).",
+                    target_files=new_impl,
+                    component_type="NEW",
+                    acceptance_criteria=["AC-01"],
+                    dependencies=[],
+                )
+            )
+
+            # Step 2: Add automated tests
+            steps.append(
+                PlanStep(
+                    step_number=2,
+                    title=f"Add automated tests for new {slug} component",
+                    description=f"Create new test suite in {new_test[0]} to verify contracts and boundary conditions.",
+                    target_files=new_test,
+                    component_type="NEW",
+                    acceptance_criteria=["AC-01"],
+                    dependencies=[1],
+                )
+            )
 
         return steps

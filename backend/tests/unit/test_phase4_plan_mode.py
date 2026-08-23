@@ -211,3 +211,175 @@ def test_plan_terminal_langgraph_workflow(db_session):
     assert "plan" in final_state["metadata"]
     # Invariant: Must not be in AWAITING_APPROVAL
     assert final_state["current_state"] != AgentState.AWAITING_APPROVAL.value
+
+
+def test_plan_normalizes_planning_language():
+    """
+    Verifies that conversational noise ('what would it take to add')
+    is stripped and domain concepts ('google oauth', 'dark mode') are prioritized.
+    """
+    from backend.agent.context.assembler import extract_domain_concepts
+    concepts = extract_domain_concepts("What would it take to add Google OAuth?")
+    assert "google oauth" in concepts or "oauth" in concepts
+    assert "what" not in concepts
+    assert "would" not in concepts
+    assert "take" not in concepts
+
+
+def test_plan_retrieves_repository_specific_files(db_session):
+    """
+    Verifies that execute_plan retrieves files that actually exist in FactStore for matching keywords.
+    """
+    res = execute_plan(
+        user_requirement="Add OAuth authentication handler",
+        repository_id="repo1",
+        user_id=1,
+        analysis_id=101,
+        db=db_session,
+    )
+    plan = res["plan"]
+    tasks = plan["tasks"]
+    assert len(tasks) > 0
+    # backend/auth/service.py was seeded in db_session
+    task1_files = tasks[0]["affected_files"]
+    assert "backend/auth/service.py" in task1_files
+    assert tasks[0]["component_type"] == "EXISTING"
+
+
+def test_plan_does_not_invent_python_files_for_typescript_repo():
+    """
+    Verifies that for a TypeScript/React repository, the planner never outputs generic 'app/main.py'.
+    """
+    from backend.agent.context.contracts import RepositoryContext, RepositoryUnderstandingContract, CompletenessStatus
+    from backend.agent.planning.orchestrator import PlanningOrchestrator
+
+    ctx = RepositoryContext(
+        version="v1",
+        repository_id="frontend-repo",
+        requirement="What would it take to add dark mode?",
+        capabilities=[],
+        relevant_files=["src/app/theme-provider.tsx", "src/components/ThemeToggleButton.tsx"],
+        relevant_symbols=[{"name": "ThemeProvider", "file_path": "src/app/theme-provider.tsx", "kind": "function"}],
+        relevant_routes=[],
+        relevant_db_objects=[],
+        relevant_dependencies=[],
+        relevant_call_paths=[],
+        relevant_features=[],
+        architecture_constraints=["typescript", "nextjs"],
+        impact_context=None,
+        evidence=[],
+        unknowns=[],
+        contract=RepositoryUnderstandingContract(
+            required_categories=["capabilities", "entrypoints_or_routes", "symbols_or_files", "dependencies_or_models"],
+            satisfied_categories=["capabilities", "entrypoints_or_routes", "symbols_or_files", "dependencies_or_models"],
+            missing_categories=[],
+            unknowns=[],
+            completeness=CompletenessStatus.COMPLETE,
+            explanation="Complete evidence",
+        ),
+    )
+
+    orchestrator = PlanningOrchestrator(llm_service=None)
+    plan = orchestrator.create_plan(
+        context=ctx,
+        agent_run_id="run_ts_test",
+        repository_id="frontend-repo",
+        requirement="What would it take to add dark mode?",
+    )
+
+    for task in plan.tasks:
+        for f in task.affected_files:
+            assert f != "app/main.py", "Should never invent app/main.py for TypeScript repo"
+            assert not f.endswith(".py") or "test" in f, "Should not produce Python implementation files for TS repo"
+
+
+def test_existing_files_require_factstore_evidence(db_session):
+    """
+    Verifies that tasks marked as EXISTING only contain files present in the FactStore.
+    """
+    res = execute_plan(
+        user_requirement="Improve auth service performance",
+        repository_id="repo1",
+        user_id=1,
+        analysis_id=101,
+        db=db_session,
+    )
+    for task in res["plan"]["tasks"]:
+        if task["component_type"] == "EXISTING":
+            for f in task["affected_files"]:
+                # Must exist in db
+                exists = db_session.query(FactFile).filter_by(analysis_id=101, path=f).first()
+                assert exists is not None or "test" in f.lower()
+
+
+def test_new_files_are_explicitly_justified():
+    """
+    Verifies that when proposing a NEW file, the task description contains explicit justification.
+    """
+    from backend.agent.context.contracts import RepositoryContext, RepositoryUnderstandingContract, CompletenessStatus
+    from backend.agent.planning.orchestrator import PlanningOrchestrator
+
+    ctx = RepositoryContext(
+        version="v1",
+        repository_id="frontend-repo",
+        requirement="Add a payment system",
+        capabilities=[],
+        relevant_files=[],
+        relevant_symbols=[],
+        relevant_routes=[],
+        relevant_db_objects=[],
+        relevant_dependencies=[],
+        relevant_call_paths=[],
+        relevant_features=[],
+        architecture_constraints=["typescript"],
+        impact_context=None,
+        evidence=[],
+        unknowns=["No payment capability in index"],
+        contract=RepositoryUnderstandingContract(
+            required_categories=["capabilities", "entrypoints_or_routes", "symbols_or_files", "dependencies_or_models"],
+            satisfied_categories=["capabilities", "entrypoints_or_routes", "symbols_or_files", "dependencies_or_models"],
+            missing_categories=[],
+            unknowns=[],
+            completeness=CompletenessStatus.COMPLETE,
+            explanation="Complete evidence",
+        ),
+    )
+
+    orchestrator = PlanningOrchestrator(llm_service=None)
+    plan = orchestrator.create_plan(
+        context=ctx,
+        agent_run_id="run_payment_test",
+        repository_id="frontend-repo",
+        requirement="Add a payment system",
+    )
+
+    new_tasks = [t for t in plan.tasks if t.component_type == "NEW"]
+    assert len(new_tasks) > 0
+    assert "No existing" in new_tasks[0].description
+    assert "Propose new module" in new_tasks[0].description
+
+
+def test_context_sufficiency_is_repository_aware(db_session):
+    """
+    Verifies that a Frontend (TypeScript/Next.js) repository is not penalized
+    for lacking Python database models or backend route decorators.
+    """
+    from backend.agent.context.assembler import ContextAssembler, ContextAssemblyRequest, ContextBudget
+    # Seed TS package.json in analysis
+    f_ts = FactFile(id="101:f_pkg", analysis_id=101, path="package.json", size=500, language="json")
+    f_app = FactFile(id="101:f_app", analysis_id=101, path="src/app/page.tsx", size=500, language="typescript")
+    db_session.add(f_ts)
+    db_session.add(f_app)
+    db_session.commit()
+
+    assembler = ContextAssembler(llm_service=None)
+    req = ContextAssemblyRequest(
+        repository_id="repo1",
+        analysis_id=101,
+        requirement="What would it take to add dark mode?",
+        context_budget=ContextBudget(),
+    )
+    ctx = assembler.assemble(req, db=db_session)
+    # Must satisfy dependencies_or_models via package.json / frontend awareness
+    assert "dependencies_or_models" in ctx.contract.satisfied_categories
+

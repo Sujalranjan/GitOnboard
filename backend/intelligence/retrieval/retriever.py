@@ -5,16 +5,29 @@ from backend.models.user import User
 from backend.intelligence.retrieval.lexical import BM25Index, CodeTokenizer
 from backend.intelligence.retrieval.fusion import reciprocal_rank_fusion
 from backend.intelligence.retrieval.expansion import FactStoreExpander
-from backend.models.fact_store import FactSymbol, FactFile, FactRoute, FactDatabaseObject
+from backend.models.fact_store import FactSymbol, FactFile, FactRoute, FactDatabaseObject, FactCapability
 
 logger = logging.getLogger(__name__)
+
+def _extract_symbol_file_path(sym: Optional[FactSymbol]) -> str:
+    if not sym:
+        return ""
+    if sym.file and sym.file.path:
+        return sym.file.path
+    if sym.id:
+        import re
+        match = re.search(r":urn:[^:]+:(.+?)#", sym.id)
+        if match:
+            return match.group(1)
+    return ""
+
 
 class HybridRetriever:
     """
     Unified Hybrid Retrieval Engine for GitOnboard:
-    1. Lexical BM25 Search (using CodeTokenizer on Fact Store symbols & docs)
+    1. Lexical BM25 Search (using CodeTokenizer on Fact Store symbols, files, routes & docs)
     2. Dense Semantic Vector Search (ChromaDB)
-    3. Exact Fact Store direct lookups (Routes, DB tables, exact symbols)
+    3. Exact Fact Store direct lookups (Routes, DB tables, exact symbols, files)
     4. Reciprocal Rank Fusion (RRF)
     5. Limited Fact Store Structural Expansion
     """
@@ -46,10 +59,27 @@ class HybridRetriever:
 
         docs: List[Dict[str, Any]] = []
 
-        # 1. Index Symbols
+        # 1. Index Files
+        files = self.db.query(FactFile).filter(FactFile.analysis_id == self.analysis_id).all()
+        for f in files:
+            search_text = f"file path {f.path} {f.language or ''} {f.content_type or ''}"
+            docs.append({
+                "id": f.id,
+                "name": f.path,
+                "qualified_name": f.path,
+                "type": "file",
+                "file_path": f.path,
+                "search_text": search_text,
+                "line_start": 1,
+                "line_end": 1,
+                "match_type": "file",
+                "match_name": f.path,
+            })
+
+        # 2. Index Symbols
         symbols = self.db.query(FactSymbol).filter(FactSymbol.analysis_id == self.analysis_id).all()
         for sym in symbols:
-            fpath = sym.file.path if sym.file else ""
+            fpath = _extract_symbol_file_path(sym)
             meta = sym.metadata_json or {}
             docstring = meta.get("docstring", "")
             signature = meta.get("signature", "")
@@ -69,7 +99,7 @@ class HybridRetriever:
                 "match_name": sym.name,
             })
 
-        # 2. Index Routes
+        # 3. Index Routes
         routes = self.db.query(FactRoute).filter(FactRoute.analysis_id == self.analysis_id).all()
         for r in routes:
             handler_id = r.handler_symbol_id or r.symbol_id
@@ -79,7 +109,7 @@ class HybridRetriever:
             if handler_id:
                 sym = self.db.query(FactSymbol).filter(FactSymbol.id == handler_id).first()
                 if sym:
-                    fpath = sym.file.path if sym.file else ""
+                    fpath = _extract_symbol_file_path(sym)
                     l_start = sym.line_start
                     l_end = sym.line_end
             search_text = f"route {r.method} {r.path} {fpath}"
@@ -97,7 +127,7 @@ class HybridRetriever:
                 "line_end": l_end,
             })
 
-        # 3. Index DB Objects
+        # 4. Index DB Objects
         db_objs = self.db.query(FactDatabaseObject).filter(FactDatabaseObject.analysis_id == self.analysis_id).all()
         for d in db_objs:
             fpath = ""
@@ -106,7 +136,7 @@ class HybridRetriever:
             if d.symbol_id:
                 sym = self.db.query(FactSymbol).filter(FactSymbol.id == d.symbol_id).first()
                 if sym:
-                    fpath = sym.file.path if sym.file else ""
+                    fpath = _extract_symbol_file_path(sym)
                     l_start = sym.line_start
                     l_end = sym.line_end
             search_text = f"database table {d.name} {d.object_type} {fpath}"
@@ -124,6 +154,21 @@ class HybridRetriever:
                 "line_end": l_end,
             })
 
+        # 5. Index Capabilities
+        caps = self.db.query(FactCapability).filter(FactCapability.analysis_id == self.analysis_id).all()
+        for c in caps:
+            search_text = f"capability {c.name} {c.capability_type or ''} {c.evidence_summary or ''}"
+            docs.append({
+                "id": c.id,
+                "name": c.name,
+                "qualified_name": c.name,
+                "type": "capability",
+                "file_path": "",
+                "search_text": search_text,
+                "match_type": "capability",
+                "match_name": c.name,
+            })
+
         self.bm25_index = BM25Index()
         self.bm25_index.index(docs, text_key="search_text")
 
@@ -139,8 +184,8 @@ class HybridRetriever:
         # Check exact symbol match
         exact_syms = self.db.query(FactSymbol).filter(
             FactSymbol.analysis_id == self.analysis_id,
-            (FactSymbol.name == q_clean) | (FactSymbol.name.ilike(q_clean))
-        ).all()
+            (FactSymbol.name == q_clean) | (FactSymbol.name.ilike(f"%{q_clean}%"))
+        ).limit(10).all()
         for s in exact_syms:
             results.append({
                 "id": s.id,
@@ -149,9 +194,28 @@ class HybridRetriever:
                 "match_name": s.name,
                 "type": s.symbol_type,
                 "match_type": s.symbol_type,
-                "file_path": s.file.path if s.file else "",
+                "file_path": _extract_symbol_file_path(s),
                 "line_start": s.line_start,
                 "line_end": s.line_end,
+                "score_type": "exact_fact"
+            })
+
+        # Check exact file path match
+        exact_files = self.db.query(FactFile).filter(
+            FactFile.analysis_id == self.analysis_id,
+            FactFile.path.ilike(f"%{q_clean}%")
+        ).limit(10).all()
+        for f in exact_files:
+            results.append({
+                "id": f.id,
+                "symbol_id": f.id,
+                "name": f.path,
+                "match_name": f.path,
+                "type": "file",
+                "match_type": "file",
+                "file_path": f.path,
+                "line_start": 1,
+                "line_end": 1,
                 "score_type": "exact_fact"
             })
 
@@ -168,7 +232,7 @@ class HybridRetriever:
             if handler_id:
                 sym = self.db.query(FactSymbol).filter(FactSymbol.id == handler_id).first()
                 if sym:
-                    fpath = sym.file.path if sym.file else ""
+                    fpath = _extract_symbol_file_path(sym)
                     l_start = sym.line_start
                     l_end = sym.line_end
             results.append({
@@ -196,7 +260,7 @@ class HybridRetriever:
             if d.symbol_id:
                 sym = self.db.query(FactSymbol).filter(FactSymbol.id == d.symbol_id).first()
                 if sym:
-                    fpath = sym.file.path if sym.file else ""
+                    fpath = _extract_symbol_file_path(sym)
                     l_start = sym.line_start
                     l_end = sym.line_end
             results.append({
