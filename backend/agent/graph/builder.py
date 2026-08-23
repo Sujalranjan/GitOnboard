@@ -25,6 +25,7 @@ from backend.agent.engineering_agent import EngineeringAgent
 from backend.database import SessionLocal
 from backend.models.implementation import AgentState, AgentEventType
 from backend.config import settings
+from backend.agent.modes import execute_chat, execute_explore, execute_explain
 
 logger = logging.getLogger(__name__)
 
@@ -118,23 +119,25 @@ def build_agent_graph(
 
     def chat_terminal(state: AgentGraphState) -> Dict[str, Any]:
         run_id = state.get("run_id")
+        user_req = state.get("user_requirement", "")
         history = list(state.get("node_history") or [])
         history.append("chat_terminal")
 
-        msg = "Hello! I am your Repository Intelligence Assistant. You can ask me to explore files, explain architectures, plan features, or implement changes."
-        logger.info(f"LangGraph chat_terminal completed for run '{run_id}' using model '{settings.model_terminal_chat}'")
+        result = execute_chat(user_requirement=user_req)
+        msg = result.get("response", "Chat processed.")
+        logger.info(f"LangGraph chat_terminal completed for run '{run_id}' using model '{result.get('model')}'")
 
         with SessionLocal() as db:
             try:
                 run = service.get_run(db, run_id)
-                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg, "model": settings.model_terminal_chat}})
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg, "model": result.get("model")}})
                 if hasattr(service, "events") and service.events is not None:
                     service.events.emit_event(
                         db=db,
                         run_id=run_id,
                         event_type=AgentEventType.AGENT_MESSAGE,
                         message=msg,
-                        payload={"response": msg, "intent": "chat", "model": settings.model_terminal_chat},
+                        payload={"response": msg, "intent": "chat", "model": result.get("model")},
                     )
                 if not service.state_machine.is_terminal(run.current_state):
                     service.transition_state(
@@ -149,29 +152,32 @@ def build_agent_graph(
         return {
             "current_state": AgentState.COMPLETED.value,
             "status": "COMPLETED",
-            "metadata": {"response": msg, "model": settings.model_terminal_chat},
+            "metadata": {"response": msg, "model": result.get("model")},
             "node_history": history,
         }
 
     def explore_terminal(state: AgentGraphState) -> Dict[str, Any]:
         run_id = state.get("run_id")
+        user_req = state.get("user_requirement", "")
+        repo_id = state.get("repository_id", "")
         history = list(state.get("node_history") or [])
         history.append("explore_terminal")
 
-        msg = f"Exploration query recognized for: '{state.get('user_requirement', '')}'. The repository AST symbol tables and file layout are cataloged."
-        logger.info(f"LangGraph explore_terminal completed for run '{run_id}' using model '{settings.model_terminal_explore}'")
-
         with SessionLocal() as db:
+            result = execute_explore(user_requirement=user_req, repository_id=repo_id, db=db)
+            msg = result.get("response", "Exploration processed.")
+            logger.info(f"LangGraph explore_terminal completed for run '{run_id}' using model '{result.get('model')}'")
+
             try:
                 run = service.get_run(db, run_id)
-                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg, "model": settings.model_terminal_explore}})
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg, "model": result.get("model"), "entities": result.get("entities", [])}})
                 if hasattr(service, "events") and service.events is not None:
                     service.events.emit_event(
                         db=db,
                         run_id=run_id,
                         event_type=AgentEventType.AGENT_MESSAGE,
                         message=msg,
-                        payload={"response": msg, "intent": "explore", "model": settings.model_terminal_explore},
+                        payload={"response": msg, "intent": "explore", "model": result.get("model"), "entities": result.get("entities", [])},
                     )
                 if not service.state_machine.is_terminal(run.current_state):
                     service.transition_state(
@@ -186,29 +192,32 @@ def build_agent_graph(
         return {
             "current_state": AgentState.COMPLETED.value,
             "status": "COMPLETED",
-            "metadata": {"response": msg, "model": settings.model_terminal_explore},
+            "metadata": {"response": msg, "model": result.get("model"), "entities": result.get("entities", [])},
             "node_history": history,
         }
 
     def explain_terminal(state: AgentGraphState) -> Dict[str, Any]:
         run_id = state.get("run_id")
+        user_req = state.get("user_requirement", "")
+        repo_id = state.get("repository_id", "")
         history = list(state.get("node_history") or [])
         history.append("explain_terminal")
 
-        msg = f"Explanation query recognized for: '{state.get('user_requirement', '')}'. The codebase architecture models and call graphs are available for inspection."
-        logger.info(f"LangGraph explain_terminal completed for run '{run_id}' using model '{settings.model_terminal_explain}'")
-
         with SessionLocal() as db:
+            result = execute_explain(user_requirement=user_req, repository_id=repo_id, db=db)
+            msg = result.get("response", "Explanation processed.")
+            logger.info(f"LangGraph explain_terminal completed for run '{run_id}' using model '{result.get('model')}'")
+
             try:
                 run = service.get_run(db, run_id)
-                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg, "model": settings.model_terminal_explain}})
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg, "model": result.get("model"), "evidence": result.get("evidence", [])}})
                 if hasattr(service, "events") and service.events is not None:
                     service.events.emit_event(
                         db=db,
                         run_id=run_id,
                         event_type=AgentEventType.AGENT_MESSAGE,
                         message=msg,
-                        payload={"response": msg, "intent": "explain", "model": settings.model_terminal_explain},
+                        payload={"response": msg, "intent": "explain", "model": result.get("model"), "evidence": result.get("evidence", [])},
                     )
                 if not service.state_machine.is_terminal(run.current_state):
                     service.transition_state(
@@ -223,7 +232,7 @@ def build_agent_graph(
         return {
             "current_state": AgentState.COMPLETED.value,
             "status": "COMPLETED",
-            "metadata": {"response": msg, "model": settings.model_terminal_explain},
+            "metadata": {"response": msg, "model": result.get("model"), "evidence": result.get("evidence", [])},
             "node_history": history,
         }
 
