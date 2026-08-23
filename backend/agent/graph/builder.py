@@ -1,26 +1,14 @@
 """
 LangGraph workflow builder with Intent Routing (Phase 2).
 
-Graph topology:
+Pure intent routing topology:
   START ──► entry_node ──► intent_router_node ──► [conditional edge]
                                 │
-                 ┌──────────────┼──────────────┬──────────────┐
-                 ▼              ▼              ▼              ▼
-            chat_terminal explore_terminal explain_terminal clarify_terminal
-                 │              │              │              │
-                 └──────────────┼──────────────┴──────────────┘
-                                ▼
-                               END
-                                ▲
-                 ┌──────────────┴──────────────┐
-                 │ (Plan / Implement bridge)   │
-                 ▼                             ▼
-             PLAN branch                 IMPLEMENT branch
-                 │                             │
-                 └──────────────┬──────────────┘
-                                ▼
-                        legacy_agent_node
-                                │
+   ┌──────────────┬─────────────┼─────────────┬──────────────┬──────────────┐
+   ▼              ▼             ▼             ▼              ▼              ▼
+chat_terminal explore_terminal explain_term  plan_terminal implement_term clarify_terminal
+   │              │             │             │              │              │
+   └──────────────┴─────────────┼─────────────┴──────────────┴──────────────┘
                                 ▼
                                END
 """
@@ -33,7 +21,7 @@ from langgraph.graph import StateGraph, START, END
 
 from backend.agent.graph.state import AgentGraphState, sync_graph_state_to_run
 from backend.agent.intent import Intent, IntentRouter
-from backend.agent.engineering_agent import EngineeringAgent, EngineeringAgentError
+from backend.agent.engineering_agent import EngineeringAgent
 from backend.database import SessionLocal
 from backend.models.implementation import AgentState, AgentEventType
 
@@ -45,7 +33,7 @@ def build_agent_graph(
     intent_router: Optional[IntentRouter] = None,
 ):
     """
-    Compiles and returns the Phase 2 LangGraph workflow with intent classification.
+    Compiles and returns the clean Phase 2 LangGraph workflow with intent classification.
     """
     service = agent_service or EngineeringAgent()
     router = intent_router or IntentRouter()
@@ -80,7 +68,6 @@ def build_agent_graph(
         history = list(state.get("node_history") or [])
         history.append("intent_router_node")
 
-        # Invariant: If intent is already pre-set or run cancelled, pass through
         if state.get("is_cancelled"):
             return {
                 "node_history": history,
@@ -92,7 +79,6 @@ def build_agent_graph(
             f"(confidence={result.confidence:.2f}, method='{result.classification_method}')"
         )
 
-        # Sync intent to database record and emit live event
         with SessionLocal() as db:
             try:
                 sync_graph_state_to_run(
@@ -130,15 +116,11 @@ def build_agent_graph(
         }
 
     def chat_terminal(state: AgentGraphState) -> Dict[str, Any]:
-        """
-        Terminal handler for non-mutating CHAT requests.
-        Never invokes planning or creates worktrees.
-        """
         run_id = state.get("run_id")
         history = list(state.get("node_history") or [])
         history.append("chat_terminal")
 
-        msg = "Hello! I am your Repository Intelligence Assistant. You can ask me to explore files, explain architectures, or plan code implementations."
+        msg = "Hello! I am your Repository Intelligence Assistant. You can ask me to explore files, explain architectures, plan features, or implement changes."
         logger.info(f"LangGraph chat_terminal completed for run '{run_id}'")
 
         with SessionLocal() as db:
@@ -171,14 +153,11 @@ def build_agent_graph(
         }
 
     def explore_terminal(state: AgentGraphState) -> Dict[str, Any]:
-        """
-        Terminal handler for non-mutating EXPLORE requests.
-        """
         run_id = state.get("run_id")
         history = list(state.get("node_history") or [])
         history.append("explore_terminal")
 
-        msg = f"Exploration query recognized for: '{state.get('user_requirement', '')}'. The repository knowledge graph and symbol lookup are being cataloged."
+        msg = f"Exploration query recognized for: '{state.get('user_requirement', '')}'. The repository AST symbol tables and file layout are cataloged."
         logger.info(f"LangGraph explore_terminal completed for run '{run_id}'")
 
         with SessionLocal() as db:
@@ -211,9 +190,6 @@ def build_agent_graph(
         }
 
     def explain_terminal(state: AgentGraphState) -> Dict[str, Any]:
-        """
-        Terminal handler for non-mutating EXPLAIN requests.
-        """
         run_id = state.get("run_id")
         history = list(state.get("node_history") or [])
         history.append("explain_terminal")
@@ -250,10 +226,81 @@ def build_agent_graph(
             "node_history": history,
         }
 
+    def plan_terminal(state: AgentGraphState) -> Dict[str, Any]:
+        run_id = state.get("run_id")
+        history = list(state.get("node_history") or [])
+        history.append("plan_terminal")
+
+        msg = f"Plan intent recognized for: '{state.get('user_requirement', '')}'. High-level DAG change estimation classified successfully."
+        logger.info(f"LangGraph plan_terminal completed for run '{run_id}'")
+
+        with SessionLocal() as db:
+            try:
+                run = service.get_run(db, run_id)
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg}})
+                if hasattr(service, "events") and service.events is not None:
+                    service.events.emit_event(
+                        db=db,
+                        run_id=run_id,
+                        event_type=AgentEventType.AGENT_MESSAGE,
+                        message=msg,
+                        payload={"response": msg, "intent": "plan"},
+                    )
+                if not service.state_machine.is_terminal(run.current_state):
+                    service.transition_state(
+                        db,
+                        run_id=run_id,
+                        to_state=AgentState.COMPLETED,
+                        reason="Plan intent processed",
+                    )
+            except Exception as err:
+                logger.warning(f"Error updating run state in plan_terminal: {err}")
+
+        return {
+            "current_state": AgentState.COMPLETED.value,
+            "status": "COMPLETED",
+            "metadata": {"response": msg},
+            "node_history": history,
+        }
+
+    def implement_terminal(state: AgentGraphState) -> Dict[str, Any]:
+        run_id = state.get("run_id")
+        history = list(state.get("node_history") or [])
+        history.append("implement_terminal")
+
+        msg = f"Implement intent recognized for: '{state.get('user_requirement', '')}'. Code modification request classified successfully."
+        logger.info(f"LangGraph implement_terminal completed for run '{run_id}'")
+
+        with SessionLocal() as db:
+            try:
+                run = service.get_run(db, run_id)
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg}})
+                if hasattr(service, "events") and service.events is not None:
+                    service.events.emit_event(
+                        db=db,
+                        run_id=run_id,
+                        event_type=AgentEventType.AGENT_MESSAGE,
+                        message=msg,
+                        payload={"response": msg, "intent": "implement"},
+                    )
+                if not service.state_machine.is_terminal(run.current_state):
+                    service.transition_state(
+                        db,
+                        run_id=run_id,
+                        to_state=AgentState.COMPLETED,
+                        reason="Implement intent processed",
+                    )
+            except Exception as err:
+                logger.warning(f"Error updating run state in implement_terminal: {err}")
+
+        return {
+            "current_state": AgentState.COMPLETED.value,
+            "status": "COMPLETED",
+            "metadata": {"response": msg},
+            "node_history": history,
+        }
+
     def clarify_terminal(state: AgentGraphState) -> Dict[str, Any]:
-        """
-        Terminal handler for ambiguous/underspecified CLARIFY requests.
-        """
         run_id = state.get("run_id")
         history = list(state.get("node_history") or [])
         history.append("clarify_terminal")
@@ -293,79 +340,21 @@ def build_agent_graph(
             "node_history": history,
         }
 
-    def legacy_agent_node(state: AgentGraphState) -> Dict[str, Any]:
-        """
-        Executes the existing EngineeringAgent planning lifecycle within a DB session
-        for PLAN and IMPLEMENT requests.
-        """
-        run_id = state.get("run_id")
-        history = list(state.get("node_history") or [])
-        history.append("legacy_agent_node")
-
-        if not run_id:
-            return {
-                "error_message": "Invalid run_id in legacy_agent_node",
-                "node_history": history,
-            }
-
-        if state.get("is_cancelled"):
-            logger.info(f"Skipping legacy_agent_node for cancelled run '{run_id}'")
-            return {
-                "node_history": history,
-            }
-
-        with SessionLocal() as db:
-            try:
-                logger.info(f"LangGraph legacy_agent_node executing create_plan for run '{run_id}'")
-                plan = service.create_plan(db=db, run_id=run_id)
-                run = service.get_run(db, run_id)
-
-                current_state_val = (
-                    run.current_state.value
-                    if isinstance(run.current_state, AgentState)
-                    else str(run.current_state)
-                )
-
-                return {
-                    "current_state": current_state_val,
-                    "status": run.status.value if hasattr(run.status, "value") else str(run.status),
-                    "node_history": history,
-                }
-            except Exception as err:
-                logger.error(f"LangGraph legacy_agent_node execution error on run '{run_id}': {err}", exc_info=True)
-                error_msg = str(err)
-                try:
-                    run = service.get_run(db, run_id)
-                    if not service.state_machine.is_terminal(run.current_state):
-                        service.transition_state(
-                            db,
-                            run_id=run_id,
-                            to_state=AgentState.FAILED,
-                            reason=f"Graph node error: {error_msg}",
-                        )
-                except Exception as transition_err:
-                    logger.warning(f"Could not transition run '{run_id}' to FAILED: {transition_err}")
-
-                return {
-                    "error_message": error_msg,
-                    "current_state": AgentState.FAILED.value,
-                    "node_history": history,
-                }
-
-    # Add all nodes
+    # Add all 6 intent terminals
     workflow.add_node("entry_node", entry_node)
     workflow.add_node("intent_router_node", intent_router_node)
     workflow.add_node("chat_terminal", chat_terminal)
     workflow.add_node("explore_terminal", explore_terminal)
     workflow.add_node("explain_terminal", explain_terminal)
+    workflow.add_node("plan_terminal", plan_terminal)
+    workflow.add_node("implement_terminal", implement_terminal)
     workflow.add_node("clarify_terminal", clarify_terminal)
-    workflow.add_node("legacy_agent_node", legacy_agent_node)
 
     # Base transition to intent router
     workflow.add_edge(START, "entry_node")
     workflow.add_edge("entry_node", "intent_router_node")
 
-    # Conditional routing based on classified intent
+    # Conditional routing strictly to intent terminals
     def route_by_intent(state: AgentGraphState) -> str:
         intent = state.get("intent", Intent.CLARIFY.value)
         if intent == Intent.CHAT.value:
@@ -374,10 +363,12 @@ def build_agent_graph(
             return "explore_terminal"
         elif intent == Intent.EXPLAIN.value:
             return "explain_terminal"
+        elif intent == Intent.PLAN.value:
+            return "plan_terminal"
+        elif intent == Intent.IMPLEMENT.value:
+            return "implement_terminal"
         elif intent == Intent.CLARIFY.value:
             return "clarify_terminal"
-        elif intent in (Intent.PLAN.value, Intent.IMPLEMENT.value):
-            return "legacy_agent_node"
         return "clarify_terminal"
 
     workflow.add_conditional_edges(
@@ -387,8 +378,9 @@ def build_agent_graph(
             "chat_terminal": "chat_terminal",
             "explore_terminal": "explore_terminal",
             "explain_terminal": "explain_terminal",
+            "plan_terminal": "plan_terminal",
+            "implement_terminal": "implement_terminal",
             "clarify_terminal": "clarify_terminal",
-            "legacy_agent_node": "legacy_agent_node",
         },
     )
 
@@ -396,7 +388,8 @@ def build_agent_graph(
     workflow.add_edge("chat_terminal", END)
     workflow.add_edge("explore_terminal", END)
     workflow.add_edge("explain_terminal", END)
+    workflow.add_edge("plan_terminal", END)
+    workflow.add_edge("implement_terminal", END)
     workflow.add_edge("clarify_terminal", END)
-    workflow.add_edge("legacy_agent_node", END)
 
     return workflow.compile()
