@@ -69,12 +69,14 @@ def execute_chat(
 def execute_explore(
     user_requirement: str,
     repository_id: Optional[str] = None,
+    user_id: Optional[int] = None,
     db: Optional[Session] = None,
     llm_service: Optional[LLMService] = None,
 ) -> Dict[str, Any]:
     """
     Executes deterministic repository inspection and navigation.
     Queries QueryLayer and FactStore for symbols, files, classes, functions, and repo tree.
+    Strictly isolated to the authenticated user's target repository.
     """
     close_db = False
     if db is None:
@@ -82,14 +84,18 @@ def execute_explore(
         close_db = True
 
     try:
-        # Find matching repository analysis
+        # Find matching repository analysis strictly scoped to user
         analysis_id = None
         if repository_id:
             from backend.models.repository import Repository
-            repo = db.query(Repository).filter(
+            query = db.query(Repository)
+            if user_id is not None:
+                query = query.filter(Repository.user_id == user_id)
+            repo = query.filter(
                 (Repository.id == (int(repository_id) if repository_id.isdigit() else -1)) |
-                (Repository.url.endswith(f"/{repository_id}")) |
-                (Repository.url.endswith(f"/{repository_id}.git"))
+                (Repository.url.ilike(f"%/{repository_id}")) |
+                (Repository.url.ilike(f"%/{repository_id}.git")) |
+                (Repository.url.ilike(f"%{repository_id}%"))
             ).first()
             if repo:
                 latest_analysis = db.query(Analysis).filter(
@@ -99,11 +105,16 @@ def execute_explore(
                 if latest_analysis:
                     analysis_id = latest_analysis.id
 
-        # Fallback to latest analysis in the database if no repository_id provided
-        if not analysis_id:
-            latest_any_analysis = db.query(Analysis).order_by(Analysis.id.desc()).first()
-            if latest_any_analysis:
-                analysis_id = latest_any_analysis.id
+        # If still no analysis and user_id is provided, search user's latest repo analysis only
+        if not analysis_id and user_id is not None:
+            user_repo = db.query(Repository).filter(Repository.user_id == user_id).order_by(Repository.id.desc()).first()
+            if user_repo:
+                user_analysis = db.query(Analysis).filter(
+                    Analysis.repository_id == user_repo.id,
+                    Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
+                ).order_by(Analysis.id.desc()).first()
+                if user_analysis:
+                    analysis_id = user_analysis.id
 
         query_lower = user_requirement.lower()
 
@@ -195,7 +206,7 @@ def execute_explore(
 
         response_text = (
             f"Exploration query recognized for: '{user_requirement}'. "
-            "The repository AST symbol tables and file layout are cataloged."
+            "No matching symbols or files found in this repository index."
         )
         return {
             "response": response_text,
@@ -212,12 +223,14 @@ def execute_explore(
 def execute_explain(
     user_requirement: str,
     repository_id: Optional[str] = None,
+    user_id: Optional[int] = None,
     db: Optional[Session] = None,
     llm_service: Optional[LLMService] = None,
 ) -> Dict[str, Any]:
     """
     Executes repository-grounded natural-language explanation.
     Assembles evidence using ContextAssembler and prompts the LLM with evidence-only bounds.
+    Strictly isolated to the authenticated user's target repository.
     """
     service = llm_service or build_default_service()
     close_db = False
@@ -226,12 +239,15 @@ def execute_explain(
         close_db = True
 
     try:
-        # Find matching repository analysis
+        # Find matching repository analysis strictly scoped to user
         analysis_id = None
         repo_name_resolved = repository_id or "default"
         if repository_id:
             from backend.models.repository import Repository
-            repo = db.query(Repository).filter(
+            query = db.query(Repository)
+            if user_id is not None:
+                query = query.filter(Repository.user_id == user_id)
+            repo = query.filter(
                 (Repository.id == (int(repository_id) if repository_id.isdigit() else -1)) |
                 (Repository.url.ilike(f"%/{repository_id}")) |
                 (Repository.url.ilike(f"%/{repository_id}.git")) |
@@ -246,10 +262,16 @@ def execute_explain(
                 if latest_analysis:
                     analysis_id = latest_analysis.id
 
-        if not analysis_id:
-            latest_any_analysis = db.query(Analysis).order_by(Analysis.id.desc()).first()
-            if latest_any_analysis:
-                analysis_id = latest_any_analysis.id
+        # If still no analysis and user_id is provided, search user's latest repo analysis only
+        if not analysis_id and user_id is not None:
+            user_repo = db.query(Repository).filter(Repository.user_id == user_id).order_by(Repository.id.desc()).first()
+            if user_repo:
+                user_analysis = db.query(Analysis).filter(
+                    Analysis.repository_id == user_repo.id,
+                    Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
+                ).order_by(Analysis.id.desc()).first()
+                if user_analysis:
+                    analysis_id = user_analysis.id
 
         # Assemble bounded repository context
         assembler = ContextAssembler(llm_service=service)

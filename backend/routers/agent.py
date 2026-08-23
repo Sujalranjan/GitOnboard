@@ -273,10 +273,10 @@ def classify_intent_endpoint(
         mode_res = execute_chat(req.requirement)
         response_text = mode_res.get("response", "Hello! How can I help you today?")
     elif result.intent == Intent.EXPLORE:
-        mode_res = execute_explore(req.requirement, repository_id=req.repository_id, db=db)
+        mode_res = execute_explore(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Exploration complete.")
     elif result.intent == Intent.EXPLAIN:
-        mode_res = execute_explain(req.requirement, repository_id=req.repository_id, db=db)
+        mode_res = execute_explain(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Explanation complete.")
     elif result.intent == Intent.PLAN:
         response_text = f"Plan intent recognized for: '{req.requirement}'. High-level DAG change estimation classified successfully."
