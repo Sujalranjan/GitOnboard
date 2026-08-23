@@ -180,6 +180,7 @@ export function AIAgentPanel({
         {activeView === "chat" && (
           <ChatPanel
             snapshot={snapshot}
+            repoId={repoId}
             onStartRun={(prompt) => {
               startRun(prompt);
             }}
