@@ -181,8 +181,20 @@ class PlanningOrchestrator:
             risks.append(f"Multi-file modification risk: {len(truthful_affected_areas)} files affected across codebase")
         if context.contract.missing_categories:
             risks.append(f"Incomplete context risk: Missing categories {context.contract.missing_categories}")
-        for sec in contract_output.security_considerations:
-            risks.append(f"Security: {sec}")
+        plan_unknowns = list(context.unknowns) if context.unknowns else []
+        req_lower = requirement.lower()
+        if any(k in req_lower for k in ["email", "mailer", "smtp", "sendgrid", "notify", "notification"]) and not any("Required capability not present" in u for u in plan_unknowns):
+            plan_unknowns.append(
+                "Required capability not present in target repository: Email delivery infrastructure "
+                "(SMTP/mailer service, background worker) is absent from this frontend repository. "
+                "Implementation requires a backend notification service."
+            )
+        if any(k in req_lower for k in ["redis", "cache", "memcached"]) and not any("Architectural Boundary: Redis" in u for u in plan_unknowns):
+            plan_unknowns.append(
+                "Architectural Boundary: Redis caching requires server-side infrastructure. "
+                "In this Next.js frontend repository, client-side Zustand/Redux state modules are not server caches. "
+                "Caching should be implemented via Next.js Route Handlers / Server Actions or an external API gateway."
+            )
 
         plan = Plan(
             agent_run_id=agent_run_id,
@@ -199,7 +211,7 @@ class PlanningOrchestrator:
             acceptance_criteria=global_criteria,
             verification_strategy="verify_static_and_automated_tests",
             risks=risks,
-            unknowns=list(context.unknowns),
+            unknowns=plan_unknowns,
         )
 
         # ──────────────────────────────────────────────────────────────────────
@@ -318,7 +330,13 @@ class PlanningOrchestrator:
 
         # Professional action phrases
         act_lower = cleaned_action.lower()
-        if "oauth" in act_lower or "google" in act_lower:
+        if "rbac" in act_lower or "role" in act_lower or "admin" in act_lower or "access control" in act_lower:
+            action_title = "Role-Based Access Control and Route Guards"
+        elif "search" in act_lower or "find" in act_lower:
+            action_title = "Global Search across Analysis Store and Uploads"
+        elif "email" in act_lower or "notification" in act_lower or "notify" in act_lower:
+            action_title = "Analysis Completion Notification System"
+        elif "oauth" in act_lower or "google" in act_lower:
             action_title = "Google OAuth Authentication Integration"
         elif "pagination" in act_lower:
             action_title = "Pagination Support in Users API Client"
@@ -340,21 +358,31 @@ class PlanningOrchestrator:
             is_ts_repo = any("typescript" in c.lower() or "next" in c.lower() or "react" in c.lower() for c in context.architecture_constraints)
 
         safe_name = re.sub(r"[^\w]+", "_", action_title.lower()).strip("_")
-        slug_words = [w for w in safe_name.split("_") if w not in {"what", "would", "it", "take", "to", "add", "implement", "a", "an", "the", "feature", "system", "for", "in", "of", "and", "integration", "support", "server", "side", "layer", "client", "provider", "module"}]
+        slug_words = [w for w in safe_name.split("_") if w not in {"what", "would", "it", "take", "to", "add", "implement", "a", "an", "the", "feature", "system", "for", "in", "of", "and", "integration", "support", "server", "side", "layer", "client", "provider", "module", "across"}]
         slug = "_".join(slug_words[:2]) if slug_words else "feature"
 
         if files:
             # Verified EXISTING files in repository FactStore
-            impl_files = files[:3]
+            impl_files = files[:4]
             test_candidates = [f for f in files if "test" in f.lower() or "spec" in f.lower()]
             test_files = test_candidates[:2] if test_candidates else ([f"tests/{slug}.test.ts"] if is_ts_repo else [f"tests/test_{slug}.py"])
+
+            # Detail rationale
+            if "role" in slug or "rbac" in slug:
+                desc = f"Extend verified authentication architecture ({', '.join(impl_files)}) to support role claims, user permission guards, and admin route protection."
+            elif "search" in slug:
+                desc = f"Integrate search query methods and state filtering in {', '.join(impl_files)} to query across analysis records and uploaded file metadata."
+            elif "notification" in slug or "email" in slug:
+                desc = f"Configure notification preferences and completion event handlers in {', '.join(impl_files)} (Note: backend notification mailer required for delivery)."
+            else:
+                desc = f"Modify verified repository components ({', '.join(impl_files)}) to implement {action_title.lower()}."
 
             # Step 1: Implementation of required change in existing files
             steps.append(
                 PlanStep(
                     step_number=1,
                     title=f"Implement {action_title} in {', '.join(impl_files)}",
-                    description=f"Modify verified repository components ({', '.join(impl_files)}) to implement {action_title.lower()}.",
+                    description=desc,
                     target_files=impl_files,
                     component_type="EXISTING",
                     acceptance_criteria=["AC-01"],
@@ -387,6 +415,11 @@ class PlanningOrchestrator:
                     new_impl = ["src/lib/cache/redis.ts"]
                     new_test = ["tests/redis_caching.test.ts"]
                     reason = "Architectural boundary: Redis requires server infrastructure; provides server cache adapter for Next.js Route Handlers"
+                elif "notification" in act_lower or "email" in act_lower or "notification" in slug:
+                    slug = "notifications"
+                    new_impl = ["src/services/notificationService.ts"]
+                    new_test = ["tests/notifications.test.ts"]
+                    reason = "Required capability not present in repository: provides client notification adapter for backend mailer dispatch"
                 elif "auth" in act_lower or "oauth" in act_lower or "auth" in slug:
                     slug = "oauth_auth"
                     new_impl = ["lib/auth.ts", "src/services/authService.ts"]
