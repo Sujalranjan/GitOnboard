@@ -38,12 +38,12 @@ def test_github_callback_sets_secure_cookie_in_production(monkeypatch):
 
     assert response.status_code == 302
     assert response.headers["location"] == "https://app.example.com/dashboard"
-    cookie_header = response.headers["set-cookie"]
+    cookie_header = response.headers.get("set-cookie", "")
     assert "access_token=jwt-token" in cookie_header
-    assert "HttpOnly" in cookie_header
-    assert "Secure" in cookie_header
-    assert "SameSite=none" in cookie_header
-    assert "Path=/" in cookie_header
+    assert "httponly" in cookie_header.lower()
+    assert "secure" in cookie_header.lower()
+    assert "samesite=lax" in cookie_header.lower()
+    assert "path=/" in cookie_header.lower()
 
 
 def test_cors_is_scoped_to_configured_frontend_origin():

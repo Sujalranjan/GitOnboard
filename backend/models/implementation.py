@@ -238,7 +238,7 @@ class Implementation(Base):
     __tablename__ = "implementations"
 
     id = Column(String, primary_key=True, default=_uuid)
-    repository_id = Column(Integer, ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False, index=True)
+    repository_id = Column(Integer, ForeignKey("repositories.id", ondelete="CASCADE"), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
     title = Column(String, nullable=False)
@@ -363,11 +363,12 @@ class AgentRun(Base):
     )
     task_id = Column(String, nullable=False, index=True)
     repository_id = Column(String, nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     user_requirement = Column(Text, nullable=True)
 
     # Authoritative granular state
     current_state = Column(
-        SAEnum(AgentState, name="agent_state"),
+        SAEnum(AgentState, native_enum=False),
         nullable=False,
         default=AgentState.IDLE,
         index=True,
@@ -375,7 +376,7 @@ class AgentRun(Base):
 
     # Coarse legacy status
     status = Column(
-        SAEnum(AgentRunStatus, name="agent_run_status"),
+        SAEnum(AgentRunStatus, native_enum=False),
         nullable=False,
         default=AgentRunStatus.QUEUED,
         index=True,
@@ -410,6 +411,7 @@ class AgentRun(Base):
         "PolicyDecisionRecord", back_populates="agent_run", cascade="all, delete-orphan",
         order_by="PolicyDecisionRecord.created_at",
     )
+    user = relationship("User")
 
     def __repr__(self) -> str:
         return f"<AgentRun id={self.id!r} state={self.current_state.value!r} status={self.status.value!r}>"
@@ -511,8 +513,8 @@ class AgentStateTransition(Base):
     agent_run_id = Column(
         String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    from_state = Column(SAEnum(AgentState, name="agent_state_from"), nullable=False)
-    to_state = Column(SAEnum(AgentState, name="agent_state_to"), nullable=False)
+    from_state = Column(SAEnum(AgentState, native_enum=False), nullable=False)
+    to_state = Column(SAEnum(AgentState, native_enum=False), nullable=False)
     reason = Column(Text, nullable=True)
     metadata_json = Column("metadata", JSONType, nullable=True, default=dict)
     timestamp = Column(DateTime(timezone=True), default=_now, nullable=False, index=True)
@@ -532,7 +534,7 @@ class AgentEvent(Base):
         String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    event_type = Column(SAEnum(AgentEventType, name="agent_event_type"), nullable=False)
+    event_type = Column(SAEnum(AgentEventType, native_enum=False), nullable=False)
     message = Column(Text, nullable=False)
     payload = Column(JSONType, nullable=False, default=dict)
 

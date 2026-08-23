@@ -55,12 +55,38 @@ def ensure_db_schema_up_to_date(bind_engine):
                 ALTER TABLE files ADD COLUMN IF NOT EXISTS is_documentation BOOLEAN DEFAULT false;
                 ALTER TABLE files ADD COLUMN IF NOT EXISTS is_agent_instruction BOOLEAN DEFAULT false;
 
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS implementation_id VARCHAR;
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS task_id VARCHAR;
                 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS repository_id VARCHAR;
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
                 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS user_requirement TEXT;
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS plan JSONB;
                 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS current_state VARCHAR DEFAULT 'IDLE';
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'QUEUED';
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS iteration INTEGER DEFAULT 1;
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS worktree_path VARCHAR;
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS error_message TEXT;
                 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
                 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS metadata JSONB;
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
                 ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+                ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;
+
+                ALTER TABLE agent_events ADD COLUMN IF NOT EXISTS sequence INTEGER;
+                ALTER TABLE agent_events ADD COLUMN IF NOT EXISTS agent_run_id VARCHAR;
+                ALTER TABLE agent_events ADD COLUMN IF NOT EXISTS task_id VARCHAR;
+                ALTER TABLE agent_events ADD COLUMN IF NOT EXISTS event_type VARCHAR;
+                ALTER TABLE agent_events ADD COLUMN IF NOT EXISTS message TEXT;
+                ALTER TABLE agent_events ADD COLUMN IF NOT EXISTS payload JSONB;
+                ALTER TABLE agent_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+                ALTER TABLE agent_events ALTER COLUMN event_type TYPE VARCHAR USING event_type::VARCHAR;
+                ALTER TABLE agent_runs ALTER COLUMN current_state TYPE VARCHAR USING current_state::VARCHAR;
+                ALTER TABLE agent_runs ALTER COLUMN status TYPE VARCHAR USING status::VARCHAR;
+                ALTER TABLE agent_state_transitions ALTER COLUMN from_state TYPE VARCHAR USING from_state::VARCHAR;
+                ALTER TABLE agent_state_transitions ALTER COLUMN to_state TYPE VARCHAR USING to_state::VARCHAR;
+                ALTER TABLE implementations ALTER COLUMN repository_id DROP NOT NULL;
             """))
             conn.commit()
     except Exception as e:
@@ -220,7 +246,6 @@ from backend.routers import auth_router, health_router, agent_router
 from backend.routers.implementation import router as implementation_router
 from backend.routers.repo import repo_router, import_router
 from backend.routers.verification import router as verification_router
-from backend.routers.verification_pipeline import router as verification_pipeline_router
 from backend.routers.sandbox import router as sandbox_router
 
 app.include_router(auth_router, prefix="/api")
@@ -231,7 +256,6 @@ app.include_router(repo_router, prefix="/api/repos")
 app.include_router(agent_router)
 app.include_router(implementation_router)
 app.include_router(verification_router)
-app.include_router(verification_pipeline_router)
 app.include_router(sandbox_router)
 
 @app.get("/", include_in_schema=False)
