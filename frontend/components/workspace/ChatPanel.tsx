@@ -6,6 +6,7 @@ import {
   ArrowUp,
   Bot,
   Compass,
+  FileCode,
   HelpCircle,
   Info,
   Layers,
@@ -140,10 +141,19 @@ export function ChatPanel({ onStartRun, snapshot, repoId }: ChatPanelProps) {
       }
 
       const data = await res.json();
+      const planText = data.response || "Request processed.";
+
+      if (data.intent === "plan" || planText.includes("Plan")) {
+        try {
+          sessionStorage.setItem("gitonboard_active_plan_markdown", planText);
+          localStorage.setItem("gitonboard_active_plan_markdown", planText);
+        } catch {}
+      }
+
       const finalAssistantMsg: ChatMessage = {
         id: assistantMsgId,
         role: "assistant",
-        text: data.response || "Request processed.",
+        text: planText,
         intent: {
           intent: data.intent,
           confidence: data.confidence,
@@ -374,9 +384,28 @@ export function ChatPanel({ onStartRun, snapshot, repoId }: ChatPanelProps) {
                     </div>
                     <div className="flex-1 space-y-1.5 min-w-0">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-zinc-200">
-                          Repository Assistant
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-zinc-200">
+                            Repository Assistant
+                          </span>
+                          {!msg.isLoading && (msg.intent?.intent === "plan" || msg.text.includes("Plan")) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  sessionStorage.setItem("gitonboard_active_plan_markdown", msg.text);
+                                  localStorage.setItem("gitonboard_active_plan_markdown", msg.text);
+                                } catch {}
+                                onSelectFile?.("implementation_plan.md");
+                              }}
+                              className="text-[10px] px-2 py-0.5 rounded bg-purple-900/40 hover:bg-purple-800/60 text-purple-300 hover:text-purple-100 border border-purple-500/40 flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                              title="Open this plan in Monaco Editor as a temporary in-memory scratch file"
+                            >
+                              <FileCode className="w-3 h-3 text-purple-400" />
+                              <span>Open in Editor (Temp)</span>
+                            </button>
+                          )}
+                        </div>
                         <span className="text-[10px] text-emerald-400 font-mono">
                           {msg.isLoading ? "Thinking..." : "Delivered"}
                         </span>

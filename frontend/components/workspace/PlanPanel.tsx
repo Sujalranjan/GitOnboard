@@ -54,9 +54,36 @@ export function PlanPanel({
     setShowRejectInput(false);
   };
 
+  const handleOpenInEditor = () => {
+    const lines = [
+      `# Implementation Plan v${plan?.version || 1}: ${snapshot?.run?.user_requirement || "Requirement Spec"}`,
+      "",
+      `**Status**: ${plan?.status || "DRAFT"}`,
+      `**Target Repository**: \`${snapshot?.run?.repository_id || "default"}\``,
+      "",
+      "## Planned DAG Tasks",
+      "",
+      ...tasks.map((t, idx) => [
+        `### Task ${idx + 1}: ${t.title} [${t.component_type}]`,
+        `- **Files**: ${(t.affected_files || []).join(", ") || "None"}`,
+        `- **Dependencies**: ${(t.dependencies || []).join(", ") || "None"}`,
+        `- **Verification**: \`${t.verification_strategy}\``,
+        `- **Acceptance Criteria**:`,
+        ...(t.acceptance_criteria || []).map((ac) => `  - ${ac}`),
+        "",
+      ].join("\n")),
+    ];
+    const md = lines.join("\n");
+    try {
+      sessionStorage.setItem("gitonboard_active_plan_markdown", md);
+      localStorage.setItem("gitonboard_active_plan_markdown", md);
+    } catch {}
+    onSelectFile?.("implementation_plan.md");
+  };
+
   if (!plan && tasks.length === 0) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-6 text-zinc-500 font-mono text-center">
+      <div className="h-full flex flex-col items-center justify-center p-6 text-center select-none font-mono">
         <Layers className="w-10 h-10 mb-3 text-zinc-600 animate-pulse" />
         <p className="text-xs font-semibold text-zinc-400">No Implementation Plan Yet</p>
         <p className="text-[11px] text-zinc-500 max-w-sm mt-1">
@@ -81,12 +108,12 @@ export function PlanPanel({
             {onSelectFile && (
               <button
                 type="button"
-                onClick={() => onSelectFile("implementation_plan.md")}
-                className="text-[10px] px-2 py-0.5 rounded bg-[#21262D] hover:bg-[#30363D] text-purple-400 hover:text-purple-300 border border-[#30363D] flex items-center gap-1 transition-colors"
-                title="Open Markdown spec in Monaco Editor"
+                onClick={handleOpenInEditor}
+                className="text-[10px] px-2 py-0.5 rounded bg-[#21262D] hover:bg-[#30363D] text-purple-400 hover:text-purple-300 border border-[#30363D] flex items-center gap-1 transition-colors cursor-pointer"
+                title="Open Markdown spec in Monaco Editor as in-memory temporary scratch"
               >
                 <FileCode className="w-3 h-3" />
-                <span>Open in Editor</span>
+                <span>Open in Editor (Temp)</span>
               </button>
             )}
             <span
