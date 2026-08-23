@@ -58,7 +58,7 @@ def github_callback(code: str, db: Session = Depends(get_db)):
         response = RedirectResponse(url=redirect_url, status_code=302)
         
         is_secure = settings.environment.lower() == "production"
-        same_site = "none" if is_secure else "lax"
+        same_site = "lax"
         
         response.set_cookie(
             key="access_token",
@@ -95,7 +95,7 @@ def logout():
     response = JSONResponse({"message": "Logged out successfully"})
 
     is_secure = settings.environment.lower() == "production"
-    same_site = "none" if is_secure else "lax"
+    same_site = "lax"
 
     response.delete_cookie(
         key="access_token",

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, LargeBinary, JSON
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, LargeBinary, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime, timezone
@@ -10,10 +10,15 @@ class Repository(Base):
     __tablename__ = "repositories"
 
     id = Column(Integer, primary_key=True, index=True)
-    github_repo_id = Column(String, unique=True, index=True, nullable=True)
-    url = Column(String, unique=True, index=True, nullable=False)
+    github_repo_id = Column(String, index=True, nullable=True)
+    url = Column(String, index=True, nullable=False)
     default_branch = Column(String, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "url", name="uq_user_repo_url"),
+        UniqueConstraint("user_id", "github_repo_id", name="uq_user_github_repo"),
+    )
     
     analyses = relationship("Analysis", back_populates="repository", cascade="all, delete-orphan")
 
