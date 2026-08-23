@@ -178,32 +178,33 @@ class ContextAssembler:
             except Exception as err:
                 logger.debug(f"HybridRetriever query error: {err}")
 
-        # Direct repository snapshot tool discovery
-        try:
-            tool_layer = RepositoryToolLayer(
-                repo_name=request.repository_id,
-                db=db,
-                repo_root=request.worktree_path,
-            )
-            for kw in keywords[:5]:
-                matches = tool_layer.search_repository(query=kw, limit=5)
-                for m in matches:
-                    f_path = m.get("file", m.get("path", ""))
-                    if f_path and f_path not in seen_files:
-                        seen_files.add(f_path)
-                        relevant_files.append(f_path)
-                        evidence_items.append(
-                            ContextEvidence(
-                                source_type="snapshot_search",
-                                source_id=f_path,
-                                relevance=0.85,
-                                confidence=1.0,
-                                summary=f"Found match in {f_path}: {m.get('line_content', '')[:60]}",
-                                data=m,
+        # Direct repository snapshot tool discovery (only if active worktree on disk is present)
+        if request.worktree_path and Path(request.worktree_path).exists():
+            try:
+                tool_layer = RepositoryToolLayer(
+                    repo_name=request.repository_id,
+                    db=db,
+                    repo_root=request.worktree_path,
+                )
+                for kw in keywords[:5]:
+                    matches = tool_layer.search_repository(query=kw, limit=5)
+                    for m in matches:
+                        f_path = m.get("file", m.get("path", ""))
+                        if f_path and f_path not in seen_files:
+                            seen_files.add(f_path)
+                            relevant_files.append(f_path)
+                            evidence_items.append(
+                                ContextEvidence(
+                                    source_type="snapshot_search",
+                                    source_id=f_path,
+                                    relevance=0.85,
+                                    confidence=1.0,
+                                    summary=f"Found match in {f_path}: {m.get('line_content', '')[:60]}",
+                                    data=m,
+                                )
                             )
-                        )
-        except Exception as err:
-            logger.debug(f"RepositoryToolLayer search failed: {err}")
+            except Exception as err:
+                logger.debug(f"RepositoryToolLayer search failed: {err}")
 
 
         # ──────────────────────────────────────────────────────────────────────
