@@ -1,0 +1,140 @@
+id,question,intent,difficulty,case_type
+001,Hi,chat,easy,clear
+002,Hello!,chat,easy,clear
+003,Good morning.,chat,easy,clear
+004,"Thanks, that helped.",chat,easy,clear
+005,What can you do?,chat,easy,clear
+006,I'm just exploring the system.,chat,easy,clear
+007,"No task yet, just testing.",chat,easy,clear
+008,"Hey, how are you?",chat,easy,clear
+009,Where is the authentication middleware?,explore,easy,clear
+010,Find UserRepository.,explore,easy,clear
+011,Find all references to UserRepository.,explore,easy,clear
+012,Where is AuthService defined?,explore,easy,clear
+013,Show me the repository tree.,explore,easy,clear
+014,Where is process_request() called?,explore,easy,clear
+015,Search the repository for retry_count.,explore,easy,clear
+016,Which file contains the scheduler?,explore,easy,clear
+017,How does authentication work?,explain,easy,clear
+018,Why does the scheduler use a DAG?,explain,easy,clear
+019,Explain the request-processing pipeline.,explain,easy,clear
+020,What does RepositoryIndexer do?,explain,easy,clear
+021,How do terminal types interact?,explain,easy,clear
+022,Why does TaskManager depend on Scheduler?,explain,easy,clear
+023,Walk me through the lifecycle of a DAG node.,explain,easy,clear
+024,How does repository search work?,explain,easy,clear
+025,What would it take to add OAuth?,plan,easy,clear
+026,How should we add caching to repository search?,plan,easy,clear
+027,What changes would be needed for GitLab support?,plan,easy,clear
+028,How should we redesign the scheduler?,plan,easy,clear
+029,What files would need to change to support retries?,plan,easy,clear
+030,Give me a high-level implementation plan for OAuth.,plan,easy,clear
+031,What would be required to migrate the DAG schema?,plan,easy,clear
+032,What is the safest approach for adding Redis caching?,plan,easy,clear
+033,Add OAuth login.,implement,easy,clear
+034,Implement retry logic for failed DAG nodes.,implement,easy,clear
+035,Fix the authentication bug.,implement,easy,clear
+036,Modify the scheduler to support priority execution.,implement,easy,clear
+037,Add GitLab repository support.,implement,easy,clear
+038,Refactor RepositoryIndexer.,implement,easy,clear
+039,Update authentication middleware to reject expired tokens.,implement,easy,clear
+040,Create a new DAG node type.,implement,easy,clear
+041,Make authentication better.,clarify,easy,clear
+042,Improve this.,clarify,easy,clear
+043,Clean this up.,clarify,easy,clear
+044,Fix it.,clarify,easy,clear
+045,Update the DAG.,clarify,easy,clear
+046,Make the terminal system faster.,clarify,easy,clear
+047,Something is wrong with authentication.,clarify,easy,clear
+048,Change how retries work.,clarify,easy,clear
+049,Where can I find the code that handles token validation?,explore,medium,natural_variation
+050,Which module owns repository indexing?,explore,medium,natural_variation
+051,Point me to the scheduler implementation.,explore,medium,natural_variation
+052,Can you locate every call site of process_request()?,explore,medium,natural_variation
+053,What files are involved in parsing the config?,explore,medium,natural_variation
+054,Can you walk me through the authentication flow?,explain,medium,natural_variation
+055,What is the purpose of RepositoryIndexer?,explain,medium,natural_variation
+056,Why is the scheduler coupled to TaskManager?,explain,medium,natural_variation
+057,Can you explain how retries are currently handled?,explain,medium,natural_variation
+058,How does the repository search pipeline work?,explain,medium,natural_variation
+059,How could we introduce OAuth without disrupting existing auth?,plan,medium,natural_variation
+060,What would a Redis caching change look like architecturally?,plan,medium,natural_variation
+061,How should GitLab support fit into the repository layer?,plan,medium,natural_variation
+062,What would we need to change to support multiple schedulers?,plan,medium,natural_variation
+063,How would you approach redesigning the terminal router?,plan,medium,natural_variation
+064,Please add OAuth support.,implement,medium,natural_variation
+065,Could you implement retry handling for failed nodes?,implement,medium,natural_variation
+066,Change the scheduler so high-priority tasks run first.,implement,medium,natural_variation
+067,Please refactor RepositoryIndexer.,implement,medium,natural_variation
+068,Update the middleware to reject expired tokens.,implement,medium,natural_variation
+069,Authentication is behaving strangely.,clarify,medium,natural_variation
+070,The scheduler needs to be changed.,clarify,medium,natural_variation
+071,Can you fix the repository problem?,clarify,medium,natural_variation
+072,I need this cleaned up.,clarify,medium,natural_variation
+073,The retry behavior isn't right.,clarify,medium,natural_variation
+074,[boundary] Where is authentication implemented?,explore,hard,boundary_pair
+075,[boundary] How does authentication work?,explain,hard,boundary_pair
+076,[boundary] How should authentication be redesigned?,plan,hard,boundary_pair
+077,[boundary] Redesign the authentication system.,implement,hard,boundary_pair
+078,[boundary] Authentication isn't working.,clarify,hard,boundary_pair
+079,[boundary] Find the code that handles retries.,explore,hard,boundary_pair
+080,[boundary] Why are retries handled by the scheduler?,explain,hard,boundary_pair
+081,[boundary] How should retries be redesigned?,plan,hard,boundary_pair
+082,[boundary] Implement retry handling.,implement,hard,boundary_pair
+083,[boundary] Fix retries.,clarify,hard,boundary_pair
+084,[boundary] Where is RepositoryIndexer defined?,explore,hard,boundary_pair
+085,[boundary] What does RepositoryIndexer do?,explain,hard,boundary_pair
+086,[boundary] How should RepositoryIndexer be refactored?,plan,hard,boundary_pair
+087,[boundary] Refactor RepositoryIndexer.,implement,hard,boundary_pair
+088,[boundary] RepositoryIndexer is broken.,clarify,hard,boundary_pair
+089,[boundary] Where would I modify code to add Redis caching?,explore,hard,boundary_pair
+090,[boundary] What architecture would be best for Redis caching?,plan,hard,boundary_pair
+091,[boundary] Explain how caching currently works.,explain,hard,boundary_pair
+092,[boundary] Add Redis caching.,implement,hard,boundary_pair
+093,[boundary] Caching.,clarify,hard,boundary_pair
+094,Could we add OAuth?,plan,hard,semantic_boundary
+095,Could you add OAuth?,implement,hard,semantic_boundary
+096,How could we add OAuth?,plan,hard,semantic_boundary
+097,How do I add OAuth?,explain,hard,semantic_boundary
+098,Add OAuth.,implement,hard,semantic_boundary
+099,What would it take to add OAuth?,plan,hard,semantic_boundary
+100,Why should we add OAuth?,explain,hard,semantic_boundary
+101,Where is OAuth implemented?,explore,hard,semantic_boundary
+102,How does the existing OAuth implementation work?,explain,hard,semantic_boundary
+103,Change the OAuth implementation.,implement,hard,semantic_boundary
+104,Don't change anything; just explain how authentication works.,explain,hard,negation_constraint
+105,Don't modify the scheduler. Where is it implemented?,explore,hard,negation_constraint
+106,I don't want you to implement this yet. How would you add caching?,plan,hard,negation_constraint
+107,Don't fix it yet. Tell me why the scheduler is failing.,explain,hard,negation_constraint
+108,"I want to understand the bug, not change the code.",explain,hard,negation_constraint
+109,Don't just explain it—fix the authentication bug.,implement,hard,negation_constraint
+110,"Before changing anything, find where retries are implemented.",explore,hard,negation_constraint
+111,Don't implement it yet; outline how you would add GitLab support.,plan,hard,negation_constraint
+112,Do not edit the code. Explain the current repository search.,explain,hard,negation_constraint
+113,No more discussion—apply the retry fix.,implement,hard,negation_constraint
+114,Find the authentication code and explain how it works.,explore,expert,mixed_intent
+115,Explain the scheduler and tell me how we should redesign it.,explain,expert,mixed_intent
+116,Find the bug and fix it.,implement,expert,mixed_intent
+117,Show me the relevant files and then implement the change.,implement,expert,mixed_intent
+118,Explain the problem and propose a fix.,plan,expert,mixed_intent
+119,Locate the scheduler and summarize where its dependencies live.,explore,expert,mixed_intent
+120,Explain the current caching design and propose a better one.,plan,expert,mixed_intent
+121,Tell me where the auth bug is and patch it.,implement,expert,mixed_intent
+122,Find the retry code and suggest how it should be redesigned.,plan,expert,mixed_intent
+123,Locate RepositoryIndexer and refactor it.,implement,expert,mixed_intent
+124,[adversarial] How do I find where authentication is implemented?,explore,expert,keyword_trap
+125,[adversarial] Can you explain where the scheduler code lives?,explore,expert,keyword_trap
+126,[adversarial] I don't need a file path—what does RepositoryIndexer actually do?,explain,expert,keyword_trap
+127,[adversarial] Don't implement OAuth. What would be required to support it?,plan,expert,keyword_trap
+128,[adversarial] I know the plan already. Add Redis caching.,implement,expert,keyword_trap
+129,[adversarial] Please fix authentication.,clarify,expert,keyword_trap
+130,[adversarial] Could you make the scheduler better?,clarify,expert,keyword_trap
+131,[adversarial] Why isn't authentication working?,explain,expert,keyword_trap
+132,[adversarial] What's the location of the code that handles retries?,explore,expert,keyword_trap
+133,[adversarial] What changes would you recommend before we implement retry handling?,plan,expert,keyword_trap
+134,[adversarial] Go ahead and make the retry changes.,implement,expert,keyword_trap
+135,[adversarial] Can you handle the repository issue?,clarify,expert,keyword_trap
+136,[adversarial] I'm not asking for anything yet; just looking around.,chat,expert,keyword_trap
+137,[adversarial] Thanks! I'll come back with a task later.,chat,expert,keyword_trap
+138,"[adversarial] Show me all files related to OAuth, but don't change anything.",explore,expert,keyword_trap
+139,[adversarial] Don't tell me how to change it; explain the current DAG behavior.,explain,expert,keyword_trap

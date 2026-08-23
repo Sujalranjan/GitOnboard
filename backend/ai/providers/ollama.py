@@ -22,13 +22,13 @@ class OllamaProvider:
 
     provider_name = "ollama"
 
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = DEFAULT_MODEL, timeout: float = 300.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:11434", model: str = DEFAULT_MODEL, timeout: float = 300.0):
         self.base_url = base_url.rstrip("/")
         self.default_model = model
         self.timeout = timeout
 
-    def _build_body(self, request: LLMRequest) -> Dict[str, Any]:
-        return {
+    def _build_body(self, request: LLMRequest, force_json: bool = False) -> Dict[str, Any]:
+        body = {
             "model": request.model or self.default_model,
             "messages": [{"role": m.role.value, "content": m.content} for m in request.messages],
             "stream": False,
@@ -37,6 +37,9 @@ class OllamaProvider:
                 "num_predict": request.max_tokens,
             },
         }
+        if force_json:
+            body["format"] = "json"
+        return body
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         model_name = request.model or self.default_model
