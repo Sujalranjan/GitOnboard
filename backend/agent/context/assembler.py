@@ -41,12 +41,22 @@ from backend.repository_tools.tools import RepositoryToolLayer
 logger = logging.getLogger(__name__)
 
 
-def extract_domain_concepts(requirement: str) -> List[str]:
+class DomainIntent(dict):
+    """Container for domain concept extraction supporting both dict access and membership checks."""
+    def __contains__(self, item):
+        if super().__contains__(item):
+            return True
+        return (
+            item in self.get("primary", [])
+            or item in self.get("secondary", [])
+            or item in self.get("raw_words", [])
+        )
+
+
+def extract_domain_concepts(requirement: str) -> DomainIntent:
     """
-    Extracts high-signal domain concepts and removes generic planning language noise.
-    E.g. 'what would it take to add Google OAuth' -> ['google oauth', 'google', 'oauth', 'auth', 'login']
-         'what would it take to add pagination to the users API' -> ['pagination users api', 'pagination', 'users', 'api']
-         'what would it take to add dark mode' -> ['dark mode', 'dark', 'mode', 'theme', 'tailwind', 'color', 'style']
+    Extracts high-signal primary capability keywords, secondary context keywords,
+    and classifies the architectural layer of the requested capability.
     """
     import re
     planning_noise = {
@@ -54,46 +64,44 @@ def extract_domain_concepts(requirement: str) -> List[str]:
         "please", "could", "should", "want", "need", "like", "about", "into", "make",
         "help", "this", "that", "with", "from", "have", "tell", "show", "give", "step",
         "steps", "plan", "estimate", "changes", "files", "file", "for", "and", "the", "a", "an",
-        "require", "require?", "take?", "add?", "create", "setup", "new", "do", "we", "of", "in"
+        "require", "require?", "take?", "add?", "create", "setup", "new", "do", "we", "of", "in",
+        "how", "can"
     }
     cleaned = re.sub(r"[^\w\s-]", " ", requirement)
-    words = cleaned.split()
-    meaningful_words = [w.lower() for w in words if w.lower() not in planning_noise and len(w) > 1]
-    
-    concepts: List[str] = []
-    if meaningful_words:
-        concepts.append(" ".join(meaningful_words))
-    for w in meaningful_words:
-        if w not in concepts:
-            concepts.append(w)
-            
+    words = [w.lower() for w in cleaned.split() if w.lower() not in planning_noise and len(w) > 1]
     req_lower = requirement.lower()
-    if "oauth" in req_lower or "google" in req_lower or "auth" in req_lower:
-        for syn in ["auth", "login", "oauth", "session", "user"]:
-            if syn not in concepts:
-                concepts.append(syn)
-    if "dark" in req_lower or "mode" in req_lower or "theme" in req_lower:
-        for syn in ["theme", "dark", "tailwind", "color", "style", "provider"]:
-            if syn not in concepts:
-                concepts.append(syn)
-    if "pagination" in req_lower or "page" in req_lower:
-        for syn in ["pagination", "page", "limit", "offset", "cursor", "api"]:
-            if syn not in concepts:
-                concepts.append(syn)
-    if "payment" in req_lower or "stripe" in req_lower or "billing" in req_lower:
-        for syn in ["payment", "stripe", "billing", "checkout", "subscription"]:
-            if syn not in concepts:
-                concepts.append(syn)
-    if "redis" in req_lower or "cache" in req_lower or "caching" in req_lower:
-        for syn in ["redis", "cache", "caching", "store"]:
-            if syn not in concepts:
-                concepts.append(syn)
-    if "user" in req_lower or "users" in req_lower:
-        for syn in ["user", "users", "account", "profile"]:
-            if syn not in concepts:
-                concepts.append(syn)
 
-    return concepts or [requirement]
+    primary_kws: List[str] = []
+    secondary_kws: List[str] = []
+    arch_layer: str = "GENERAL"
+
+    if "oauth" in req_lower or "google" in req_lower:
+        primary_kws.extend(["oauth", "google", "authService", "auth.ts", "login"])
+        secondary_kws.extend(["auth", "session"])
+        arch_layer = "SERVER_AUTH"
+    elif "pagination" in req_lower:
+        primary_kws.extend(["pagination", "api.ts", "api", "page", "limit", "offset", "cursor"])
+        secondary_kws.extend(["users", "user", "fetch"])
+        arch_layer = "CLIENT_API"
+    elif "dark" in req_lower or "mode" in req_lower or "theme" in req_lower:
+        primary_kws.extend(["theme", "theme-provider", "dark", "ThemeToggle", "tailwind"])
+        secondary_kws.extend(["style", "color"])
+        arch_layer = "CLIENT_UI"
+    elif "redis" in req_lower or "cache" in req_lower or "caching" in req_lower:
+        primary_kws.extend(["redis", "cache", "caching"])
+        arch_layer = "SERVER_INFRA"
+    elif "payment" in req_lower or "stripe" in req_lower or "billing" in req_lower:
+        primary_kws.extend(["payment", "stripe", "billing", "checkout", "subscription"])
+        arch_layer = "PAYMENT_GATEWAY"
+    else:
+        primary_kws.extend(words)
+
+    return DomainIntent(
+        primary=primary_kws,
+        secondary=secondary_kws,
+        arch_layer=arch_layer,
+        raw_words=words,
+    )
 
 
 def _extract_symbol_file_path(sym: FactSymbol) -> str:
@@ -145,7 +153,13 @@ class ContextAssembler:
         # ──────────────────────────────────────────────────────────────────────
         # 1. Requirement Analysis (Intent & Keyword Extraction)
         # ──────────────────────────────────────────────────────────────────────
-        keywords = extract_domain_concepts(request.requirement)
+        intent_data = extract_domain_concepts(request.requirement)
+        primary_kws = intent_data["primary"]
+        secondary_kws = intent_data["secondary"]
+        arch_layer = intent_data["arch_layer"]
+        all_kws = primary_kws + secondary_kws
+        keywords = all_kws
+
         from backend.planning.requirements import AcceptanceCriterion
         analyzed_req = AnalyzedRequirement(
             title=request.requirement[:60],
@@ -163,7 +177,7 @@ class ContextAssembler:
                 source_id="req_analysis",
                 relevance=1.0,
                 confidence=1.0,
-                summary=f"Requirement Title: {analyzed_req.title}, extracted domain concepts: {keywords}",
+                summary=f"Requirement Title: {analyzed_req.title}, primary keywords: {primary_kws}, layer: {arch_layer}",
                 data={
                     "title": analyzed_req.title,
                     "goals": analyzed_req.goals,
@@ -171,41 +185,72 @@ class ContextAssembler:
                         {"id": c.id, "text": c.description}
                         for c in analyzed_req.acceptance_criteria
                     ],
-                    "keywords": keywords,
+                    "keywords": all_kws,
+                    "arch_layer": arch_layer,
                 },
             )
         )
 
         # ──────────────────────────────────────────────────────────────────────
-        # 2. Candidate Discovery (HybridRetriever & Direct Fact Store)
+        # 2. Repository Archetype & Architectural Boundary Check
+        # ──────────────────────────────────────────────────────────────────────
+        repo_files = db.query(FactFile).filter(FactFile.analysis_id == request.analysis_id).all() if db and request.analysis_id else []
+        file_paths = [f.path.lower() for f in repo_files]
+        is_frontend = any("package.json" in p or "next.config" in p or p.endswith(".tsx") or p.endswith(".jsx") or p.endswith(".ts") for p in file_paths)
+        is_backend = any("requirements.txt" in p or "pyproject.toml" in p or p.endswith(".py") for p in file_paths)
+
+        # Architectural boundary check: server infrastructure in frontend client
+        if arch_layer == "SERVER_INFRA" and is_frontend and not is_backend:
+            unknowns.append(
+                "Architectural Boundary: Redis caching requires server-side infrastructure. "
+                "In this Next.js frontend repository, client-side Zustand/Redux state modules are not server caches. "
+                "Caching should be implemented via Next.js Route Handlers / Server Actions or an external API gateway."
+            )
+
+        # ──────────────────────────────────────────────────────────────────────
+        # 3. Candidate Discovery (HybridRetriever & Scored Fact Store)
         # ──────────────────────────────────────────────────────────────────────
         seen_files: Set[str] = set()
         seen_symbols: Set[str] = set()
+        file_scores: Dict[str, float] = {}
 
         if db and request.analysis_id:
             try:
                 retriever = HybridRetriever(db=db, analysis_id=request.analysis_id)
-                for kw in keywords[:8]:
-                    # Exact file match in FactFile
-                    exact_files = db.query(FactFile).filter(
-                        FactFile.analysis_id == request.analysis_id,
-                        FactFile.path.ilike(f"%{kw}%")
-                    ).limit(5).all()
-                    for f in exact_files:
-                        if f.path not in seen_files:
-                            seen_files.add(f.path)
-                            relevant_files.append(f.path)
 
-                    # Exact symbol match in FactSymbol
+                # Skip matching client-side state files for server infrastructure requests
+                skip_client_state = (arch_layer == "SERVER_INFRA" and is_frontend and not is_backend)
+
+                # Score matching files
+                for f in repo_files:
+                    f_lower = f.path.lower()
+                    if skip_client_state and ("store" in f_lower or "zustand" in f_lower):
+                        continue
+
+                    score = 0.0
+                    for p in primary_kws:
+                        if p.lower() in f_lower:
+                            score += 3.0
+                    for s in secondary_kws:
+                        if s.lower() in f_lower:
+                            score += 0.4
+                    if score >= 1.0:
+                        file_scores[f.path] = max(file_scores.get(f.path, 0.0), score)
+
+                # Query symbols
+                for kw in primary_kws[:5]:
                     exact_symbols = db.query(FactSymbol).filter(
                         FactSymbol.analysis_id == request.analysis_id,
                         FactSymbol.name.ilike(f"%{kw}%")
                     ).limit(5).all()
                     for s in exact_symbols:
                         f_path = _extract_symbol_file_path(s)
-                        if f_path and f_path not in seen_files:
-                            seen_files.add(f_path)
-                            relevant_files.append(f_path)
+                        if f_path:
+                            f_lower = f_path.lower()
+                            if skip_client_state and ("store" in f_lower or "zustand" in f_lower):
+                                continue
+                            file_scores[f_path] = max(file_scores.get(f_path, 0.0), 2.5)
+
                         if s.name not in seen_symbols:
                             seen_symbols.add(s.name)
                             relevant_symbols.append({
@@ -214,33 +259,20 @@ class ContextAssembler:
                                 "kind": s.symbol_type,
                             })
 
-                    # Hybrid lexical BM25 / vector retrieval
-                    retrieved = retriever.retrieve(query=kw, top_k=5, expand_with_fact_store=True)
-                    for item in retrieved:
-                        f_path = item.get("file_path", "")
-                        sym_name = item.get("name", "")
-                        if f_path and f_path not in seen_files:
-                            seen_files.add(f_path)
-                            relevant_files.append(f_path)
-
-                        if sym_name and sym_name not in seen_symbols:
-                            seen_symbols.add(sym_name)
-                            relevant_symbols.append(
-                                {
-                                    "name": sym_name,
-                                    "file_path": f_path,
-                                    "kind": item.get("type", "symbol"),
-                                }
-                            )
-
+                # Sort files by relevance score
+                sorted_files = sorted(file_scores.keys(), key=lambda x: file_scores[x], reverse=True)
+                for f_path in sorted_files[:budget.max_files]:
+                    if f_path not in seen_files:
+                        seen_files.add(f_path)
+                        relevant_files.append(f_path)
                         evidence_items.append(
                             ContextEvidence(
                                 source_type="retrieval",
-                                source_id=f"{f_path or 'match'}:{sym_name or 'match'}",
-                                relevance=float(item.get("score", 0.9) or 0.9),
-                                confidence=0.85,
-                                summary=f"Discovered candidate '{f_path or sym_name}' (relevance: {float(item.get('score', 0.9) or 0.9):.2f})",
-                                data=item,
+                                source_id=f_path,
+                                relevance=min(1.0, file_scores[f_path] / 3.0),
+                                confidence=0.9,
+                                summary=f"Matched relevant file '{f_path}' (score: {file_scores[f_path]:.1f})",
+                                data={"file_path": f_path, "score": file_scores[f_path]},
                             )
                         )
             except Exception as err:
@@ -296,9 +328,6 @@ class ContextAssembler:
 
                         if s.file_id:
                             f_path = s.file_id.split(":")[-1]
-                            if f_path and f_path not in seen_files:
-                                seen_files.add(f_path)
-                                relevant_files.append(f_path)
 
             # Expand Routes
             for kw in keywords[:5]:

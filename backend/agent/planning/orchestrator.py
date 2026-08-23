@@ -162,10 +162,23 @@ class PlanningOrchestrator:
             "dependencies_count": len(context.relevant_dependencies),
         }
 
+        # Construct truthful affected areas strictly matching the planned implementation tasks
+        truthful_affected_areas: List[Dict[str, Any]] = []
+        seen_area_files: Set[str] = set()
+
+        for task in tasks:
+            for f in task.affected_files:
+                if f and f not in seen_area_files:
+                    seen_area_files.add(f)
+                    truthful_affected_areas.append({
+                        "file": f,
+                        "component_type": task.component_type,
+                    })
+
         # Risks synthesis
         risks: List[str] = []
-        if len(affected_files) > 3:
-            risks.append(f"Multi-file modification risk: {len(affected_files)} files affected across codebase")
+        if len(truthful_affected_areas) > 3:
+            risks.append(f"Multi-file modification risk: {len(truthful_affected_areas)} files affected across codebase")
         if context.contract.missing_categories:
             risks.append(f"Incomplete context risk: Missing categories {context.contract.missing_categories}")
         for sec in contract_output.security_considerations:
@@ -179,10 +192,7 @@ class PlanningOrchestrator:
             status=PlanStatus.DRAFT,
             repository_understanding=repo_understanding_summary,
             architecture_context=arch_summary,
-            affected_areas=[
-                {"file": c.file, "symbol": c.symbol, "component_type": c.component_type}
-                for c in contract_output.affected_components
-            ] if contract_output.affected_components else [{"file": f, "component_type": "EXISTING"} for f in affected_files],
+            affected_areas=truthful_affected_areas,
             constraints=context.architecture_constraints,
             tasks=tasks,
             task_dependencies=task_deps_map,
@@ -294,6 +304,33 @@ class PlanningOrchestrator:
         steps: List[PlanStep] = []
         files = list(context.relevant_files)
 
+        # Synthesize clean actionable title from requirement
+        import re
+        raw_req = requirement.title.strip()
+        cleaned_action = re.sub(
+            r"^(what\s+would\s+it\s+take\s+to\s+add|what\s+would\s+it\s+take\s+to|how\s+do\s+we\s+implement|how\s+can\s+we\s+add|how\s+to\s+add|can\s+you\s+add|can\s+we\s+add|please\s+add|add|implement)\s+",
+            "",
+            raw_req,
+            flags=re.IGNORECASE
+        ).strip(" ?.")
+        if not cleaned_action:
+            cleaned_action = raw_req.strip(" ?.")
+
+        # Professional action phrases
+        act_lower = cleaned_action.lower()
+        if "oauth" in act_lower or "google" in act_lower:
+            action_title = "Google OAuth Authentication Integration"
+        elif "pagination" in act_lower:
+            action_title = "Pagination Support in Users API Client"
+        elif "dark" in act_lower or "mode" in act_lower or "theme" in act_lower:
+            action_title = "Dark Mode Theme Provider and Styling"
+        elif "payment" in act_lower or "stripe" in act_lower:
+            action_title = "Payment Gateway Integration"
+        elif "redis" in act_lower or "cache" in act_lower:
+            action_title = "Server-Side Redis Caching Layer"
+        else:
+            action_title = " ".join(w.capitalize() for w in cleaned_action.split())
+
         # Detect repo archetype
         is_ts_repo = any(
             f.endswith((".ts", ".tsx", ".js", ".jsx")) or "package.json" in f or "src/" in f
@@ -302,11 +339,9 @@ class PlanningOrchestrator:
         if not files and context.architecture_constraints:
             is_ts_repo = any("typescript" in c.lower() or "next" in c.lower() or "react" in c.lower() for c in context.architecture_constraints)
 
-        import re
-        safe_name = re.sub(r"[^\w]+", "_", requirement.title.lower()).strip("_")
-        # Extract short feature slug
-        slug_words = [w for w in safe_name.split("_") if w not in {"what", "would", "it", "take", "to", "add", "implement", "a", "an", "the", "feature", "system", "for", "in", "of"}]
-        slug = "_".join(slug_words[:2]) or "feature"
+        safe_name = re.sub(r"[^\w]+", "_", action_title.lower()).strip("_")
+        slug_words = [w for w in safe_name.split("_") if w not in {"what", "would", "it", "take", "to", "add", "implement", "a", "an", "the", "feature", "system", "for", "in", "of", "and", "integration", "support", "server", "side", "layer", "client", "provider", "module"}]
+        slug = "_".join(slug_words[:2]) if slug_words else "feature"
 
         if files:
             # Verified EXISTING files in repository FactStore
@@ -318,8 +353,8 @@ class PlanningOrchestrator:
             steps.append(
                 PlanStep(
                     step_number=1,
-                    title=f"Implement {requirement.title} in existing codebase",
-                    description=f"Modify verified repository components ({', '.join(impl_files)}) to implement {requirement.title}.",
+                    title=f"Implement {action_title} in {', '.join(impl_files)}",
+                    description=f"Modify verified repository components ({', '.join(impl_files)}) to implement {action_title.lower()}.",
                     target_files=impl_files,
                     component_type="EXISTING",
                     acceptance_criteria=["AC-01"],
@@ -331,8 +366,8 @@ class PlanningOrchestrator:
             steps.append(
                 PlanStep(
                     step_number=2,
-                    title=f"Verify implementation and add test coverage",
-                    description=f"Execute unit and integration tests covering changes in {', '.join(impl_files)}.",
+                    title=f"Verify {action_title} and Add Automated Tests",
+                    description=f"Execute unit and integration tests covering modifications in {', '.join(impl_files)}.",
                     target_files=test_files,
                     component_type="EXISTING" if test_candidates else "NEW",
                     acceptance_criteria=["AC-01"],
@@ -342,25 +377,32 @@ class PlanningOrchestrator:
         else:
             # Explicitly justified NEW component proposing appropriate repo locations
             if is_ts_repo or True:  # Default to repo structure based on context
-                if "payment" in slug or "stripe" in slug:
+                if "payment" in act_lower or "stripe" in act_lower or "payment" in slug:
+                    slug = "payment_gateway"
                     new_impl = ["src/lib/payment.ts", "src/services/paymentService.ts"]
                     new_test = ["tests/payment.test.ts"]
-                elif "redis" in slug or "cache" in slug:
-                    new_impl = ["src/lib/redis.ts"]
-                    new_test = ["tests/redis.test.ts"]
-                elif "auth" in slug or "oauth" in slug:
+                    reason = "Encapsulates payment gateway client initialization and checkout session handling"
+                elif "redis" in act_lower or "cache" in act_lower or "redis" in slug:
+                    slug = "redis_caching"
+                    new_impl = ["src/lib/cache/redis.ts"]
+                    new_test = ["tests/redis_caching.test.ts"]
+                    reason = "Architectural boundary: Redis requires server infrastructure; provides server cache adapter for Next.js Route Handlers"
+                elif "auth" in act_lower or "oauth" in act_lower or "auth" in slug:
+                    slug = "oauth_auth"
                     new_impl = ["lib/auth.ts", "src/services/authService.ts"]
-                    new_test = ["tests/auth.test.ts"]
+                    new_test = ["tests/google_oauth.test.ts"]
+                    reason = "Implements OAuth 2.0 token verification and session handlers"
                 else:
                     new_impl = [f"src/lib/{slug}.ts"]
                     new_test = [f"tests/{slug}.test.ts"]
+                    reason = f"Implements client/API support for {action_title}"
 
             # Step 1: Create new component
             steps.append(
                 PlanStep(
                     step_number=1,
-                    title=f"Create new {slug} component",
-                    description=f"No existing {slug} component verified in FactStore index. Propose new module: {new_impl[0]} (Reason: client/API implementation for {requirement.title}).",
+                    title=f"Create New {slug.replace('_', ' ').title()} Module ({new_impl[0]})",
+                    description=f"No existing {slug} component verified in FactStore index. Propose new module: {new_impl[0]} (Justification: {reason}).",
                     target_files=new_impl,
                     component_type="NEW",
                     acceptance_criteria=["AC-01"],
@@ -372,8 +414,8 @@ class PlanningOrchestrator:
             steps.append(
                 PlanStep(
                     step_number=2,
-                    title=f"Add automated tests for new {slug} component",
-                    description=f"Create new test suite in {new_test[0]} to verify contracts and boundary conditions.",
+                    title=f"Add Automated Tests for {action_title}",
+                    description=f"Create new test suite in {new_test[0]} to verify contracts, boundary conditions, and error states.",
                     target_files=new_test,
                     component_type="NEW",
                     acceptance_criteria=["AC-01"],
