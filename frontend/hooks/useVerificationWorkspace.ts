@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { DefectItem, RunState, VerificationReport } from "@/types/workspace";
+import { useState, useCallback } from "react";
+import { DefectItem, RunState } from "@/types/workspace";
 import {
-  submitPipelineTask,
-  executePipelineTask,
-  repairPipelineTask,
+  runVerification,
+  triggerRepair,
 } from "@/services/verificationApi";
 
 export function useVerificationWorkspace(initialRepoName: string = "default") {
@@ -30,8 +29,10 @@ export function useVerificationWorkspace(initialRepoName: string = "default") {
     statusMessage: "",
   });
 
-  // Complete state reset when repository changes
-  useEffect(() => {
+  // Track repository changes to reset state cleanly without cascading effects
+  const [prevRepo, setPrevRepo] = useState(initialRepoName);
+  if (prevRepo !== initialRepoName) {
+    setPrevRepo(initialRepoName);
     setActiveFile("");
     setOpenTabs([]);
     setEditorMode("source");
@@ -51,99 +52,85 @@ export function useVerificationWorkspace(initialRepoName: string = "default") {
       isLoading: false,
       statusMessage: "",
     });
-  }, [initialRepoName]);
+  }
 
   const appendLog = useCallback((message: string) => {
-    setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs((prev) => [...prev, `[${timestamp}] ${message}`]);
   }, []);
 
-  const handleSelectFile = useCallback(
-    (filePath: string) => {
-      setActiveFile(filePath);
-      if (!openTabs.includes(filePath)) {
-        setOpenTabs((prev) => [...prev, filePath]);
+  const handleSelectFile = useCallback((filePath: string) => {
+    setActiveFile(filePath);
+    setOpenTabs((prev) => {
+      if (!prev.includes(filePath)) {
+        return [...prev, filePath];
       }
-    },
-    [openTabs]
-  );
+      return prev;
+    });
+  }, []);
 
   const handleCloseTab = useCallback(
     (filePath: string) => {
-      const newTabs = openTabs.filter((t) => t !== filePath);
-      setOpenTabs(newTabs);
-      if (activeFile === filePath && newTabs.length > 0) {
-        setActiveFile(newTabs[newTabs.length - 1]);
-      }
+      setOpenTabs((prev) => {
+        const next = prev.filter((p) => p !== filePath);
+        if (activeFile === filePath) {
+          setActiveFile(next.length > 0 ? next[next.length - 1] : "");
+        }
+        return next;
+      });
     },
-    [activeFile, openTabs]
+    [activeFile]
   );
 
-  // Contract ➔ Agent ➔ Verification ➔ Judge sequence via Pipeline Orchestrator
+  // Active Multi-Vector Verification execution handler
   const handleStartTaskPrompt = useCallback(
     async (prompt: string) => {
       setRunState((prev) => ({
         ...prev,
         taskPrompt: prompt,
         isLoading: true,
-        statusMessage: "1/3 Decomposing requirement into Implementation Contract...",
+        statusMessage: "Running Multi-Vector Verification Mesh...",
       }));
-      appendLog(`Starting pipeline task for requirement: "${prompt.slice(0, 45)}..."`);
+      appendLog(`Starting verification for requirement: "${prompt.slice(0, 45)}..."`);
 
       try {
-        // Step 1: Submit requirement and synthesize contract
-        const submitRes = await submitPipelineTask(runState.repoId, prompt);
-        setRunState((prev) => ({
-          ...prev,
-          runId: submitRes.task_id,
-          contract: submitRes.contract,
-          statusMessage: "2/3 Spawning Git worktree & executing AI Coding Agent...",
-        }));
-        appendLog(`Synthesized Implementation Contract ID: ${submitRes.contract.id}`);
-
-        // Step 2: Execute sandboxed run and multi-vector verification
-        const execRes = await executePipelineTask(
-          submitRes.task_id,
-          runState.repoId,
-          submitRes.contract.id,
-          submitRes.contract
-        );
+        const runId = runState.runId || `run-${Date.now()}`;
+        const report = await runVerification(runId, runState.repoId);
 
         setRunState((prev) => ({
           ...prev,
-          runId: execRes.run_id,
-          rawDiff: execRes.diff,
-          report: execRes.report,
+          runId,
+          report,
           iteration: 1,
           isLoading: false,
-          statusMessage: execRes.report.passed
+          statusMessage: report.passed
             ? "Verification Passed — Zero Defects Detected"
-            : `Verification Failed — ${execRes.report.defects.length} Defect(s) Detected`,
+            : `Verification Failed — ${report.defects.length} Defect(s) Detected`,
         }));
 
-        setEditorMode("diff");
-
-        if (execRes.report.passed) {
+        if (report.passed) {
           appendLog("VERIFICATION PASS: All AST, Dynamic, and Contract checks satisfied.");
         } else {
-          appendLog(`VERIFICATION FAIL: Detected ${execRes.report.defects.length} defect(s).`);
-          execRes.report.defects.forEach((d) => {
+          appendLog(`VERIFICATION FAIL: Detected ${report.defects.length} defect(s).`);
+          report.defects.forEach((d: DefectItem) => {
             appendLog(`  - [${d.category}] ${d.file_path}: ${d.description}`);
           });
         }
-      } catch (error: any) {
-        console.error("Pipeline execution error:", error);
+      } catch (error: unknown) {
+        console.error("Verification execution error:", error);
         setRunState((prev) => ({
           ...prev,
           isLoading: false,
-          statusMessage: "Pipeline error occurred.",
+          statusMessage: "Verification error occurred.",
         }));
-        appendLog(`ERROR: ${error?.message || "Pipeline execution failed."}`);
+        const msg = error instanceof Error ? error.message : "Verification execution failed.";
+        appendLog(`ERROR: ${msg}`);
       }
     },
-    [runState.repoId, appendLog]
+    [runState.runId, runState.repoId, appendLog]
   );
 
-  // Automated repair iteration handler (max 3 passes)
+  // Automated repair iteration handler (max 3 passes) via active /api/v1/repair/iterate
   const handleTriggerRepair = useCallback(async () => {
     if (!runState.runId) return;
 
@@ -166,12 +153,11 @@ export function useVerificationWorkspace(initialRepoName: string = "default") {
 
     try {
       const defects = runState.report?.defects || [];
-      const repairRes = await repairPipelineTask(
+      const repairRes = await triggerRepair(
         runState.runId,
-        runState.repoId,
         nextIteration,
         defects,
-        runState.contract
+        runState.repoId
       );
 
       setRunState((prev) => ({
@@ -192,16 +178,17 @@ export function useVerificationWorkspace(initialRepoName: string = "default") {
       } else {
         appendLog(`REPAIR ITERATION ${nextIteration}: ${repairRes.report.defects.length} remaining defect(s).`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Repair error:", error);
       setRunState((prev) => ({
         ...prev,
         isLoading: false,
         statusMessage: "Repair iteration error.",
       }));
-      appendLog(`REPAIR ERROR: ${error?.message || "Repair iteration failed."}`);
+      const msg = error instanceof Error ? error.message : "Repair iteration failed.";
+      appendLog(`ERROR: ${msg}`);
     }
-  }, [runState.runId, runState.repoId, runState.iteration, runState.report, runState.contract, appendLog]);
+  }, [runState.runId, runState.repoId, runState.iteration, runState.report, appendLog]);
 
   return {
     runState,
@@ -214,5 +201,6 @@ export function useVerificationWorkspace(initialRepoName: string = "default") {
     handleCloseTab,
     handleStartTaskPrompt,
     handleTriggerRepair,
+    appendLog,
   };
 }

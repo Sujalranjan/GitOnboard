@@ -1,7 +1,10 @@
 import { fetchAPI } from './api';
 
 export const repositoryService = {
-  getAll: () => fetchAPI('/repos'),
+  getAll: async () => {
+    const res = await fetchAPI('/repos');
+    return Array.isArray(res) ? res : (res?.repositories || []);
+  },
   
   delete: (repoName) => fetchAPI(`/repos/${repoName}`, { method: 'DELETE' }),
   

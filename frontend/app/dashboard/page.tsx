@@ -9,8 +9,10 @@ import { Modal } from '@/components/common/Modal';
 import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { Plus, FolderGit2 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 function DashboardContent() {
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const [repos, setRepos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -25,28 +27,20 @@ function DashboardContent() {
 
   const fetchRepos = async () => {
     try {
+      setIsLoading(true);
       const data = await repositoryService.getAll();
-      setRepos(data.repositories || []);
-      
-      // If any repo is processing, queue up another fetch
-      const hasProcessing = data.repositories?.some((r: any) => 
-        ['Queued', 'Downloading', 'Analyzing', 'Saving', 'Processing'].includes(r.status) ||
-        ['Queued', 'Downloading', 'Analyzing', 'Saving'].includes(r.job_status)
-      );
-      
-      if (hasProcessing) {
-        setTimeout(fetchRepos, 3000);
-      }
+      const repoList = Array.isArray(data) ? data : (data?.repositories || []);
+      setRepos(repoList);
     } catch (err) {
-      console.error("Failed to fetch repos", err);
+      console.error('Failed to fetch repositories:', err);
+      setRepos([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const getRepositoryPath = (repo: any) => {
-    if (repo.repository_path) return repo.repository_path;
-    if (repo.url) {
+    if (repo?.url) {
       try {
         const parsed = new URL(repo.url);
         return parsed.pathname.replace(/^\//, '').replace(/\.git$/, '');
@@ -58,14 +52,21 @@ function DashboardContent() {
   };
 
   useEffect(() => {
-    fetchRepos();
-  }, []);
+    if (!authLoading) {
+      if (!isAuthenticated) {
+        window.location.href = "/";
+      } else {
+        fetchRepos();
+      }
+    }
+  }, [authLoading, isAuthenticated]);
 
-  const filteredRepos = repos.filter((repo) => {
+  const repoList = Array.isArray(repos) ? repos : [];
+  const filteredRepos = repoList.filter((repo) => {
     const query = searchQuery.toLowerCase().trim();
     if (!query) return true;
     
-    const projectName = (repo.project_name || '').toLowerCase();
+    const projectName = (repo?.project_name || '').toLowerCase();
     const repoPath = getRepositoryPath(repo).toLowerCase();
     
     return projectName.includes(query) || repoPath.includes(query);

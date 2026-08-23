@@ -4,10 +4,12 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { repositoryService } from '@/services/repository';
 import RepositoryOverview from '@/components/repository/RepositoryOverview';
+import { useAuth } from '@/context/AuthContext';
 
 export default function RepositoryOverviewPage() {
   const params = useParams();
   const repoName = params.repoName;
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
   
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -16,6 +18,11 @@ export default function RepositoryOverviewPage() {
   const router = useRouter();
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      router.replace("/");
+      return;
+    }
     if (!repoName) return;
     
     let pollInterval: NodeJS.Timeout;
