@@ -6,25 +6,19 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Search, Bell, User, LogOut } from 'lucide-react';
 import { Button } from '../common/Button';
 import { ThemeToggle } from '../ThemeToggle';
+import { useAuth } from '@/context/AuthContext';
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [user, setUser] = useState(null);
+  const { user, logout } = useAuth();
   const [query, setQuery] = useState(searchParams ? (searchParams.get('search') || '') : '');
   const [debounceTimeout, setDebounceTimeout] = useState(null);
   const searchInputRef = React.useRef(null);
 
   const isInsideRepository = Boolean(pathname?.startsWith('/repository'));
-
-  useEffect(() => {
-    fetch('/api/auth/github/me')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => setUser(data))
-      .catch(() => setUser(null));
-  }, []);
 
   useEffect(() => {
     if (isInsideRepository) return;
@@ -62,17 +56,7 @@ export function Header() {
   };
 
   const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/github/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      localStorage.clear();
-      sessionStorage.clear();
-      window.location.href = '/';
-    } catch (err) {
-      console.error('Logout failed:', err);
-    }
+    await logout();
   };
 
   return (

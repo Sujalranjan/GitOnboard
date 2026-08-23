@@ -83,6 +83,14 @@ export function CodeEditorPanel({
       return;
     }
 
+    if (activeFile === "implementation_plan.md" || activeFile.endsWith("plan.md")) {
+      const planMarkdown = localStorage.getItem("gitonboard_active_plan_markdown") || "# Implementation Plan\n\nPlan is being synthesized...";
+      setFileContent(planMarkdown);
+      setLoadingFile(false);
+      setFileError(null);
+      return;
+    }
+
     setLoadingFile(true);
     setFileError(null);
     setSaveSuccess(false);
@@ -102,6 +110,14 @@ export function CodeEditorPanel({
   useEffect(() => {
     if (!activeFile) {
       setFileContent("");
+      setLoadingFile(false);
+      setFileError(null);
+      return;
+    }
+
+    if (activeFile === "implementation_plan.md" || activeFile.endsWith("plan.md")) {
+      const planMarkdown = localStorage.getItem("gitonboard_active_plan_markdown") || "# Implementation Plan\n\nPlan is being synthesized...";
+      setFileContent(planMarkdown);
       setLoadingFile(false);
       setFileError(null);
       return;

@@ -24,18 +24,10 @@ export default function LandingPage() {
           Understand, analyze, and visualize your entire codebase architecture with just a few clicks.
         </p>
         
-        <div className="pt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <div className="pt-8 flex items-center justify-center">
           <Button variant="primary" size="lg" onClick={() => setIsLoginModalOpen(true)}>
             Get Started
           </Button>
-
-          <Link
-            href="/workspace"
-            className="px-6 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-base shadow-md flex items-center gap-2 transition-all hover:scale-105"
-          >
-            <Sparkles className="w-5 h-5 text-purple-200" />
-            Launch AI Workspace
-          </Link>
         </div>
       </div>
 
