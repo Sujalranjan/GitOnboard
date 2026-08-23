@@ -42,7 +42,7 @@ interface ChatMessage {
   timestamp: string;
 }
 
-export function ChatPanel({ onStartRun }: ChatPanelProps) {
+export function ChatPanel({ onStartRun, snapshot }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputPrompt, setInputPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,16 +59,16 @@ export function ChatPanel({ onStartRun }: ChatPanelProps) {
     { label: "Explore", prompt: "show repo tree", intent: "explore", icon: Compass },
     { label: "Plan", prompt: "what would it take to add payments?", intent: "plan", icon: Layers },
     { label: "Implement", prompt: "add Google OAuth", intent: "implement", icon: Zap },
-    { label: "Clarify", prompt: "make auth better", intent: "clarify", icon: HelpCircle },
+    { label: "Ambiguous", prompt: "clean this up", intent: "clarify", icon: HelpCircle },
   ];
 
-  const handleSend = async (promptText: string) => {
-    const trimmed = promptText.trim();
+  const handleSend = async (textToSend?: string) => {
+    const text = textToSend !== undefined ? textToSend : inputPrompt;
+    const trimmed = text.trim();
     if (!trimmed || isSubmitting) return;
 
-    const userMsgId = `user-${Date.now()}`;
     const userMsg: ChatMessage = {
-      id: userMsgId,
+      id: `user-${Date.now()}`,
       role: "user",
       text: trimmed,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -90,7 +90,10 @@ export function ChatPanel({ onStartRun }: ChatPanelProps) {
       const res = await fetch("/api/v1/agent/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requirement: trimmed }),
+        body: JSON.stringify({
+          requirement: trimmed,
+          repository_id: snapshot?.run?.repository_id || null,
+        }),
       });
 
       if (!res.ok) {

@@ -51,6 +51,7 @@ _EVENT_CHANNEL_USER_ID = 0
 
 class ClassifyIntentRequest(BaseModel):
     requirement: str = Field(..., description="User prompt to classify")
+    repository_id: Optional[str] = Field(default=None, description="Optional target repository identifier")
 
 
 class ClassifyIntentResponse(BaseModel):
@@ -272,10 +273,10 @@ def classify_intent_endpoint(
         mode_res = execute_chat(req.requirement)
         response_text = mode_res.get("response", "Hello! How can I help you today?")
     elif result.intent == Intent.EXPLORE:
-        mode_res = execute_explore(req.requirement, db=db)
+        mode_res = execute_explore(req.requirement, repository_id=req.repository_id, db=db)
         response_text = mode_res.get("response", "Exploration complete.")
     elif result.intent == Intent.EXPLAIN:
-        mode_res = execute_explain(req.requirement, db=db)
+        mode_res = execute_explain(req.requirement, repository_id=req.repository_id, db=db)
         response_text = mode_res.get("response", "Explanation complete.")
     elif result.intent == Intent.PLAN:
         response_text = f"Plan intent recognized for: '{req.requirement}'. High-level DAG change estimation classified successfully."

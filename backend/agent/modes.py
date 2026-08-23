@@ -99,6 +99,12 @@ def execute_explore(
                 if latest_analysis:
                     analysis_id = latest_analysis.id
 
+        # Fallback to latest analysis in the database if no repository_id provided
+        if not analysis_id:
+            latest_any_analysis = db.query(Analysis).order_by(Analysis.id.desc()).first()
+            if latest_any_analysis:
+                analysis_id = latest_any_analysis.id
+
         query_lower = user_requirement.lower()
 
         # 1. Repository tree / file listing
@@ -114,7 +120,7 @@ def execute_explore(
                     "entities": [{"type": "file", "path": f.path} for f in query_files],
                 }
 
-        # 2. Symbol / Reference search
+        # 2. Symbol / Reference / File search
         search_token = user_requirement
         for prefix in ["find all references to", "find references to", "where is", "find", "search for", "locate", "show"]:
             if query_lower.startswith(prefix):
@@ -122,23 +128,48 @@ def execute_explore(
                 break
         search_token = search_token.replace("implemented", "").replace("defined", "").strip()
 
+        search_variations = [search_token]
+        if "authentication" in search_token.lower():
+            search_variations.append("auth")
+        if "auth" in search_token.lower():
+            search_variations.append("auth")
+            search_variations.append("jwt")
+
         matching_symbols = []
+        matching_files = []
         if analysis_id and search_token:
             from sqlalchemy import or_
+            symbol_conditions = []
+            file_conditions = []
+            for token in search_variations:
+                symbol_conditions.append(FactSymbol.name.ilike(f"%{token}%"))
+                symbol_conditions.append(FactSymbol.qualified_name.ilike(f"%{token}%"))
+                file_conditions.append(FactFile.path.ilike(f"%{token}%"))
+
             matching_symbols = db.query(FactSymbol).filter(
                 FactSymbol.analysis_id == analysis_id,
-                or_(
-                    FactSymbol.name.ilike(f"%{search_token}%"),
-                    FactSymbol.qualified_name.ilike(f"%{search_token}%"),
-                )
+                or_(*symbol_conditions)
             ).limit(15).all()
 
-        if matching_symbols:
+            matching_files = db.query(FactFile).filter(
+                FactFile.analysis_id == analysis_id,
+                or_(*file_conditions)
+            ).limit(10).all()
+
+        if matching_symbols or matching_files:
             lines = []
-            for s in matching_symbols:
-                file_path = s.file.path if s.file else "unknown"
-                lines.append(f"- **`{s.name}`** (`{s.symbol_type}`) in [`{file_path}:{s.line_start}`](file:///{file_path}#L{s.line_start})")
-            response_text = f"### Symbol Search Results for '{search_token}':\n\n" + "\n".join(lines)
+            if matching_symbols:
+                lines.append("#### Matching Symbols:")
+                for s in matching_symbols:
+                    file_path = s.file.path if s.file else "unknown"
+                    lines.append(f"- **`{s.name}`** (`{s.symbol_type}`) in [`{file_path}:{s.line_start}`](file:///{file_path}#L{s.line_start})")
+
+            if matching_files:
+                lines.append("\n#### Matching Files:")
+                for f in matching_files:
+                    lines.append(f"- [`{f.path}`](file:///{f.path}) ({f.size or 0} bytes)")
+
+            response_text = f"### Exploration Results for '{search_token}':\n\n" + "\n".join(lines)
             return {
                 "response": response_text,
                 "intent": "explore",
@@ -151,6 +182,14 @@ def execute_explore(
                         "line": s.line_start,
                     }
                     for s in matching_symbols
+                ] + [
+                    {
+                        "name": f.path,
+                        "type": "file",
+                        "file": f.path,
+                        "line": 1,
+                    }
+                    for f in matching_files
                 ],
             }
 
