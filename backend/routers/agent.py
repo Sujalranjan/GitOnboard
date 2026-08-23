@@ -254,6 +254,32 @@ def _background_execute_approved_plan(run_id: str):
 # Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
+class QuickIntentResponse(BaseModel):
+    intent: str
+    confidence: float
+    reason: str
+    method: str
+
+
+@router.post("/intent", response_model=QuickIntentResponse)
+def quick_intent_endpoint(
+    req: ClassifyIntentRequest,
+    current_user: User = Depends(get_current_user),
+) -> QuickIntentResponse:
+    """
+    Lightweight, instant (<10ms) intent classification endpoint without executing deep mode engines.
+    """
+    from backend.agent.intent import IntentRouter
+    router_inst = IntentRouter()
+    result = router_inst.classify(req.requirement)
+    return QuickIntentResponse(
+        intent=result.intent.value,
+        confidence=result.confidence,
+        reason=result.reason,
+        method=result.classification_method,
+    )
+
+
 @router.post("/classify", response_model=ClassifyIntentResponse)
 def classify_intent_endpoint(
     req: ClassifyIntentRequest,

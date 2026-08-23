@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import {
   ArrowUp,
   Bot,
@@ -40,6 +41,7 @@ interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   intent?: IntentData;
+  isLoading?: boolean;
   timestamp: string;
 }
 
@@ -75,19 +77,55 @@ export function ChatPanel({ onStartRun, snapshot, repoId }: ChatPanelProps) {
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
+    const assistantMsgId = `assistant-${Date.now()}`;
     setMessages((prev) => [...prev, userMsg]);
     setInputPrompt("");
     setIsSubmitting(true);
 
     try {
-      // Optional: notify background runner if provided
       if (onStartRun) {
         try {
           onStartRun(trimmed);
         } catch {}
       }
 
-      // Fast, synchronous classification endpoint
+      // Step 1: INSTANT Intent Classification (<15ms)
+      // Display the Intent Card right away while synthesizing response
+      let detectedIntent: IntentData | undefined = undefined;
+      try {
+        const intentRes = await fetch("/api/v1/agent/intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requirement: trimmed,
+            repository_id: repoId || snapshot?.run?.repository_id || null,
+          }),
+        });
+        if (intentRes.ok) {
+          const intentData = await intentRes.json();
+          detectedIntent = {
+            intent: intentData.intent,
+            confidence: intentData.confidence,
+            reason: intentData.reason,
+            method: intentData.method,
+          };
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: assistantMsgId,
+              role: "assistant",
+              text: "",
+              intent: detectedIntent,
+              isLoading: true,
+              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            },
+          ]);
+        }
+      } catch {
+        // Quick intent endpoint fallback
+      }
+
+      // Step 2: Full Mode Execution & Synthesis
       const res = await fetch("/api/v1/agent/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -102,8 +140,8 @@ export function ChatPanel({ onStartRun, snapshot, repoId }: ChatPanelProps) {
       }
 
       const data = await res.json();
-      const assistantMsg: ChatMessage = {
-        id: `assistant-${Date.now()}`,
+      const finalAssistantMsg: ChatMessage = {
+        id: assistantMsgId,
         role: "assistant",
         text: data.response || "Request processed.",
         intent: {
@@ -112,18 +150,32 @@ export function ChatPanel({ onStartRun, snapshot, repoId }: ChatPanelProps) {
           reason: data.reason,
           method: data.method,
         },
+        isLoading: false,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
 
-      setMessages((prev) => [...prev, assistantMsg]);
+      setMessages((prev) => {
+        const exists = prev.some((m) => m.id === assistantMsgId);
+        if (exists) {
+          return prev.map((m) => (m.id === assistantMsgId ? finalAssistantMsg : m));
+        }
+        return [...prev, finalAssistantMsg];
+      });
     } catch (err: any) {
-      const fallbackMsg: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        text: `Error communicating with intent router: ${err.message || err}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, fallbackMsg]);
+      setMessages((prev) => {
+        const fallbackMsg: ChatMessage = {
+          id: assistantMsgId,
+          role: "assistant",
+          text: `Error communicating with intent router: ${err.message || err}`,
+          isLoading: false,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        const exists = prev.some((m) => m.id === assistantMsgId);
+        if (exists) {
+          return prev.map((m) => (m.id === assistantMsgId ? fallbackMsg : m));
+        }
+        return [...prev, fallbackMsg];
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -320,31 +372,115 @@ export function ChatPanel({ onStartRun, snapshot, repoId }: ChatPanelProps) {
                     <div className="w-6 h-6 rounded-full bg-purple-600/30 border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0 text-xs font-semibold">
                       <Bot className="w-3.5 h-3.5" />
                     </div>
-                    <div className="flex-1 space-y-1">
+                    <div className="flex-1 space-y-1.5 min-w-0">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-zinc-200">
                           Repository Assistant
                         </span>
                         <span className="text-[10px] text-emerald-400 font-mono">
-                          Delivered
+                          {msg.isLoading ? "Thinking..." : "Delivered"}
                         </span>
                       </div>
-                      <p className="text-xs text-zinc-200 leading-relaxed font-sans whitespace-pre-wrap">
-                        {msg.text}
-                      </p>
+
+                      {msg.isLoading ? (
+                        <div className="flex items-center gap-2 text-xs text-purple-400 font-mono py-1.5">
+                          <div className="w-3.5 h-3.5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                          <span>Synthesizing repository-grounded plan...</span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-zinc-200 leading-relaxed font-sans space-y-1 break-words">
+                          <ReactMarkdown
+                            components={{
+                              h1: ({ children }) => (
+                                <h1 className="text-sm font-bold text-white mt-3 mb-1.5 pb-1 border-b border-zinc-700/60">
+                                  {children}
+                                </h1>
+                              ),
+                              h2: ({ children }) => (
+                                <h2 className="text-xs font-bold text-purple-300 mt-2.5 mb-1 pb-0.5 border-b border-zinc-800">
+                                  {children}
+                                </h2>
+                              ),
+                              h3: ({ children }) => (
+                                <h3 className="text-xs font-semibold text-zinc-100 mt-2 mb-1">
+                                  {children}
+                                </h3>
+                              ),
+                              h4: ({ children }) => (
+                                <h4 className="text-xs font-medium text-purple-400 mt-1.5 mb-0.5">
+                                  {children}
+                                </h4>
+                              ),
+                              p: ({ children }) => (
+                                <p className="text-xs text-zinc-200 leading-relaxed my-1.5">
+                                  {children}
+                                </p>
+                              ),
+                              ul: ({ children }) => (
+                                <ul className="list-disc pl-4 space-y-1 my-1.5 text-zinc-300">
+                                  {children}
+                                </ul>
+                              ),
+                              ol: ({ children }) => (
+                                <ol className="list-decimal pl-4 space-y-1 my-1.5 text-zinc-300">
+                                  {children}
+                                </ol>
+                              ),
+                              li: ({ children }) => (
+                                <li className="text-xs text-zinc-300 leading-normal">
+                                  {children}
+                                </li>
+                              ),
+                              strong: ({ children }) => (
+                                <strong className="font-semibold text-zinc-100">
+                                  {children}
+                                </strong>
+                              ),
+                              code: ({ className, children, ...props }: any) => {
+                                const isMultiline = String(children).includes("\n");
+                                if (!isMultiline) {
+                                  return (
+                                    <code
+                                      className="bg-[#21262D] text-purple-300 px-1.5 py-0.5 rounded font-mono text-[11px] border border-zinc-700/60"
+                                      {...props}
+                                    >
+                                      {children}
+                                    </code>
+                                  );
+                                }
+                                return (
+                                  <pre className="bg-[#0D1117] border border-[#30363D] p-3 rounded-lg overflow-x-auto my-2 text-zinc-200">
+                                    <code
+                                      className="font-mono text-[11px] leading-relaxed block text-zinc-200"
+                                      {...props}
+                                    >
+                                      {children}
+                                    </code>
+                                  </pre>
+                                );
+                              },
+                              a: ({ href, children }) => (
+                                <a
+                                  href={href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-cyan-400 hover:text-cyan-300 underline font-mono text-[11px]"
+                                >
+                                  {children}
+                                </a>
+                              ),
+                            }}
+                          >
+                            {msg.text}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
             </div>
           ))
-        )}
-
-        {isSubmitting && (
-          <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono py-1 px-2">
-            <div className="w-3 h-3 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-            <span>Classifying intent...</span>
-          </div>
         )}
 
         <div ref={messagesEndRef} />
