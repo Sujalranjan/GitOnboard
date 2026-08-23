@@ -26,9 +26,14 @@ class AgentGraphOrchestrator:
     Thin execution adapter that triggers compiled LangGraph workflows.
     """
 
-    def __init__(self, agent_service: Optional[EngineeringAgent] = None):
+    def __init__(
+        self,
+        agent_service: Optional[EngineeringAgent] = None,
+        intent_router: Optional[Any] = None,
+    ):
         self.agent_service = agent_service or EngineeringAgent()
-        self.graph = build_agent_graph(agent_service=self.agent_service)
+        self.intent_router = intent_router
+        self.graph = build_agent_graph(agent_service=self.agent_service, intent_router=self.intent_router)
 
     def run_graph(
         self,
