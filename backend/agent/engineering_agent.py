@@ -627,6 +627,40 @@ class EngineeringAgent:
                 db.add(run)
                 db.commit()
 
+                # Invalidate any previous approvals (PENDING or APPROVED) for older plan revisions
+                prev_approvals = db.query(ApprovalRequest).filter(
+                    ApprovalRequest.agent_run_id == run.id,
+                    ApprovalRequest.action_type == ApprovalActionType.PLAN_APPROVAL,
+                    ApprovalRequest.status.in_([ApprovalStatus.PENDING, ApprovalStatus.APPROVED]),
+                ).all()
+                for pa in prev_approvals:
+                    pa.status = ApprovalStatus.EXPIRED
+                    db.add(pa)
+                db.commit()
+
+                # Create plan-specific ApprovalRequest bound to exact plan_id and version
+                aff_files = [
+                    a.get("file") if isinstance(a, dict) else getattr(a, "file", str(a))
+                    for a in (plan.affected_areas or [])
+                ]
+                self.approval_controller.create_approval_request(
+                    db=db,
+                    agent_run_id=run.id,
+                    action_type=ApprovalActionType.PLAN_APPROVAL,
+                    action_description=f"Approve implementation plan v{plan.version} ({plan.plan_id}) with {len(plan.tasks)} tasks",
+                    risk_level=RiskLevel.HIGH,
+                    requested_operation={
+                        "plan_id": plan.plan_id,
+                        "version": plan.version,
+                        "repository_id": run.repository_id or "default",
+                        "task_count": len(plan.tasks),
+                    },
+                    affected_files=aff_files,
+                    reason=f"Human authorization required for plan v{plan.version} ({plan.requirement[:60]})",
+                    metadata={"plan_id": plan.plan_id, "version": plan.version},
+                    run_model=run,
+                )
+
                 # Transition to AWAITING_APPROVAL only if still in PLANNING state
                 db.refresh(run)
                 if run.current_state == AgentState.PLANNING:
@@ -681,7 +715,81 @@ class EngineeringAgent:
                 logger.warning(f"Failed to parse Plan model from metadata for run '{run_id}': {err}")
         return None
 
-    def approve_plan(self, db: Session, run_id: str) -> AgentRun:
+    def assert_execution_authorized(
+        self,
+        db: Session,
+        run_id: str,
+        plan_id: Optional[str] = None,
+        plan_version: Optional[int] = None,
+    ) -> None:
+        """
+        Server-side central execution authorization gate.
+        Enforces:
+          1. Run exists and is in a valid execution state (AWAITING_APPROVAL or EXECUTING).
+          2. Plan exists, is marked APPROVED, and has valid validation result.
+          3. A persisted ApprovalRequest with status == APPROVED exists for this run and plan identity.
+          4. Plan ID and Version match between approval and active plan (prevents stale approval).
+        Raises EngineeringAgentError if any authorization condition fails.
+        """
+        run = self.get_run(db, run_id)
+        if run.current_state not in (AgentState.AWAITING_APPROVAL, AgentState.EXECUTING):
+            raise EngineeringAgentError(
+                f"Execution not authorized: Run '{run_id}' is in state '{run.current_state.value}', expected EXECUTING or AWAITING_APPROVAL"
+            )
+
+        plan = self.get_plan(db, run_id)
+        if not plan:
+            raise EngineeringAgentError(f"Execution not authorized: No plan found for run '{run_id}'")
+
+        if plan.status != PlanStatus.APPROVED:
+            raise EngineeringAgentError(
+                f"Execution not authorized: Plan '{plan.plan_id}' has status '{plan.status.value}', expected APPROVED"
+            )
+
+        if not plan.validation or not plan.validation.valid:
+            raise EngineeringAgentError(f"Execution not authorized: Plan '{plan.plan_id}' failed validation")
+
+        approval = (
+            db.query(ApprovalRequest)
+            .filter(
+                ApprovalRequest.agent_run_id == run_id,
+                ApprovalRequest.action_type == ApprovalActionType.PLAN_APPROVAL,
+                ApprovalRequest.status == ApprovalStatus.APPROVED,
+            )
+            .order_by(ApprovalRequest.resolved_at.desc(), ApprovalRequest.requested_at.desc())
+            .first()
+        )
+
+        if not approval:
+            raise EngineeringAgentError(
+                f"Execution not authorized: No valid APPROVED ApprovalRequest found in database for run '{run_id}'"
+            )
+
+        op = approval.requested_operation or {}
+        approved_plan_id = op.get("plan_id")
+        approved_version = op.get("version")
+
+        if approved_plan_id and approved_plan_id != plan.plan_id:
+            raise EngineeringAgentError(
+                f"Execution not authorized: Approval plan ID mismatch (approved '{approved_plan_id}' != active '{plan.plan_id}')"
+            )
+
+        if approved_version is not None and approved_version != plan.version:
+            raise EngineeringAgentError(
+                f"Execution not authorized: Approval plan version mismatch (approved v{approved_version} != active v{plan.version})"
+            )
+
+        if plan_id and plan_id != plan.plan_id:
+            raise EngineeringAgentError(
+                f"Execution not authorized: Target plan ID mismatch ('{plan_id}' != active '{plan.plan_id}')"
+            )
+
+        if plan_version is not None and plan_version != plan.version:
+            raise EngineeringAgentError(
+                f"Execution not authorized: Target plan version mismatch (v{plan_version} != active v{plan.version})"
+            )
+
+    def approve_plan(self, db: Session, run_id: str, resolved_by: str = "human_user") -> AgentRun:
         """
         Explicitly approves the synthesized plan.
         CRITICAL INVARIANT: Approval does NOT execute tasks (PLAN_APPROVED != TASK_EXECUTION_STARTED).
@@ -716,26 +824,40 @@ class EngineeringAgent:
         db.add(run)
         db.commit()
 
+        # Resolve pending ApprovalRequest
+        pending_approvals = self.approval_controller.get_pending_approvals(db, agent_run_id=run.id)
+        plan_approval = next((a for a in pending_approvals if a.action_type == ApprovalActionType.PLAN_APPROVAL), None)
+        if plan_approval:
+            self.approval_controller.approve_request(db, approval_id=plan_approval.id, resolved_by=resolved_by, run_model=run)
+        else:
+            app_req = db.query(ApprovalRequest).filter(
+                ApprovalRequest.agent_run_id == run_id,
+                ApprovalRequest.action_type == ApprovalActionType.PLAN_APPROVAL,
+            ).order_by(ApprovalRequest.requested_at.desc()).first()
+            if app_req and app_req.status == ApprovalStatus.PENDING:
+                self.approval_controller.approve_request(db, approval_id=app_req.id, resolved_by=resolved_by, run_model=run)
+
         # Emit PLAN_APPROVED event
         self.events.emit_event(
             db,
             run,
             AgentEventType.PLAN_APPROVED,
-            f"Plan v{plan.version} ('{plan.plan_id}') approved by user. Ready for Phase 5 task orchestration.",
+            f"Plan v{plan.version} ('{plan.plan_id}') approved by {resolved_by}. Ready for task orchestration.",
             {
                 "plan_id": plan.plan_id,
                 "version": plan.version,
                 "task_count": len(plan.tasks),
+                "resolved_by": resolved_by,
             },
         )
 
         return run
 
-    def reject_plan(self, db: Session, run_id: str, reason: Optional[str] = None) -> AgentRun:
+    def reject_plan(self, db: Session, run_id: str, reason: Optional[str] = None, resolved_by: str = "human_user") -> AgentRun:
         """
         Explicitly rejects the synthesized plan.
-        Transitions the run state to PLANNING for revision.
         CRITICAL INVARIANT: Rejection NEVER triggers task implementation.
+        Transitions the run state to CANCELLED (terminal non-executing state).
         """
         run = self.get_run(db, run_id)
 
@@ -757,9 +879,17 @@ class EngineeringAgent:
             db.add(run)
             db.commit()
 
+        reject_msg = reason or "Plan rejected by user."
+
+        # Resolve pending ApprovalRequest as REJECTED
+        pending_approvals = self.approval_controller.get_pending_approvals(db, agent_run_id=run.id)
+        for pa in pending_approvals:
+            if pa.action_type == ApprovalActionType.PLAN_APPROVAL:
+                self.approval_controller.reject_request(
+                    db, approval_id=pa.id, reason=reject_msg, resolved_by=resolved_by, run_model=run
+                )
 
         # Emit PLAN_REJECTED event
-        reject_msg = reason or "Plan rejected by user."
         self.events.emit_event(
             db,
             run,
@@ -771,12 +901,12 @@ class EngineeringAgent:
             },
         )
 
-        # Transition state back to PLANNING for plan revision
+        # Transition state to CANCELLED (terminal non-executing state)
         self.transition_state(
             db,
             run.id,
-            to_state=AgentState.PLANNING,
-            reason=f"Plan rejected: {reject_msg}; awaiting revision",
+            to_state=AgentState.CANCELLED,
+            reason=f"Plan rejected: {reject_msg}",
         )
 
         return run
@@ -788,6 +918,7 @@ class EngineeringAgent:
           - AgentRun.current_state == AgentState.AWAITING_APPROVAL
           - Plan.status == PlanStatus.APPROVED
           - Plan.validation.valid is True
+          - A persisted APPROVED ApprovalRequest exists matching active plan
         Transitions run state from AWAITING_APPROVAL -> EXECUTING and marks initial eligible tasks READY.
         """
         run = self.get_run(db, run_id)
@@ -798,18 +929,12 @@ class EngineeringAgent:
                 f"Run must be in '{AgentState.AWAITING_APPROVAL.value}' state."
             )
 
+        # Enforce server-side execution authorization gate
+        self.assert_execution_authorized(db, run_id)
+
         plan = self.get_plan(db, run_id)
         if not plan:
             raise EngineeringAgentError(f"No plan found for run '{run_id}'")
-
-        if plan.status != PlanStatus.APPROVED:
-            raise EngineeringAgentError(
-                f"Cannot execute unapproved plan '{plan.plan_id}' with status '{plan.status.value}'. "
-                f"Plan must be explicitly APPROVED before execution."
-            )
-
-        if not plan.validation or not plan.validation.valid:
-            raise EngineeringAgentError(f"Cannot execute invalid plan '{plan.plan_id}'.")
 
         # Evaluate dependencies to unlock initial eligible tasks to READY
         self.task_orchestrator.evaluate_dependencies(plan)
@@ -896,6 +1021,9 @@ class EngineeringAgent:
                 f"Cannot execute tasks for run '{run_id}' in state '{run.current_state.value}'. "
                 f"Run must be in '{AgentState.EXECUTING.value}' state."
             )
+
+        # Enforce server-side execution authorization gate
+        self.assert_execution_authorized(db, run_id)
 
         plan = self.get_plan(db, run_id)
         if not plan or plan.status != PlanStatus.APPROVED:

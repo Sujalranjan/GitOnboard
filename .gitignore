@@ -63,6 +63,8 @@ data/*
 !data/.gitkeep
 
 # Application Logs
-logs/*.log
-logs/*.jsonl
+logs/*
 !logs/.gitkeep
+*.log
+*.log.*
+

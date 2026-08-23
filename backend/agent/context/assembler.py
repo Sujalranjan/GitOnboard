@@ -77,7 +77,7 @@ def extract_domain_concepts(requirement: str) -> DomainIntent:
 
     # 1. Auth / Access Control / RBAC / Permissions
     if any(k in req_lower for k in ["role", "rbac", "admin", "permission", "access control", "guard", "oauth", "auth", "login"]):
-        primary_kws.extend(["middleware", "auth.ts", "authService", "role", "admin", "login", "guard"])
+        primary_kws.extend(["auth", "login", "middleware", "auth.ts", "authService", "role", "admin", "guard"])
         secondary_kws.extend(["user", "session", "permission", "access"])
         arch_layer = "AUTH_ACCESS_CONTROL"
     # 2. Search / Query across data sources
@@ -172,8 +172,7 @@ class ContextAssembler:
         primary_kws = intent_data["primary"]
         secondary_kws = intent_data["secondary"]
         arch_layer = intent_data["arch_layer"]
-        all_kws = primary_kws + secondary_kws
-        keywords = all_kws
+        keywords = list(dict.fromkeys(primary_kws + secondary_kws + intent_data.get("raw_words", [])))
 
         from backend.planning.requirements import AcceptanceCriterion
         analyzed_req = AnalyzedRequirement(
@@ -200,7 +199,7 @@ class ContextAssembler:
                         {"id": c.id, "text": c.description}
                         for c in analyzed_req.acceptance_criteria
                     ],
-                    "keywords": all_kws,
+                    "keywords": keywords,
                     "arch_layer": arch_layer,
                 },
             )
@@ -272,8 +271,9 @@ class ContextAssembler:
                     if score >= 1.0:
                         file_scores[f.path] = max(file_scores.get(f.path, 0.0), score)
 
-                # Query symbols
-                for kw in primary_kws[:5]:
+                # Query symbols using domain keywords and explicit requirement words
+                search_kws = list(dict.fromkeys(primary_kws[:5] + intent_data.get("raw_words", [])[:5]))
+                for kw in search_kws:
                     exact_symbols = db.query(FactSymbol).filter(
                         FactSymbol.analysis_id == request.analysis_id,
                         FactSymbol.name.ilike(f"%{kw}%")

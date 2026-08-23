@@ -291,7 +291,7 @@ def classify_intent_endpoint(
     Direct endpoint for fast, synchronous intent classification and response synthesis.
     """
     from backend.agent.intent import IntentRouter, Intent
-    from backend.agent.modes import execute_chat, execute_explore, execute_explain, execute_plan
+    from backend.agent.modes import execute_chat, execute_explore, execute_explain, execute_plan, execute_implement
 
     router_inst = IntentRouter()
     result = router_inst.classify(req.requirement)
@@ -311,7 +311,9 @@ def classify_intent_endpoint(
         response_text = mode_res.get("response", "Plan generation complete.")
         plan_dict = mode_res.get("plan")
     elif result.intent == Intent.IMPLEMENT:
-        response_text = f"Implement intent recognized for: '{req.requirement}'. Code modification request classified successfully."
+        mode_res = execute_implement(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
+        response_text = mode_res.get("response", "Implementation plan synthesized. Ready for human approval.")
+        plan_dict = mode_res.get("plan")
     else:  # CLARIFY
         response_text = f"Your request '{req.requirement}' is ambiguous or underspecified. Please specify which files, functions, or features you want to modify or inspect."
 
@@ -575,10 +577,15 @@ def approve_run_plan(
 ) -> AgentRunResponse:
     """
     Explicitly approves the synthesized plan and starts background execution of tasks.
+    Idempotency: If run is already EXECUTING, returns current run without duplicate worker.
     """
-    _get_authorized_run(run_id, current_user, db)
+    run = _get_authorized_run(run_id, current_user, db)
+    if run.current_state == AgentState.EXECUTING:
+        logger.info(f"Run '{run_id}' is already in EXECUTING state; returning current run.")
+        return _serialize_run(run)
     try:
-        run = agent_service.approve_plan(db=db, run_id=run_id)
+        resolved_by = current_user.username if hasattr(current_user, "username") else "human_user"
+        run = agent_service.approve_plan(db=db, run_id=run_id, resolved_by=resolved_by)
         run = agent_service.start_plan_execution(db=db, run_id=run_id)
         background_tasks.add_task(_background_execute_approved_plan, run_id)
         return _serialize_run(run)
@@ -601,13 +608,14 @@ def reject_run_plan(
     db: Session = Depends(get_db),
 ) -> AgentRunResponse:
     """
-    Explicitly rejects the plan and transitions run back to PLANNING for revision.
+    Explicitly rejects the plan and transitions run to terminal CANCELLED state.
     CRITICAL INVARIANT: Rejection NEVER triggers task implementation.
     """
     _get_authorized_run(run_id, current_user, db)
     try:
         reason = req.reason if req else None
-        run = agent_service.reject_plan(db=db, run_id=run_id, reason=reason)
+        resolved_by = current_user.username if hasattr(current_user, "username") else "human_user"
+        run = agent_service.reject_plan(db=db, run_id=run_id, reason=reason, resolved_by=resolved_by)
         return _serialize_run(run)
     except RunNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
@@ -623,16 +631,23 @@ def reject_run_plan(
 @router.post("/runs/{run_id}/execute", response_model=AgentRunResponse)
 def execute_approved_plan(
     run_id: str,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AgentRunResponse:
     """
     Starts controlled execution of the approved implementation plan.
-    Strict preconditions: Run must be in AWAITING_APPROVAL and Plan must be APPROVED.
+    Strict preconditions: Run must be in AWAITING_APPROVAL and Plan must be APPROVED with valid ApprovalRequest.
     """
-    _get_authorized_run(run_id, current_user, db)
+    run = _get_authorized_run(run_id, current_user, db)
+    if run.current_state == AgentState.EXECUTING:
+        logger.info(f"Run '{run_id}' is already in EXECUTING state; returning current run.")
+        return _serialize_run(run)
     try:
+        # Enforce server-side execution authorization gate
+        agent_service.assert_execution_authorized(db=db, run_id=run_id)
         run = agent_service.start_plan_execution(db=db, run_id=run_id)
+        background_tasks.add_task(_background_execute_approved_plan, run_id)
         return _serialize_run(run)
     except RunNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))

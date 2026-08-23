@@ -533,3 +533,38 @@ def execute_plan(
         if close_db:
             db.close()
 
+
+def execute_implement(
+    user_requirement: str,
+    repository_id: Optional[str] = None,
+    agent_run_id: Optional[str] = None,
+    user_id: Optional[int] = None,
+    db: Optional[Session] = None,
+) -> Dict[str, Any]:
+    """
+    Safe Intent.IMPLEMENT handler (Phase 5).
+    Synthesizes a repository-aware plan and establishes the server approval gate.
+    Guarantees:
+      - Repository-aware planning using Phase 4 pipeline.
+      - Plan status is READY_FOR_APPROVAL.
+      - AgentRun state is AWAITING_APPROVAL.
+      - ZERO file mutations, ZERO shell executions, ZERO task executions.
+    """
+    res = execute_plan(
+        user_requirement=user_requirement,
+        repository_id=repository_id,
+        agent_run_id=agent_run_id,
+        user_id=user_id,
+        db=db,
+    )
+    res["intent"] = "implement"
+    res["model"] = settings.model_terminal_implement
+    res["status"] = "READY_FOR_APPROVAL"
+    res["response"] = (
+        f"### 📋 Implementation Plan Generated (Awaiting Approval)\n\n"
+        f"{res.get('response', '')}\n\n"
+        f"> 🔒 **Approval Required**: Review the planned tasks above and click **Approve** to authorize repository mutation."
+    )
+    return res
+
+
