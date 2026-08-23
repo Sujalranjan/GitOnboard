@@ -65,7 +65,7 @@ def test_nominal_graph_workflow_execution(db_session, monkeypatch):
     assert "entry_node" in final_state["node_history"]
     assert "intent_router_node" in final_state["node_history"]
     assert "implement_terminal" in final_state["node_history"]
-    assert final_state["current_state"] == AgentState.COMPLETED.value
+    assert final_state["current_state"] == AgentState.AWAITING_APPROVAL.value
 
 
 def test_graph_workflow_cancelled_state(db_session, monkeypatch):

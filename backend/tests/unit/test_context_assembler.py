@@ -88,7 +88,7 @@ def test_context_assembler_basic_flow(init_db):
 
         assembler = ContextAssembler()
         req = ContextAssemblyRequest(
-            repository_id="test_repo",
+            repository_id="1",
             requirement="Add validation to authenticate_user login flow",
             worktree_path=tmpdir,
             analysis_id=1,
@@ -96,7 +96,7 @@ def test_context_assembler_basic_flow(init_db):
 
         ctx = assembler.assemble(req, db=db)
 
-        assert ctx.repository_id == "test_repo"
+        assert ctx.repository_id == "1"
         assert len(ctx.evidence) > 0
         assert any("authenticate_user" in s.get("name", "") for s in ctx.relevant_symbols)
         assert ctx.contract.completeness in (CompletenessStatus.COMPLETE, CompletenessStatus.PARTIAL)

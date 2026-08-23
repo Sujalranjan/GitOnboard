@@ -25,7 +25,7 @@ from backend.agent.engineering_agent import EngineeringAgent
 from backend.database import SessionLocal
 from backend.models.implementation import AgentState, AgentEventType
 from backend.config import settings
-from backend.agent.modes import execute_chat, execute_explore, execute_explain, execute_plan
+from backend.agent.modes import execute_chat, execute_explore, execute_explain, execute_plan, execute_implement
 
 logger = logging.getLogger(__name__)
 
@@ -304,38 +304,74 @@ def build_agent_graph(
 
     def implement_terminal(state: AgentGraphState) -> Dict[str, Any]:
         run_id = state.get("run_id")
+        user_req = state.get("user_requirement", "")
+        repo_id = state.get("repository_id", "")
         history = list(state.get("node_history") or [])
         history.append("implement_terminal")
 
-        msg = f"Implement intent recognized for: '{state.get('user_requirement', '')}'. Code modification request classified successfully."
-        logger.info(f"LangGraph implement_terminal completed for run '{run_id}' using model '{settings.model_terminal_implement}'")
-
         with SessionLocal() as db:
+            result = execute_implement(
+                user_requirement=user_req,
+                repository_id=repo_id,
+                agent_run_id=run_id,
+                db=db,
+            )
+            msg = result.get("response", "Implementation plan synthesized.")
+            plan_data = result.get("plan")
+            logger.info(f"LangGraph implement_terminal completed for run '{run_id}' using model '{result.get('model')}'")
+
             try:
                 run = service.get_run(db, run_id)
-                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg, "model": settings.model_terminal_implement}})
+                meta_update = {
+                    "response": msg,
+                    "model": result.get("model"),
+                    "plan": plan_data,
+                    "evidence": result.get("evidence", []),
+                    "unknowns": result.get("unknowns", []),
+                    "risks": result.get("risks", []),
+                }
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": meta_update})
+                if run.current_state in (AgentState.IDLE, AgentState.UNDERSTANDING, AgentState.PLANNING):
+                    service.transition_state(
+                        db,
+                        run_id=run_id,
+                        to_state=AgentState.AWAITING_APPROVAL,
+                        reason="Implementation plan synthesized; awaiting user approval",
+                    )
                 if hasattr(service, "events") and service.events is not None:
+                    service.events.emit_event(
+                        db=db,
+                        run_id=run_id,
+                        event_type=AgentEventType.PLANNING_COMPLETED,
+                        message=f"Implementation plan synthesized for '{user_req}'.",
+                        payload={"task_count": len(plan_data.get("tasks", [])) if plan_data else 0, "is_valid": result.get("is_valid", False)},
+                    )
+                    service.events.emit_event(
+                        db=db,
+                        run_id=run_id,
+                        event_type=AgentEventType.PLAN_READY_FOR_APPROVAL,
+                        message="Plan is ready for human approval.",
+                        payload={"plan_id": plan_data.get("plan_id") if plan_data else None},
+                    )
                     service.events.emit_event(
                         db=db,
                         run_id=run_id,
                         event_type=AgentEventType.AGENT_MESSAGE,
                         message=msg,
-                        payload={"response": msg, "intent": "implement", "model": settings.model_terminal_implement},
-                    )
-                if not service.state_machine.is_terminal(run.current_state):
-                    service.transition_state(
-                        db,
-                        run_id=run_id,
-                        to_state=AgentState.COMPLETED,
-                        reason="Implement intent processed",
+                        payload={"response": msg, "intent": "implement", "model": result.get("model"), "plan": plan_data},
                     )
             except Exception as err:
                 logger.warning(f"Error updating run state in implement_terminal: {err}")
 
         return {
-            "current_state": AgentState.COMPLETED.value,
-            "status": "COMPLETED",
-            "metadata": {"response": msg, "model": settings.model_terminal_implement},
+            "current_state": AgentState.AWAITING_APPROVAL.value,
+            "status": "AWAITING_APPROVAL",
+            "metadata": {
+                "response": msg,
+                "model": result.get("model"),
+                "plan": plan_data,
+                "evidence": result.get("evidence", []),
+            },
             "node_history": history,
         }
 

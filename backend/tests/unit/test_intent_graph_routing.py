@@ -211,7 +211,7 @@ def test_implement_routes_to_implement_terminal(db_session, monkeypatch):
     assert "intent_router_node" in final_state["node_history"]
     assert "implement_terminal" in final_state["node_history"]
     assert final_state["intent"] == "implement"
-    assert final_state["current_state"] == AgentState.COMPLETED.value
+    assert final_state["current_state"] == AgentState.AWAITING_APPROVAL.value
 
 
 def test_clarify_routes_to_clarify_terminal(db_session, monkeypatch):
