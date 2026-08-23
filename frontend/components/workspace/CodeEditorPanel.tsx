@@ -74,8 +74,9 @@ export function CodeEditorPanel({
     return parts[parts.length - 1];
   };
 
-  // Fetch file content with race condition cancellation guard
-  const fetchActiveFile = () => {
+  const isTempPlan = activeFile === "implementation_plan.md" || activeFile.endsWith("plan.md") || activeFile.startsWith("temp://");
+
+  const loadFile = () => {
     if (!activeFile) {
       setFileContent("");
       setLoadingFile(false);
@@ -83,8 +84,11 @@ export function CodeEditorPanel({
       return;
     }
 
-    if (activeFile === "implementation_plan.md" || activeFile.endsWith("plan.md")) {
-      const planMarkdown = localStorage.getItem("gitonboard_active_plan_markdown") || "# Implementation Plan\n\nPlan is being synthesized...";
+    if (isTempPlan) {
+      const planMarkdown =
+        sessionStorage.getItem("gitonboard_active_plan_markdown") ||
+        localStorage.getItem("gitonboard_active_plan_markdown") ||
+        "# Implementation Plan\n\nPlan is being synthesized in local memory...";
       setFileContent(planMarkdown);
       setLoadingFile(false);
       setFileError(null);
@@ -115,8 +119,11 @@ export function CodeEditorPanel({
       return;
     }
 
-    if (activeFile === "implementation_plan.md" || activeFile.endsWith("plan.md")) {
-      const planMarkdown = localStorage.getItem("gitonboard_active_plan_markdown") || "# Implementation Plan\n\nPlan is being synthesized...";
+    if (isTempPlan) {
+      const planMarkdown =
+        sessionStorage.getItem("gitonboard_active_plan_markdown") ||
+        localStorage.getItem("gitonboard_active_plan_markdown") ||
+        "# Implementation Plan\n\nPlan is being synthesized in local memory...";
       setFileContent(planMarkdown);
       setLoadingFile(false);
       setFileError(null);
@@ -172,11 +179,9 @@ export function CodeEditorPanel({
       handleSave();
     });
 
-    const defects = runState?.report?.defects || [];
-    if (!defects.length) return;
-
-    const markers = defects
-      .filter((d) => !d.file_path || d.file_path.includes(getFileBasename(activeFile)))
+    // Set Monaco markers for defects
+    const markers = (runState?.report?.defects || [])
+      .filter((d) => !d.file_path || d.file_path === activeFile)
       .map((d) => ({
         startLineNumber: d.line_number || 1,
         startColumn: 1,
@@ -209,11 +214,12 @@ export function CodeEditorPanel({
             openTabs.map((tabPath) => {
               const isActive = tabPath === activeFile;
               const basename = getFileBasename(tabPath);
+              const isTabTemp = tabPath === "implementation_plan.md" || tabPath.endsWith("plan.md") || tabPath.startsWith("temp://");
               return (
                 <div
                   key={tabPath}
                   onClick={() => onSelectFile(tabPath)}
-                  className={`h-7 px-2.5 rounded-t flex items-center gap-2 text-xs font-mono border-t border-x cursor-pointer transition-colors ${
+                  className={`h-7 px-2.5 rounded-t flex items-center gap-1.5 text-xs font-mono border-t border-x cursor-pointer transition-colors ${
                     isActive
                       ? "bg-[#0A0D10] border-[#2F343A] text-purple-300 font-medium"
                       : "bg-[#14181E] border-transparent text-[#8B949E] hover:text-[#E6EDF3] hover:bg-[#1E222A]"
@@ -221,6 +227,11 @@ export function CodeEditorPanel({
                 >
                   <FileCode className="w-3.5 h-3.5 text-purple-400" />
                   <span>{basename}</span>
+                  {isTabTemp && (
+                    <span className="text-[9px] px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      TEMP
+                    </span>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -313,6 +324,20 @@ export function CodeEditorPanel({
           </div>
         )}
       </div>
+
+      {/* Temporary In-Memory Plan Banner */}
+      {isTempPlan && (
+        <div className="bg-[#14181E] border-b border-[#2F343A] px-3 py-1.5 flex items-center justify-between text-xs text-zinc-300 font-mono select-none flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-[11px] font-semibold text-amber-300">Temporary In-Memory Plan View</span>
+            <span className="text-[10px] text-zinc-500">• Stored in local session cache only; will not write to repository files or disk.</span>
+          </div>
+          <span className="text-[10px] text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/30">
+            ⚡ Local Cache Scratch
+          </span>
+        </div>
+      )}
 
       {/* Monaco Editor / Loading Skeleton / Empty State / Explicit Error Card */}
       <div className="flex-1 min-h-0 relative bg-[#0A0D10]">
