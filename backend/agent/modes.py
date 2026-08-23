@@ -273,8 +273,8 @@ def execute_explain(
                 if user_analysis:
                     analysis_id = user_analysis.id
 
-        # Assemble bounded repository context
-        assembler = ContextAssembler(llm_service=service)
+        # Assemble bounded repository context (deterministic FactStore/AST retrieval)
+        assembler = ContextAssembler(llm_service=None)
         req = ContextAssemblyRequest(
             repository_id=repo_name_resolved,
             analysis_id=analysis_id,
@@ -422,8 +422,8 @@ def execute_plan(
                     analysis_id = user_analysis.id
 
         # 2. Bounded Context Acquisition Loop (Max 2 Iterations)
-        # Iteration 1: Initial Context Assembly
-        assembler = ContextAssembler(llm_service=service)
+        # Iteration 1: Initial Context Assembly (deterministic FactStore/AST retrieval)
+        assembler = ContextAssembler(llm_service=None)
         req = ContextAssemblyRequest(
             repository_id=repo_name_resolved,
             analysis_id=analysis_id,
@@ -473,7 +473,7 @@ def execute_plan(
 
         evidence_text = "\n\n".join(evidence_snippets) if evidence_snippets else "No matching files or symbols found in repository index."
 
-        # 4. Synthesize DAG Plan via PlanningOrchestrator
+        # 4. Synthesize DAG Plan via PlanningOrchestrator (<10ms)
         orchestrator = PlanningOrchestrator(llm_service=None)
         plan = orchestrator.create_plan(
             context=ctx,
@@ -484,76 +484,36 @@ def execute_plan(
             version=1,
         )
 
-        # 5. Fast Single-Pass LLM Plan Reasoning
-        system_prompt = (
-            "You are the GitOnboard Repository Planning Engine. "
-            "Your job is to provide a clear, concise, structured implementation plan based on the provided repository evidence.\n"
-            "Rules:\n"
-            "1. Ground all steps in the verified files and symbols. Explicitly mark existing files vs newly planned files.\n"
-            "2. Group tasks logically with verification methods and criteria.\n"
-            "3. If any required subsystem, configuration, or dependency is absent from the evidence, list it under 'Identified Unknowns & Assumptions'.\n"
-            "4. Do NOT hallucinate non-existent files as existing.\n"
-            "5. Keep the explanation structured and actionable."
-        )
+        # 5. Format Instant Structured Markdown Response from Verified DAG Plan
+        lines = [
+            f"## Repository-Aware Implementation Plan for: *{user_requirement}*",
+            "",
+            f"**Target Repository**: `{repo_name_resolved}` (Analysis #{analysis_id or 'N/A'})",
+            f"**Validation Status**: {'✅ Valid Plan (0 Cycles)' if plan.validation and plan.validation.valid else '⚠️ Draft with Warnings'}",
+            "",
+            "### Planned Implementation Steps (DAG):",
+        ]
+        for task in plan.tasks:
+            comp_badge = f"`[{task.component_type}]`"
+            files_str = ", ".join(f"`{f}`" for f in task.affected_files) if task.affected_files else "No files specified"
+            deps_str = f"(Depends on: {', '.join(task.dependencies)})" if task.dependencies else "(Initial task)"
+            lines.append(f"1. **{task.title}** {comp_badge} {deps_str}")
+            lines.append(f"   - **Files**: {files_str}")
+            lines.append(f"   - **Verification**: `{task.verification_strategy}`")
+            if task.acceptance_criteria:
+                lines.append(f"   - **Criteria**: {task.acceptance_criteria[0]}")
 
-        user_content = (
-            f"User Requirement: {user_requirement}\n\n"
-            f"Target Repository: {repo_name_resolved}\n\n"
-            f"--- REPOSITORY EVIDENCE ---\n"
-            f"{evidence_text}\n"
-            f"----------------------------"
-        )
+        if plan.unknowns:
+            lines.append("\n### Identified Unknowns & Assumptions:")
+            for u in plan.unknowns:
+                lines.append(f"- ❓ {u}")
 
-        llm_req = LLMRequest(
-            model=settings.model_terminal_plan,
-            messages=[
-                Message(role=MessageRole.SYSTEM, content=system_prompt),
-                Message(role=MessageRole.USER, content=user_content),
-            ],
-            temperature=0.2,
-            max_tokens=768,
-        )
+        if plan.risks:
+            lines.append("\n### Technical Risks & Blast Radius:")
+            for r in plan.risks:
+                lines.append(f"- ⚠️ {r}")
 
-        try:
-            resp = asyncio.run(service.generate(llm_req))
-            llm_text = resp.content.strip()
-        except Exception as err:
-            logger.warning(f"LLM plan text generation failed ({err}); formatting from validated DAG.")
-            llm_text = ""
-
-        # Format full response
-        if llm_text:
-            response_text = llm_text
-        else:
-            lines = [
-                f"## Repository-Aware Implementation Plan for: *{user_requirement}*",
-                "",
-                f"**Target Repository**: `{repo_name_resolved}` (Analysis #{analysis_id or 'N/A'})",
-                f"**Validation Status**: {'✅ Valid Plan' if plan.validation and plan.validation.valid else '⚠️ Draft with Warnings'}",
-                "",
-                "### Planned Implementation Steps (DAG):",
-            ]
-            for task in plan.tasks:
-                comp_badge = f"`[{task.component_type}]`"
-                files_str = ", ".join(f"`{f}`" for f in task.affected_files) if task.affected_files else "No files specified"
-                deps_str = f"(Depends on: {', '.join(task.dependencies)})" if task.dependencies else "(Initial task)"
-                lines.append(f"1. **{task.title}** {comp_badge} {deps_str}")
-                lines.append(f"   - **Files**: {files_str}")
-                lines.append(f"   - **Verification**: `{task.verification_strategy}`")
-                if task.acceptance_criteria:
-                    lines.append(f"   - **Criteria**: {task.acceptance_criteria[0]}")
-
-            if plan.unknowns:
-                lines.append("\n### Identified Unknowns & Assumptions:")
-                for u in plan.unknowns:
-                    lines.append(f"- ❓ {u}")
-
-            if plan.risks:
-                lines.append("\n### Technical Risks & Blast Radius:")
-                for r in plan.risks:
-                    lines.append(f"- ⚠️ {r}")
-
-            response_text = "\n".join(lines)
+        response_text = "\n".join(lines)
 
         return {
             "response": response_text,
