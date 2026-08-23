@@ -257,29 +257,39 @@ def _background_execute_approved_plan(run_id: str):
 def classify_intent_endpoint(
     req: ClassifyIntentRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> ClassifyIntentResponse:
     """
     Direct endpoint for fast, synchronous intent classification and response synthesis.
     """
     from backend.agent.intent import IntentRouter, Intent
+    from backend.agent.modes import execute_chat, execute_explore, execute_explain
+
     router_inst = IntentRouter()
     result = router_inst.classify(req.requirement)
 
-    responses = {
-        Intent.CHAT: "Hello! I am your Repository Intelligence Assistant. You can ask me to explore files, explain architectures, plan features, or implement changes.",
-        Intent.EXPLORE: f"Exploration query recognized for: '{req.requirement}'. The repository AST symbol tables and file layout are cataloged.",
-        Intent.EXPLAIN: f"Explanation query recognized for: '{req.requirement}'. The codebase architecture models and call graphs are available for inspection.",
-        Intent.PLAN: f"Plan intent recognized for: '{req.requirement}'. High-level DAG change estimation classified successfully.",
-        Intent.IMPLEMENT: f"Implement intent recognized for: '{req.requirement}'. Code modification request classified successfully.",
-        Intent.CLARIFY: f"Your request '{req.requirement}' is ambiguous or underspecified. Please specify which files, functions, or features you want to modify or inspect.",
-    }
+    if result.intent == Intent.CHAT:
+        mode_res = execute_chat(req.requirement)
+        response_text = mode_res.get("response", "Hello! How can I help you today?")
+    elif result.intent == Intent.EXPLORE:
+        mode_res = execute_explore(req.requirement, db=db)
+        response_text = mode_res.get("response", "Exploration complete.")
+    elif result.intent == Intent.EXPLAIN:
+        mode_res = execute_explain(req.requirement, db=db)
+        response_text = mode_res.get("response", "Explanation complete.")
+    elif result.intent == Intent.PLAN:
+        response_text = f"Plan intent recognized for: '{req.requirement}'. High-level DAG change estimation classified successfully."
+    elif result.intent == Intent.IMPLEMENT:
+        response_text = f"Implement intent recognized for: '{req.requirement}'. Code modification request classified successfully."
+    else:  # CLARIFY
+        response_text = f"Your request '{req.requirement}' is ambiguous or underspecified. Please specify which files, functions, or features you want to modify or inspect."
 
     return ClassifyIntentResponse(
         intent=result.intent.value,
         confidence=result.confidence,
         reason=result.reason,
         method=result.classification_method,
-        response=responses.get(result.intent, "Request processed."),
+        response=response_text,
     )
 
 
