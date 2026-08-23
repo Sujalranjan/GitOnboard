@@ -49,6 +49,18 @@ _EVENT_CHANNEL_USER_ID = 0
 # Request & Response Schemas
 # ──────────────────────────────────────────────────────────────────────────────
 
+class ClassifyIntentRequest(BaseModel):
+    requirement: str = Field(..., description="User prompt to classify")
+
+
+class ClassifyIntentResponse(BaseModel):
+    intent: str
+    confidence: float
+    reason: str
+    method: str
+    response: str
+
+
 class CreateAgentRunRequest(BaseModel):
     repository_id: str = Field(..., description="Target repository name or identifier")
     user_requirement: str = Field(..., description="Natural language feature requirement")
@@ -240,6 +252,36 @@ def _background_execute_approved_plan(run_id: str):
 # ──────────────────────────────────────────────────────────────────────────────
 # Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
+
+@router.post("/classify", response_model=ClassifyIntentResponse)
+def classify_intent_endpoint(
+    req: ClassifyIntentRequest,
+    current_user: User = Depends(get_current_user),
+) -> ClassifyIntentResponse:
+    """
+    Direct endpoint for fast, synchronous intent classification and response synthesis.
+    """
+    from backend.agent.intent import IntentRouter, Intent
+    router_inst = IntentRouter()
+    result = router_inst.classify(req.requirement)
+
+    responses = {
+        Intent.CHAT: "Hello! I am your Repository Intelligence Assistant. You can ask me to explore files, explain architectures, plan features, or implement changes.",
+        Intent.EXPLORE: f"Exploration query recognized for: '{req.requirement}'. The repository AST symbol tables and file layout are cataloged.",
+        Intent.EXPLAIN: f"Explanation query recognized for: '{req.requirement}'. The codebase architecture models and call graphs are available for inspection.",
+        Intent.PLAN: f"Plan intent recognized for: '{req.requirement}'. High-level DAG change estimation classified successfully.",
+        Intent.IMPLEMENT: f"Implement intent recognized for: '{req.requirement}'. Code modification request classified successfully.",
+        Intent.CLARIFY: f"Your request '{req.requirement}' is ambiguous or underspecified. Please specify which files, functions, or features you want to modify or inspect.",
+    }
+
+    return ClassifyIntentResponse(
+        intent=result.intent.value,
+        confidence=result.confidence,
+        reason=result.reason,
+        method=result.classification_method,
+        response=responses.get(result.intent, "Request processed."),
+    )
+
 
 @router.post("/runs", response_model=AgentRunResponse, status_code=status.HTTP_201_CREATED)
 def create_agent_run(
