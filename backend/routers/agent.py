@@ -60,6 +60,7 @@ class ClassifyIntentResponse(BaseModel):
     reason: str
     method: str
     response: str
+    plan: Optional[Dict[str, Any]] = None
 
 
 class CreateAgentRunRequest(BaseModel):
@@ -295,6 +296,7 @@ def classify_intent_endpoint(
     router_inst = IntentRouter()
     result = router_inst.classify(req.requirement)
 
+    plan_dict = None
     if result.intent == Intent.CHAT:
         mode_res = execute_chat(req.requirement)
         response_text = mode_res.get("response", "Hello! How can I help you today?")
@@ -307,6 +309,7 @@ def classify_intent_endpoint(
     elif result.intent == Intent.PLAN:
         mode_res = execute_plan(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Plan generation complete.")
+        plan_dict = mode_res.get("plan")
     elif result.intent == Intent.IMPLEMENT:
         response_text = f"Implement intent recognized for: '{req.requirement}'. Code modification request classified successfully."
     else:  # CLARIFY
@@ -318,6 +321,7 @@ def classify_intent_endpoint(
         reason=result.reason,
         method=result.classification_method,
         response=response_text,
+        plan=plan_dict,
     )
 
 

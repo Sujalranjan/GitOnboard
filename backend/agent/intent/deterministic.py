@@ -58,6 +58,11 @@ PLAN_PATTERNS = [
     r"^could\s+we\s+add\s+([A-Za-z0-9_\s]+)\??",
     r"^what\s+is\s+the\s+plan\s+for\s+([A-Za-z0-9_\s]+)\??",
     r"^estimate\s+(the\s+)?changes\s+for\s+([A-Za-z0-9_\s]+)\b",
+    r"^(modify|update|change|refine|revise)\s+(the\s+)?plan(\s+to|\s+for|\s+with)?\s*([A-Za-z0-9_\.\s\-]+)\??",
+    r"^plan\s+(for\s+)?([A-Za-z0-9_\s]+)\??",
+    r"^create\s+(a\s+)?plan\s+(for\s+)?([A-Za-z0-9_\s]+)\??",
+    r"^review\s+(the\s+)?plan(\s+for|\s+and)?\s*([A-Za-z0-9_\s]+)\??",
+    r"^add\s+([A-Za-z0-9_\s\-]+)\s+to\s+(the\s+)?plan\??",
 ]
 
 CLARIFY_UNDERSPECIFIED_PATTERNS = [
