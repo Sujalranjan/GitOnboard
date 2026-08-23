@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from backend.agent.intent.contracts import Intent, IntentResult
 from backend.ai.service import LLMService, build_default_service
 from backend.ai.schemas import LLMRequest, Message, MessageRole
+from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ async def classify_with_llm_async(
     """
     service = llm_service or build_default_service()
     req = LLMRequest(
+        model=settings.model_intent_router,
         messages=[
             Message(role=MessageRole.SYSTEM, content=CLASSIFICATION_SYSTEM_PROMPT),
             Message(role=MessageRole.USER, content=f"User request to classify:\n'''\n{requirement}\n'''"),
