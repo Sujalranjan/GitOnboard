@@ -25,7 +25,7 @@ from backend.agent.engineering_agent import EngineeringAgent
 from backend.database import SessionLocal
 from backend.models.implementation import AgentState, AgentEventType
 from backend.config import settings
-from backend.agent.modes import execute_chat, execute_explore, execute_explain
+from backend.agent.modes import execute_chat, execute_explore, execute_explain, execute_plan
 
 logger = logging.getLogger(__name__)
 
@@ -238,30 +238,54 @@ def build_agent_graph(
 
     def plan_terminal(state: AgentGraphState) -> Dict[str, Any]:
         run_id = state.get("run_id")
+        user_req = state.get("user_requirement", "")
+        repo_id = state.get("repository_id", "")
         history = list(state.get("node_history") or [])
         history.append("plan_terminal")
 
-        msg = f"Plan intent recognized for: '{state.get('user_requirement', '')}'. High-level DAG change estimation classified successfully."
-        logger.info(f"LangGraph plan_terminal completed for run '{run_id}' using model '{settings.model_terminal_plan}'")
-
         with SessionLocal() as db:
+            result = execute_plan(
+                user_requirement=user_req,
+                repository_id=repo_id,
+                agent_run_id=run_id,
+                db=db,
+            )
+            msg = result.get("response", "Planning processed.")
+            plan_data = result.get("plan")
+            logger.info(f"LangGraph plan_terminal completed for run '{run_id}' using model '{result.get('model')}'")
+
             try:
                 run = service.get_run(db, run_id)
-                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": {"response": msg, "model": settings.model_terminal_plan}})
+                meta_update = {
+                    "response": msg,
+                    "model": result.get("model"),
+                    "plan": plan_data,
+                    "evidence": result.get("evidence", []),
+                    "unknowns": result.get("unknowns", []),
+                    "risks": result.get("risks", []),
+                }
+                sync_graph_state_to_run(db, run_id=run_id, state={"metadata": meta_update})
                 if hasattr(service, "events") and service.events is not None:
+                    service.events.emit_event(
+                        db=db,
+                        run_id=run_id,
+                        event_type=AgentEventType.PLANNING_COMPLETED,
+                        message=f"Repository-aware implementation plan synthesized for '{user_req}'.",
+                        payload={"task_count": len(plan_data.get("tasks", [])) if plan_data else 0, "is_valid": result.get("is_valid", False)},
+                    )
                     service.events.emit_event(
                         db=db,
                         run_id=run_id,
                         event_type=AgentEventType.AGENT_MESSAGE,
                         message=msg,
-                        payload={"response": msg, "intent": "plan", "model": settings.model_terminal_plan},
+                        payload={"response": msg, "intent": "plan", "model": result.get("model"), "plan": plan_data},
                     )
                 if not service.state_machine.is_terminal(run.current_state):
                     service.transition_state(
                         db,
                         run_id=run_id,
                         to_state=AgentState.COMPLETED,
-                        reason="Plan intent processed",
+                        reason="Repository-aware plan synthesis completed",
                     )
             except Exception as err:
                 logger.warning(f"Error updating run state in plan_terminal: {err}")
@@ -269,7 +293,12 @@ def build_agent_graph(
         return {
             "current_state": AgentState.COMPLETED.value,
             "status": "COMPLETED",
-            "metadata": {"response": msg, "model": settings.model_terminal_plan},
+            "metadata": {
+                "response": msg,
+                "model": result.get("model"),
+                "plan": plan_data,
+                "evidence": result.get("evidence", []),
+            },
             "node_history": history,
         }
 

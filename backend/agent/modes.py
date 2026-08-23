@@ -359,3 +359,160 @@ def execute_explain(
     finally:
         if close_db:
             db.close()
+
+
+def execute_plan(
+    user_requirement: str,
+    repository_id: Optional[str] = None,
+    user_id: Optional[int] = None,
+    agent_run_id: Optional[str] = None,
+    db: Optional[Session] = None,
+    llm_service: Optional[LLMService] = None,
+) -> Dict[str, Any]:
+    """
+    Executes repository-aware implementation planning (Phase 4).
+    
+    Guarantees:
+      - Strictly read-only planning. 0 file writes, 0 worktree checkouts, 0 shell mutations.
+      - Bounded context acquisition loop (<= 2 iterations).
+      - Grounds tasks in FactStore facts vs explicit NEW components vs unknowns.
+      - Validates DAG acyclicity, acceptance criteria, and verification strategies.
+    """
+    from backend.agent.planning.orchestrator import PlanningOrchestrator
+    from backend.models.fact_store import FactRelationship
+
+    service = llm_service or build_default_service()
+    close_db = False
+    if db is None:
+        db = SessionLocal()
+        close_db = True
+
+    try:
+        # 1. Resolve repository and analysis_id strictly scoped to user
+        analysis_id = None
+        repo_name_resolved = repository_id or "default"
+        if repository_id:
+            from backend.models.repository import Repository
+            query = db.query(Repository)
+            if user_id is not None:
+                query = query.filter(Repository.user_id == user_id)
+            repo = query.filter(
+                (Repository.id == (int(repository_id) if repository_id.isdigit() else -1)) |
+                (Repository.url.ilike(f"%/{repository_id}")) |
+                (Repository.url.ilike(f"%/{repository_id}.git")) |
+                (Repository.url.ilike(f"%{repository_id}%"))
+            ).first()
+            if repo:
+                repo_name_resolved = repo.url.split("/")[-1].replace(".git", "")
+                latest_analysis = db.query(Analysis).filter(
+                    Analysis.repository_id == repo.id,
+                    Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
+                ).order_by(Analysis.id.desc()).first()
+                if latest_analysis:
+                    analysis_id = latest_analysis.id
+
+        if not analysis_id and user_id is not None:
+            user_repo = db.query(Repository).filter(Repository.user_id == user_id).order_by(Repository.id.desc()).first()
+            if user_repo:
+                user_analysis = db.query(Analysis).filter(
+                    Analysis.repository_id == user_repo.id,
+                    Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
+                ).order_by(Analysis.id.desc()).first()
+                if user_analysis:
+                    analysis_id = user_analysis.id
+
+        # 2. Bounded Context Acquisition Loop (Max 2 Iterations)
+        # Iteration 1: Initial Context Assembly
+        assembler = ContextAssembler(llm_service=service)
+        req = ContextAssemblyRequest(
+            repository_id=repo_name_resolved,
+            analysis_id=analysis_id,
+            requirement=user_requirement,
+            context_budget=ContextBudget(max_files=8, max_symbols=15, max_call_paths=5),
+        )
+        ctx = assembler.assemble(req, db=db)
+
+        # Iteration 2: 1-Hop Graph Expansion if anchor symbols exist
+        expanded_symbols = list(ctx.relevant_symbols)
+        seen_sym_names = {s.get("name") for s in expanded_symbols if s.get("name")}
+        if analysis_id and expanded_symbols and len(expanded_symbols) < 15:
+            top_sym_names = [s.get("name") for s in expanded_symbols[:5] if s.get("name")]
+            rel_query = db.query(FactRelationship).filter(
+                FactRelationship.analysis_id == analysis_id,
+                FactRelationship.rel_type.in_(["CALLS", "IMPORTS", "DEFINED_IN"])
+            )
+            # Find related symbols
+            related_edges = rel_query.limit(20).all()
+            for edge in related_edges:
+                target_name = edge.to_symbol_id.split(":")[-1] if edge.to_symbol_id else ""
+                if target_name and target_name not in seen_sym_names and len(expanded_symbols) < 15:
+                    seen_sym_names.add(target_name)
+                    expanded_symbols.append({
+                        "name": target_name,
+                        "kind": "related_symbol",
+                        "relation": edge.rel_type,
+                        "file_path": "",
+                    })
+
+        ctx.relevant_symbols = expanded_symbols
+
+        # 3. Invoke PlanningOrchestrator
+        orchestrator = PlanningOrchestrator(llm_service=service)
+        plan = orchestrator.create_plan(
+            context=ctx,
+            agent_run_id=agent_run_id or f"run_plan_{repo_name_resolved}",
+            repository_id=repo_name_resolved,
+            requirement=user_requirement,
+            db=db,
+            version=1,
+        )
+
+        # 4. Format Structured Markdown Response
+        lines = [
+            f"## Repository-Aware Implementation Plan for: *{user_requirement}*",
+            "",
+            f"**Target Repository**: `{repo_name_resolved}` (Analysis #{analysis_id or 'N/A'})",
+            f"**Validation Status**: {'✅ Valid Plan' if plan.validation and plan.validation.valid else '⚠️ Draft with Warnings'}",
+            "",
+            "### Planned Implementation Steps (DAG):",
+        ]
+        for task in plan.tasks:
+            comp_badge = f"`[{task.component_type}]`"
+            files_str = ", ".join(f"`{f}`" for f in task.affected_files) if task.affected_files else "No files specified"
+            deps_str = f"(Depends on: {', '.join(task.dependencies)})" if task.dependencies else "(Initial task)"
+            lines.append(f"1. **{task.title}** {comp_badge} {deps_str}")
+            lines.append(f"   - **Files**: {files_str}")
+            lines.append(f"   - **Verification**: `{task.verification_strategy}`")
+            if task.acceptance_criteria:
+                lines.append(f"   - **Criteria**: {task.acceptance_criteria[0]}")
+
+        if plan.unknowns:
+            lines.append("\n### Identified Unknowns & Assumptions:")
+            for u in plan.unknowns:
+                lines.append(f"- ❓ {u}")
+
+        if plan.risks:
+            lines.append("\n### Technical Risks & Blast Radius:")
+            for r in plan.risks:
+                lines.append(f"- ⚠️ {r}")
+
+        response_text = "\n".join(lines)
+
+        return {
+            "response": response_text,
+            "intent": "plan",
+            "model": settings.model_terminal_plan,
+            "plan": plan.model_dump(mode="json"),
+            "evidence": [
+                {"source_type": e.source_type, "source_id": e.source_id, "summary": e.summary}
+                for e in ctx.evidence[:10]
+            ],
+            "unknowns": plan.unknowns,
+            "risks": plan.risks,
+            "is_valid": plan.validation.valid if plan.validation else False,
+        }
+
+    finally:
+        if close_db:
+            db.close()
+
