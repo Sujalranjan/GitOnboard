@@ -29,6 +29,7 @@ dependencies = [
     "pytest-asyncio>=1.4.0",
     "docker>=7.1.0",
     "pywinpty>=2.0 ; sys_platform == 'win32'",
+    "langgraph>=1.2.11",
 ]
 
 [tool.ruff]
