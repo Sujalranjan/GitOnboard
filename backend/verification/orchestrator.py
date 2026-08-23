@@ -190,7 +190,20 @@ class VerificationOrchestrator:
         # Save to DB if Session provided
         if db:
             try:
+                repo_db_id = None
+                if repo_id:
+                    try:
+                        from backend.models.repository import Repository
+                        repo_obj = db.query(Repository).filter(
+                            (Repository.name == repo_id) | (Repository.project_name == repo_id) | (Repository.id == (int(repo_id) if repo_id.isdigit() else -1))
+                        ).first()
+                        if repo_obj:
+                            repo_db_id = repo_obj.id
+                    except Exception:
+                        pass
+
                 impl = Implementation(
+                    repository_id=repo_db_id,
                     title=contract_data.get("title", prompt[:80]),
                     raw_requirement=prompt,
                     status=ImplementationStatus.PLANNING,

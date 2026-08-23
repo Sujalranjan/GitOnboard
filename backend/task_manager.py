@@ -58,7 +58,15 @@ class TaskManager:
         self._statuses[key][task_name] = status
 
         if self._loop and not self._loop.is_closed():
-            payload = json.dumps({task_name: status})
+            try:
+                parsed = json.loads(status)
+                if isinstance(parsed, dict) and ("event_type" in parsed or "agent_run_id" in parsed or "payload" in parsed):
+                    payload = status
+                else:
+                    payload = json.dumps({task_name: status})
+            except Exception:
+                payload = json.dumps({task_name: status})
+
             for queue in list(self._subscribers[key]):
                 self._loop.call_soon_threadsafe(queue.put_nowait, payload)
 

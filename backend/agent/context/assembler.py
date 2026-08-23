@@ -263,7 +263,7 @@ class ContextAssembler:
                             "id": d.id,
                             "name": d.name,
                             "object_type": d.object_type,
-                            "file_id": d.file_id,
+                            "symbol_id": d.symbol_id,
                         }
                     )
 

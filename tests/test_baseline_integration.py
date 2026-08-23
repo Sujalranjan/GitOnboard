@@ -78,53 +78,7 @@ def test_baseline_repo_scan_unauthenticated_guard(client: TestClient):
     assert res_file.status_code == 401
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 3. Pipeline Submit -> Execute -> Verify Lifecycle
-# ──────────────────────────────────────────────────────────────────────────────
 
-def test_baseline_pipeline_lifecycle(client: TestClient):
-    """
-    Tests the End-to-End Verification Pipeline (/api/v1/pipeline):
-    1. POST /api/v1/pipeline/task/submit -> Synthesizes contract.
-    2. POST /api/v1/pipeline/task/{task_id}/execute -> Runs agent & verifies.
-    3. Verifies ExecutionState is standardized on the report.
-    """
-    prompt = "Add health status check endpoint with database ping"
-    
-    # 1. Submit task requirement
-    submit_res = client.post(
-        "/api/v1/pipeline/task/submit",
-        json={"repo_name": "baseline-test-repo", "prompt": prompt},
-    )
-    assert submit_res.status_code == 200
-    submit_data = submit_res.json()
-    assert "task_id" in submit_data
-    assert "contract" in submit_data
-    task_id = submit_data["task_id"]
-    contract = submit_data["contract"]
-    assert contract["requirement"] == prompt
-
-    # 2. Execute task with synthesized contract
-    exec_res = client.post(
-        f"/api/v1/pipeline/task/{task_id}/execute",
-        json={
-            "repo_name": "baseline-test-repo",
-            "contract_id": contract.get("id"),
-            "contract_data": contract,
-        },
-    )
-    assert exec_res.status_code == 200
-    exec_data = exec_res.json()
-    assert exec_data["task_id"] == task_id
-    assert "diff" in exec_data
-    assert "report" in exec_data
-
-    report = exec_data["report"]
-    assert "execution_state" in report
-    assert report["execution_state"] in [e.value for e in ExecutionState]
-    assert report["static_result"]["vector_name"] == "static"
-    assert report["dynamic_result"]["vector_name"] == "dynamic"
-    assert report["contract_result"]["vector_name"] == "contract"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

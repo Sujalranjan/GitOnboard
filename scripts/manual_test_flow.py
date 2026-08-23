@@ -832,9 +832,45 @@ def main():
         except EngineeringAgentError as err:
             print_kv("Terminal State Guard", f"PASSED -> Rejected subsequent invocation: {err}")
 
+        # 27. Phase 10: Workspace API Snapshot & Live Event Contract Verification
+        print_step_header(27, "Phase 10: Workspace Snapshot & Live Event Contract API Verification")
+        from fastapi.testclient import TestClient
+        from backend.main import app
+        from backend.database import get_db
+
+        def override_get_db():
+            yield db
+
+        app.dependency_overrides[get_db] = override_get_db
+        with TestClient(app) as client:
+            res_ws = client.get(f"/api/v1/agent/runs/{run.id}/workspace")
+            print_kv("GET /workspace HTTP Status", res_ws.status_code)
+            assert res_ws.status_code == 200
+            ws_data = res_ws.json()
+
+            print_kv("Workspace Run ID", ws_data["run"]["id"])
+            print_kv("Workspace Run State", ws_data["run"]["current_state"])
+            print_kv("Plan Present in Snapshot", ws_data["plan"] is not None)
+            print_kv("Total Tasks in Snapshot", len(ws_data["tasks"]))
+            print_kv("Modified Files in Changes", ws_data["changes"]["modified_files"])
+            print_kv("Latest Events Count", len(ws_data["latest_events"]))
+
+            # Verify Event ID and Sequence Number Contract (Guardrail 4)
+            if ws_data["latest_events"]:
+                first_evt = ws_data["latest_events"][0]
+                print_kv("First Event ID", first_evt["event_id"])
+                print_kv("First Event Sequence", first_evt["sequence"])
+                print_kv("First Event Type", first_evt["event_type"])
+                assert "event_id" in first_evt
+                assert "sequence" in first_evt
+                assert first_evt["sequence"] == 1
+            
+            print_kv("Phase 10 Workspace Invariant", "PASSED -> Authoritative atomic snapshot and sequence contract verified cleanly.")
+        app.dependency_overrides.clear()
+
     db.close()
 
-    print_banner("ALL FLOWS (PHASES 1 THROUGH 9) VERIFIED AND PASSED SUCCESSFULLY!")
+    print_banner("ALL FLOWS (PHASES 1 THROUGH 10) VERIFIED AND PASSED SUCCESSFULLY!")
 
 
 if __name__ == "__main__":

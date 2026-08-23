@@ -55,10 +55,11 @@ def test_cancellation_controller_cancel_run(db_session):
     token = controller.get_or_create_token("run-cancel-1")
     assert token.is_cancelled is False
 
-    success = controller.cancel_run(
+    cancelled_run = controller.cancel_run(
         db=db_session, run_id="run-cancel-1", reason="Operator aborted execution"
     )
-    assert success is True
+    assert cancelled_run is not None
+    assert cancelled_run.current_state == AgentState.CANCELLED
     assert token.is_cancelled is True
 
     # Verify run updated in DB

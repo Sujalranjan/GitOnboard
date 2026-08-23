@@ -116,6 +116,7 @@ class EngineeringAgent:
         config: Optional[Dict[str, Any]] = None,
         custom_run_id: Optional[str] = None,
         implementation_id: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> AgentRun:
         """
         Initializes and persists a new AgentRun, transitioning it from IDLE to UNDERSTANDING.
@@ -130,6 +131,7 @@ class EngineeringAgent:
             id=run_id,
             task_id=task_id,
             repository_id=repository_id,
+            user_id=user_id,
             user_requirement=user_requirement.strip(),
             implementation_id=implementation_id,
             current_state=AgentState.IDLE,
@@ -236,49 +238,13 @@ class EngineeringAgent:
         reason: Optional[str] = None,
     ) -> AgentRun:
         """
-        Cancels an in-flight AgentRun.
-        Transitions the run to terminal CANCELLED state and records cancellation reason.
+        Cancels an in-flight AgentRun across all active subsystems and returns the updated AgentRun.
+        Idempotent if already cancelled. Rejects cancellation of completed/failed runs.
         """
         run = self.get_run(db, run_id)
-
-        # Terminal state guard
-        if self.state_machine.is_terminal(run.current_state):
-            raise InvalidStateTransitionError(
-                run.current_state,
-                AgentState.CANCELLED,
-                f"Cannot cancel run '{run_id}' already in terminal state '{run.current_state.value}'",
-            )
-
-        cancel_msg = reason or "Run cancelled by user request"
-        run.cancellation_reason = cancel_msg
-
-        # Update in-flight plan tasks to BLOCKED
-        meta = run.metadata_json or {}
-        plan_dict = meta.get("plan")
-        if plan_dict and isinstance(plan_dict, dict):
-            try:
-                plan = Plan.model_validate(plan_dict)
-                for t in plan.tasks:
-                    if t.status in (PlanTaskStatus.RUNNING, PlanTaskStatus.VERIFYING, PlanTaskStatus.READY, PlanTaskStatus.PENDING):
-                        t.status = PlanTaskStatus.BLOCKED
-                        t.blocked_reason = f"Run cancelled: {cancel_msg}"
-                        t.completed_at = datetime.now(timezone.utc)
-                meta["plan"] = plan.model_dump(mode="json")
-                run.metadata_json = meta
-                from sqlalchemy.orm.attributes import flag_modified
-                flag_modified(run, "metadata_json")
-            except Exception as err:
-                logger.warning(f"Failed to cancel plan tasks for run '{run.id}': {err}")
-
-        db.add(run)
-        db.commit()
-
-        run = self.transition_state(
-            db,
-            run_id=run.id,
-            to_state=AgentState.CANCELLED,
-            reason=cancel_msg,
-            metadata={"cancelled_at": datetime.now(timezone.utc).isoformat()},
+        cancel_msg = reason or "User requested cancellation"
+        return self.cancellation_controller.cancel_run(
+            db, run_id, reason=cancel_msg, run_model=run
         )
 
         self.events.emit_event(
@@ -369,9 +335,8 @@ class EngineeringAgent:
 
         duration_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
 
-        # Persist observation in AgentRun metadata
-        meta = run.metadata_json or {}
-        actions_list = meta.get("actions", [])
+        meta = dict(run.metadata_json or {})
+        actions_list = list(meta.get("actions", []))
         actions_list.append(
             {
                 "action_type": action_type,
@@ -381,7 +346,9 @@ class EngineeringAgent:
             }
         )
         meta["actions"] = actions_list
+        from sqlalchemy.orm.attributes import flag_modified
         run.metadata_json = meta
+        flag_modified(run, "metadata_json")
         db.add(run)
         db.commit()
 
@@ -589,9 +556,16 @@ class EngineeringAgent:
                 f"Cannot create plan on run '{run_id}' in terminal state '{run.current_state.value}'"
             )
 
-        # Transition to PLANNING state if currently in IDLE or UNDERSTANDING
-        if run.current_state in (AgentState.IDLE, AgentState.UNDERSTANDING):
+        # Idempotency / Deduplication: If already in AWAITING_APPROVAL with a valid plan, return existing plan
+        existing_plan = self.get_plan(db, run_id)
+        if run.current_state == AgentState.AWAITING_APPROVAL and existing_plan and (existing_plan.validation and existing_plan.validation.valid):
+            logger.info(f"Plan already synthesized and validated for run '{run_id}' in AWAITING_APPROVAL. Returning existing plan.")
+            return existing_plan
+
+        # Transition to PLANNING state if currently in IDLE, UNDERSTANDING, or AWAITING_APPROVAL (replanning)
+        if run.current_state in (AgentState.IDLE, AgentState.UNDERSTANDING, AgentState.AWAITING_APPROVAL):
             self.transition_state(db, run.id, to_state=AgentState.PLANNING, reason="Starting plan synthesis")
+            db.refresh(run)
 
         # 1. Emit PLANNING_STARTED
         self.events.emit_event(
@@ -653,13 +627,17 @@ class EngineeringAgent:
                 db.add(run)
                 db.commit()
 
-                # Transition to AWAITING_APPROVAL (Human Review Boundary)
-                self.transition_state(
-                    db,
-                    run.id,
-                    to_state=AgentState.AWAITING_APPROVAL,
-                    reason=f"Plan v{plan.version} created and validated with {len(plan.tasks)} tasks; awaiting user review",
-                )
+                # Transition to AWAITING_APPROVAL only if still in PLANNING state
+                db.refresh(run)
+                if run.current_state == AgentState.PLANNING:
+                    self.transition_state(
+                        db,
+                        run.id,
+                        to_state=AgentState.AWAITING_APPROVAL,
+                        reason=f"Plan v{plan.version} created and validated with {len(plan.tasks)} tasks; awaiting user review",
+                    )
+                elif run.current_state == AgentState.AWAITING_APPROVAL:
+                    logger.info(f"Run '{run_id}' already transitioned to AWAITING_APPROVAL by concurrent operation")
             else:
                 from sqlalchemy.orm.attributes import flag_modified
                 err_msg = "; ".join(plan.validation.errors) if plan.validation else "Validation failed"
@@ -1209,16 +1187,6 @@ class EngineeringAgent:
         """Queries all pending approval requests for a run."""
         return self.approval_controller.get_pending_approvals(db, run_id)
 
-    def cancel_run(
-        self,
-        db: Session,
-        run_id: str,
-        reason: str = "User requested cancellation",
-    ) -> bool:
-        """
-        Requests cancellation across all active subsystems for the run.
-        """
-        run = self._get_run(db, run_id)
-        return self.cancellation_controller.cancel_run(db, run_id, reason=reason, run_model=run)
+
 
 

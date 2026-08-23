@@ -85,24 +85,27 @@ class AgentEventCoordinator:
             }
         )
 
-        # Broadcast on primary agent_run_id channel
-        cls._safe_notify(_channel_for_run(agent_run.id), ev_type.value, event_payload_json)
+        # Broadcast on primary agent_run_id channel to run owner and default
+        target_uids = [agent_run.user_id] if agent_run.user_id is not None else [0]
+        if 0 not in target_uids:
+            target_uids.append(0)
 
-        # Broadcast on task_id channel if distinct
-        if agent_run.task_id and agent_run.task_id != agent_run.id:
-            cls._safe_notify(_channel_for_run(agent_run.task_id), ev_type.value, event_payload_json)
+        for uid in target_uids:
+            cls._safe_notify(uid, _channel_for_run(agent_run.id), ev_type.value, event_payload_json)
+            if agent_run.task_id and agent_run.task_id != agent_run.id:
+                cls._safe_notify(uid, _channel_for_run(agent_run.task_id), ev_type.value, event_payload_json)
 
         logger.debug(f"AgentEvent emitted: run_id={agent_run.id} type={ev_type.value} msg='{message}'")
         return event
 
     @staticmethod
-    def _safe_notify(channel: str, event_name: str, payload_json: str) -> None:
+    def _safe_notify(user_id: int, channel: str, event_name: str, payload_json: str) -> None:
         try:
             task_manager.notify(
-                _EVENT_CHANNEL_USER_ID,
+                user_id,
                 channel,
                 event_name,
                 payload_json,
             )
         except Exception as err:
-            logger.debug(f"AgentEventCoordinator: SSE notify failed for channel '{channel}': {err}")
+            logger.debug(f"AgentEventCoordinator: SSE notify failed for user '{user_id}' channel '{channel}': {err}")
