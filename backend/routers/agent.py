@@ -264,7 +264,7 @@ def classify_intent_endpoint(
     Direct endpoint for fast, synchronous intent classification and response synthesis.
     """
     from backend.agent.intent import IntentRouter, Intent
-    from backend.agent.modes import execute_chat, execute_explore, execute_explain
+    from backend.agent.modes import execute_chat, execute_explore, execute_explain, execute_plan
 
     router_inst = IntentRouter()
     result = router_inst.classify(req.requirement)
@@ -279,7 +279,8 @@ def classify_intent_endpoint(
         mode_res = execute_explain(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Explanation complete.")
     elif result.intent == Intent.PLAN:
-        response_text = f"Plan intent recognized for: '{req.requirement}'. High-level DAG change estimation classified successfully."
+        mode_res = execute_plan(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
+        response_text = mode_res.get("response", "Plan generation complete.")
     elif result.intent == Intent.IMPLEMENT:
         response_text = f"Implement intent recognized for: '{req.requirement}'. Code modification request classified successfully."
     else:  # CLARIFY
