@@ -574,9 +574,14 @@ export function ChatPanel({ onStartRun, snapshot, repoId, onSelectFile }: ChatPa
                                   {children}
                                 </strong>
                               ),
+                              pre: ({ children }) => (
+                                <pre className="bg-[#0D1117] border border-[#30363D] p-3 rounded-lg overflow-x-auto my-2 text-zinc-200">
+                                  {children}
+                                </pre>
+                              ),
                               code: ({ className, children, ...props }: any) => {
                                 const isMultiline = String(children).includes("\n");
-                                if (!isMultiline) {
+                                if (!isMultiline && !className) {
                                   return (
                                     <code
                                       className="bg-[#21262D] text-purple-300 px-1.5 py-0.5 rounded font-mono text-[11px] border border-zinc-700/60"
@@ -587,14 +592,12 @@ export function ChatPanel({ onStartRun, snapshot, repoId, onSelectFile }: ChatPa
                                   );
                                 }
                                 return (
-                                  <pre className="bg-[#0D1117] border border-[#30363D] p-3 rounded-lg overflow-x-auto my-2 text-zinc-200">
-                                    <code
-                                      className="font-mono text-[11px] leading-relaxed block text-zinc-200"
-                                      {...props}
-                                    >
-                                      {children}
-                                    </code>
-                                  </pre>
+                                  <code
+                                    className={`font-mono text-[11px] leading-relaxed block text-zinc-200 ${className || ""}`}
+                                    {...props}
+                                  >
+                                    {children}
+                                  </code>
                                 );
                               },
                               a: ({ href, children }) => (

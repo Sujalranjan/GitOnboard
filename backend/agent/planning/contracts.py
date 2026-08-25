@@ -91,6 +91,7 @@ class Plan(BaseModel):
     requirement: str = Field(description="User requirement string being addressed")
     version: int = Field(default=1, description="Plan revision number")
     status: PlanStatus = Field(default=PlanStatus.DRAFT, description="Current plan approval status")
+    repository_revision: Optional[str] = Field(default=None, description="Repository commit SHA or revision snapshot at plan creation time")
     
     # Bounded summaries of repository context
     repository_understanding: Dict[str, Any] = Field(default_factory=dict, description="Bounded summary of understanding")

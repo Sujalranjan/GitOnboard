@@ -60,6 +60,7 @@ class ClassifyIntentResponse(BaseModel):
     reason: str
     method: str
     response: str
+    entities: List[Dict[str, Any]] = Field(default_factory=list)
     plan: Optional[Dict[str, Any]] = None
 
 
@@ -296,6 +297,7 @@ def classify_intent_endpoint(
     router_inst = IntentRouter()
     result = router_inst.classify(req.requirement)
 
+    entities_list = []
     plan_dict = None
     if result.intent == Intent.CHAT:
         mode_res = execute_chat(req.requirement)
@@ -303,6 +305,7 @@ def classify_intent_endpoint(
     elif result.intent == Intent.EXPLORE:
         mode_res = execute_explore(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Exploration complete.")
+        entities_list = mode_res.get("entities", [])
     elif result.intent == Intent.EXPLAIN:
         mode_res = execute_explain(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Explanation complete.")
@@ -323,6 +326,7 @@ def classify_intent_endpoint(
         reason=result.reason,
         method=result.classification_method,
         response=response_text,
+        entities=entities_list,
         plan=plan_dict,
     )
 
@@ -445,6 +449,28 @@ def execute_controlled_action(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
     except Exception as err:
         logger.error(f"Controlled action execution error: {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+@router.post("/runs/{run_id}/context")
+def assemble_run_context(
+    run_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Assembles bounded repository context and evidence for the run's requirement.
+    """
+    _get_authorized_run(run_id, current_user, db)
+    try:
+        ctx = agent_service.assemble_repository_context(db, run_id=run_id)
+        return ctx.model_dump(mode="json")
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except EngineeringAgentError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+    except Exception as err:
+        logger.error(f"Context assembly error for run '{run_id}': {err}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
 
 
@@ -585,8 +611,8 @@ def approve_run_plan(
         return _serialize_run(run)
     try:
         resolved_by = current_user.username if hasattr(current_user, "username") else "human_user"
-        run = agent_service.approve_plan(db=db, run_id=run_id, resolved_by=resolved_by)
-        run = agent_service.start_plan_execution(db=db, run_id=run_id)
+        run = agent_service.approve_plan(db=db, run_id=run_id, resolved_by=resolved_by, user_id=current_user.id)
+        run = agent_service.start_plan_execution(db=db, run_id=run_id, user_id=current_user.id)
         background_tasks.add_task(_background_execute_approved_plan, run_id)
         return _serialize_run(run)
     except RunNotFoundError as err:
@@ -615,7 +641,7 @@ def reject_run_plan(
     try:
         reason = req.reason if req else None
         resolved_by = current_user.username if hasattr(current_user, "username") else "human_user"
-        run = agent_service.reject_plan(db=db, run_id=run_id, reason=reason, resolved_by=resolved_by)
+        run = agent_service.reject_plan(db=db, run_id=run_id, reason=reason, resolved_by=resolved_by, user_id=current_user.id)
         return _serialize_run(run)
     except RunNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
@@ -645,8 +671,8 @@ def execute_approved_plan(
         return _serialize_run(run)
     try:
         # Enforce server-side execution authorization gate
-        agent_service.assert_execution_authorized(db=db, run_id=run_id)
-        run = agent_service.start_plan_execution(db=db, run_id=run_id)
+        agent_service.assert_execution_authorized(db=db, run_id=run_id, user_id=current_user.id)
+        run = agent_service.start_plan_execution(db=db, run_id=run_id, user_id=current_user.id)
         background_tasks.add_task(_background_execute_approved_plan, run_id)
         return _serialize_run(run)
     except RunNotFoundError as err:

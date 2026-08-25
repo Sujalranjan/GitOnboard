@@ -499,9 +499,14 @@ export function CodeEditorPanel({
                         {children}
                       </strong>
                     ),
+                    pre: ({ children }) => (
+                      <pre className="bg-[#0D1117] border border-[#30363D] p-3.5 rounded-xl overflow-x-auto my-3 text-zinc-200 shadow-sm">
+                        {children}
+                      </pre>
+                    ),
                     code: ({ className, children, ...props }: any) => {
                       const isMultiline = String(children).includes("\n");
-                      if (!isMultiline) {
+                      if (!isMultiline && !className) {
                         return (
                           <code
                             className="bg-[#21262D] text-purple-300 px-1.5 py-0.5 rounded font-mono text-[11px] border border-zinc-700/60"
@@ -512,14 +517,12 @@ export function CodeEditorPanel({
                         );
                       }
                       return (
-                        <pre className="bg-[#0D1117] border border-[#30363D] p-3.5 rounded-xl overflow-x-auto my-3 text-zinc-200 shadow-sm">
-                          <code
-                            className="font-mono text-xs leading-relaxed block text-zinc-200"
-                            {...props}
-                          >
-                            {children}
-                          </code>
-                        </pre>
+                        <code
+                          className={`font-mono text-xs leading-relaxed block text-zinc-200 ${className || ""}`}
+                          {...props}
+                        >
+                          {children}
+                        </code>
                       );
                     },
                     blockquote: ({ children }) => (

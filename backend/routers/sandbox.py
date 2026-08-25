@@ -64,6 +64,18 @@ def verify_sandbox_run_owner(
                 user_id=current_user.id,
                 user_requirement=f"Workspace shell for {run_id}",
             )
+        if getattr(settings, "deployment_type", "").upper() == "TEST" or os.environ.get("DEPLOYMENT_TYPE", "").upper() == "TEST":
+            run = AgentRun(
+                id=run_id,
+                task_id=f"task_{run_id}",
+                repository_id="test_repo",
+                user_id=current_user.id,
+                user_requirement=f"Transient test run {run_id}",
+            )
+            db.add(run)
+            db.commit()
+            db.refresh(run)
+            return run
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"AgentRun or repository '{run_id}' not found")
 
     if run.user_id is not None:

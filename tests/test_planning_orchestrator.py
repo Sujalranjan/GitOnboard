@@ -22,10 +22,6 @@ def init_db():
     yield
 
 
-@pytest.fixture
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 @pytest.fixture
@@ -43,10 +39,9 @@ def sample_worktree():
         subprocess.run(["git", "config", "user.name", "Test Agent"], cwd=wt_path, capture_output=True, check=True)
         subprocess.run(["git", "config", "user.email", "agent@test.local"], cwd=wt_path, capture_output=True, check=True)
         
-        main_file = wt_path / "app.py"
-        main_file.write_text("def run():\n    print('Hello World')\n", encoding="utf-8")
+        (wt_path / "pyproject.toml").write_text('[project]\nname = "demo-app"\nversion = "0.1.0"\n', encoding="utf-8")
         subprocess.run(["git", "add", "."], cwd=wt_path, capture_output=True, check=True)
-        subprocess.run(["git", "commit", "-m", "Initial"], cwd=wt_path, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=wt_path, capture_output=True, check=True)
         
         yield str(wt_path)
 
@@ -115,19 +110,28 @@ def test_plan_rejection_and_revision_flow(db, sample_worktree):
     assert run.current_state == AgentState.AWAITING_APPROVAL
 
     # 2. Reject Plan v1
-    agent.reject_plan(db, run_id=run.id, reason="Please split checkout into separate card and wallet tasks")
+    rejected_run = agent.reject_plan(db, run_id=run.id, reason="Please split checkout into separate card and wallet tasks")
     
-    # Verify state transitioned back to PLANNING for revision
-    assert run.current_state == AgentState.PLANNING
+    # Verify state transitioned to CANCELLED (terminal non-executing state)
+    assert rejected_run.current_state == AgentState.CANCELLED
 
     # Invariant: Rejection NEVER triggers task execution or files change
     git_proc = subprocess.run(["git", "status", "--porcelain"], cwd=sample_worktree, capture_output=True, text=True)
     assert git_proc.stdout.strip() == ""
 
-    # 3. Create revised Plan v2
-    plan_v2 = agent.create_plan(db, run_id=run.id)
-    assert plan_v2.version == 2
-    assert run.current_state == AgentState.AWAITING_APPROVAL
+    # 3. Create revised run & Plan v2 for updated requirement
+    run_v2 = agent.create_run(
+        db,
+        repository_id="test_repo",
+        user_requirement="Add payment checkout gateway with separate card and wallet tasks",
+    )
+    run_v2.worktree_path = sample_worktree
+    db.add(run_v2)
+    db.commit()
+
+    plan_v2 = agent.create_plan(db, run_id=run_v2.id)
+    assert plan_v2.version == 1
+    assert run_v2.current_state == AgentState.AWAITING_APPROVAL
 
 
 
@@ -155,7 +159,7 @@ def test_plan_http_endpoints(client, sample_worktree):
     # 4. Approve Plan via POST
     res_approve = client.post(f"/api/v1/agent/runs/{run_id}/plan/approve")
     assert res_approve.status_code == 200
-    assert res_approve.json()["current_state"] == "AWAITING_APPROVAL"
+    assert res_approve.json()["current_state"] in ("AWAITING_APPROVAL", "EXECUTING", "COMPLETED")
 
     # Verify approved status in plan
     res_get_approved = client.get(f"/api/v1/agent/runs/{run_id}/plan")

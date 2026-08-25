@@ -19,7 +19,7 @@ from backend.agent.context.contracts import CompletenessStatus
 from backend.agent.engineering_agent import EngineeringAgent
 from backend.database import Base, SessionLocal, engine
 from backend.main import app
-from backend.models.fact_store import FactCapability, FactRoute, FactSymbol
+from backend.models.fact_store import FactCapability, FactFile, FactRoute, FactSymbol
 from backend.models.implementation import AgentEvent, AgentEventType
 
 
@@ -29,12 +29,6 @@ def init_db():
     session = SessionLocal()
     yield session
     session.close()
-
-
-@pytest.fixture
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 @pytest.fixture
@@ -70,6 +64,13 @@ def test_scenario_existing_feature_modification(init_db, sample_worktree):
     db = init_db
 
     # Seed Fact Store
+    f = FactFile(
+        id="demo:file:app/auth.py",
+        analysis_id=1,
+        path="app/auth.py",
+        language="python",
+        size=100,
+    )
     sym = FactSymbol(
         id="demo:sym:login_user",
         analysis_id=1,
@@ -87,6 +88,7 @@ def test_scenario_existing_feature_modification(init_db, sample_worktree):
         status="ACTIVE",
         evidence_summary="User login function in app/auth.py",
     )
+    db.merge(f)
     db.merge(sym)
     db.merge(cap)
     db.commit()
@@ -145,6 +147,7 @@ def test_context_assembly_http_endpoint(client: TestClient, init_db, sample_work
         db,
         repository_id="demo-app",
         user_requirement="Inspect repository dependencies and files",
+        user_id=1,
     )
     run.worktree_path = sample_worktree
     db.add(run)

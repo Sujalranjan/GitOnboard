@@ -25,13 +25,6 @@ from backend.services.sandbox_manager import SandboxManager
 
 
 @pytest.fixture(scope="module")
-def client():
-    """TestClient instance for API tests."""
-    with TestClient(app, raise_server_exceptions=False) as c:
-        yield c
-
-
-@pytest.fixture(scope="module")
 def sample_repo_fixture():
     """Creates an isolated fixture repository in local repos directory."""
     repo_name = f"sample-repo-{uuid.uuid4().hex[:6]}"
