@@ -88,7 +88,8 @@ class FactStoreExpander:
 
                 # Check if it has capability memberships
                 cap_member = self.db.query(FactCapabilityMember).join(FactCapability).filter(
-                    FactCapabilityMember.symbol_id == sym_rec.id
+                    FactCapability.analysis_id == self.analysis_id,
+                    FactCapabilityMember.symbol_id == sym_rec.id,
                 ).first()
                 if cap_member and cap_member.capability:
                     enriched_cand["capability"] = cap_member.capability.name

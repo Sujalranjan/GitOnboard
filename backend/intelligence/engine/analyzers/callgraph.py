@@ -56,9 +56,11 @@ class PythonCallGraphVisitor(ast.NodeVisitor):
                 callee_name = node.func.attr
                 
             if callee_name:
-                # Without full type inference, we guess the callee ID. 
-                # A robust call graph analyzer would check imports and scope.
-                callee_id = generate_entity_id(EntityType.FUNCTION, self.file_path, callee_name)
+                module_path = self.file_path.replace("/", ".").replace(".py", "")
+                if module_path.endswith(".__init__"):
+                    module_path = module_path[:-9]
+                callee_qname = f"{module_path}.{callee_name}" if module_path else callee_name
+                callee_id = generate_entity_id(EntityType.FUNCTION, self.file_path, callee_qname)
                 
                 rel = Relationship(
                     id=generate_relationship_id(RelationshipType.CALLS, self.current_caller_id, callee_id),

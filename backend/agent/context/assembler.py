@@ -57,6 +57,7 @@ def extract_domain_concepts(requirement: str) -> DomainIntent:
     """
     Extracts high-signal primary capability keywords, secondary context keywords,
     and classifies the architectural domain of the requested capability.
+    Operates strictly on generic domain terminology without hardcoded repository file names.
     """
     import re
     planning_noise = {
@@ -77,36 +78,36 @@ def extract_domain_concepts(requirement: str) -> DomainIntent:
 
     # 1. Auth / Access Control / RBAC / Permissions
     if any(k in req_lower for k in ["role", "rbac", "admin", "permission", "access control", "guard", "oauth", "auth", "login"]):
-        primary_kws.extend(["auth", "login", "middleware", "auth.ts", "authService", "role", "admin", "guard"])
+        primary_kws.extend(["auth", "authentication", "login", "oauth", "jwt", "session", "user", "permission", "role", "guard", "security", "credentials", "middleware", "token"])
         secondary_kws.extend(["user", "session", "permission", "access"])
         arch_layer = "AUTH_ACCESS_CONTROL"
     # 2. Search / Query across data sources
     elif any(k in req_lower for k in ["search", "find", "filter", "lookup", "query", "index"]):
-        primary_kws.extend(["analysisStore", "api.ts", "UploadArea", "Sidebar", "AnalysisHistory", "RecentAnalyses"])
-        secondary_kws.extend(["analysis", "file", "upload", "data"])
+        primary_kws.extend(["search", "query", "find", "filter", "lookup", "index", "browse", "retrieve"])
+        secondary_kws.extend(["data", "item", "record", "store"])
         arch_layer = "DATA_SEARCH_QUERY"
     # 3. External Notifications / Messaging (Email, SMS, Webhooks)
     elif any(k in req_lower for k in ["email", "notification", "notify", "sms", "mailer", "webhook", "alert"]):
-        primary_kws.extend(["AccountSettings", "AnalysisPage", "analysisStore", "notification", "email"])
-        secondary_kws.extend(["finish", "status", "complete"])
+        primary_kws.extend(["notification", "notify", "email", "mailer", "alert", "message", "webhook", "sms"])
+        secondary_kws.extend(["finish", "status", "complete", "event"])
         arch_layer = "EXTERNAL_COMMUNICATIONS"
     # 4. Theming / Styling
     elif any(k in req_lower for k in ["dark", "mode", "theme", "color", "styling"]):
-        primary_kws.extend(["theme-provider", "ThemeToggle", "tailwind", "theme"])
+        primary_kws.extend(["theme", "dark", "mode", "color", "style", "palette", "theme-provider"])
         secondary_kws.extend(["style", "color"])
         arch_layer = "THEMING_UI"
     # 5. Pagination / Data fetching
     elif any(k in req_lower for k in ["pagination", "paginate", "page", "cursor"]):
-        primary_kws.extend(["api.ts", "AnalysisHistory", "RecentAnalyses", "pagination"])
-        secondary_kws.extend(["users", "user", "fetch"])
+        primary_kws.extend(["pagination", "paginate", "page", "cursor", "limit", "offset"])
+        secondary_kws.extend(["users", "user", "fetch", "query"])
         arch_layer = "API_CLIENT_PAGINATION"
     # 6. Payment / Billing
     elif any(k in req_lower for k in ["payment", "stripe", "billing", "checkout"]):
-        primary_kws.extend(["payment", "stripe", "billing", "checkout", "subscription"])
+        primary_kws.extend(["payment", "stripe", "billing", "checkout", "subscription", "invoice"])
         arch_layer = "PAYMENTS_BILLING"
     # 7. Server Cache / Infra
     elif any(k in req_lower for k in ["redis", "cache", "caching", "memcached"]):
-        primary_kws.extend(["redis", "cache", "caching"])
+        primary_kws.extend(["cache", "caching", "redis", "memcached", "store"])
         arch_layer = "SERVER_INFRA"
     else:
         primary_kws.extend(words)
@@ -135,6 +136,7 @@ def _extract_symbol_file_path(sym: FactSymbol) -> str:
 class ContextAssembler:
     """
     Assembles bounded, structured, and deduplicated repository evidence for an agent requirement.
+    Strictly isolated to the specified target analysis_id and repository.
     """
 
     def __init__(self, llm_service: Optional[Any] = None, worktree_path: Optional[str] = None):
@@ -191,7 +193,7 @@ class ContextAssembler:
                 source_id="req_analysis",
                 relevance=1.0,
                 confidence=1.0,
-                summary=f"Requirement Title: {analyzed_req.title}, domain: {arch_layer}, primary keywords: {primary_kws}",
+                summary=f"Requirement Title: {analyzed_req.title}, domain: {arch_layer}, primary keywords: {primary_kws[:6]}",
                 data={
                     "title": analyzed_req.title,
                     "goals": analyzed_req.goals,
@@ -209,28 +211,43 @@ class ContextAssembler:
         # 2. Repository Archetype & Architectural Boundary Check
         # ──────────────────────────────────────────────────────────────────────
         repo_files = []
-        if db:
-            if request.analysis_id:
-                repo_files = db.query(FactFile).filter(FactFile.analysis_id == request.analysis_id).all()
-            if not repo_files:
-                repo_files = db.query(FactFile).limit(100).all()
+        if db and request.analysis_id:
+            repo_files = db.query(FactFile).filter(FactFile.analysis_id == request.analysis_id).all()
+
+        if repo_files:
+            evidence_items.append(
+                ContextEvidence(
+                    source_type="target_repository_structure",
+                    source_id="repo_catalog",
+                    relevance=1.0,
+                    confidence=1.0,
+                    summary=f"Cataloged {len(repo_files)} target repository files",
+                    data={"files": [f.path for f in repo_files]},
+                )
+            )
 
         file_paths = [f.path.lower() for f in repo_files]
-        is_frontend = any("package.json" in p or "next.config" in p or p.endswith(".tsx") or p.endswith(".jsx") or p.endswith(".ts") for p in file_paths)
-        is_backend = any("requirements.txt" in p or "pyproject.toml" in p or p.endswith(".py") for p in file_paths)
+        is_python = any(p.endswith(".py") for p in file_paths)
+        is_frontend = any("package.json" in p or "next.config" in p or p.endswith((".tsx", ".jsx", ".ts", ".js")) for p in file_paths)
+        is_backend = is_python or any("requirements.txt" in p or "pyproject.toml" in p or "go.mod" in p or "cargo.toml" in p for p in file_paths)
+
+        if is_python and not is_frontend:
+            architecture_constraints.append("Target Repository Archetype: Python application / library")
+        elif is_frontend and not is_backend:
+            architecture_constraints.append("Target Repository Archetype: Frontend TypeScript / JavaScript application")
 
         # Architectural boundary check: server infrastructure in frontend client
         if (arch_layer == "SERVER_INFRA" or any(k in request.requirement.lower() for k in ["redis", "cache", "memcached"])) and is_frontend and not is_backend:
             unknowns.append(
                 "Architectural Boundary: Redis caching requires server-side infrastructure. "
-                "In this Next.js frontend repository, client-side Zustand/Redux state modules are not server caches. "
-                "Caching should be implemented via Next.js Route Handlers / Server Actions or an external API gateway."
+                "In this frontend repository, client-side state modules are not server caches. "
+                "Caching should be implemented via Route Handlers / Server Actions or an external API gateway."
             )
 
         # Missing capability check: email delivery infrastructure in frontend repository
-        if arch_layer == "EXTERNAL_COMMUNICATIONS" or any(k in request.requirement.lower() for k in ["email", "mailer", "smtp", "sendgrid"]):
+        if (arch_layer == "EXTERNAL_COMMUNICATIONS" or any(k in request.requirement.lower() for k in ["email", "mailer", "smtp", "sendgrid"])) and is_frontend and not is_backend:
             has_mailer = any("mailer" in p or "sendgrid" in p or "ses" in p for p in file_paths)
-            if not has_mailer and (is_frontend or True):
+            if not has_mailer:
                 unknowns.append(
                     "Required capability not present in target repository: Email delivery infrastructure "
                     "(SMTP/mailer service, background worker) is absent from this frontend repository. "
@@ -268,15 +285,22 @@ class ContextAssembler:
                     for s in secondary_kws:
                         if s.lower() in f_lower:
                             score += 0.4
+                    for rw in intent_data.get("raw_words", []):
+                        rw_clean = rw.lower().strip("./")
+                        if len(rw_clean) >= 3 and (rw_clean in f_lower or f_lower.endswith(rw_clean)):
+                            score += 3.0
                     if score >= 1.0:
                         file_scores[f.path] = max(file_scores.get(f.path, 0.0), score)
 
                 # Query symbols using domain keywords and explicit requirement words
                 search_kws = list(dict.fromkeys(primary_kws[:5] + intent_data.get("raw_words", [])[:5]))
                 for kw in search_kws:
+                    kw_clean = kw.strip("./")
+                    if len(kw_clean) < 2:
+                        continue
                     exact_symbols = db.query(FactSymbol).filter(
                         FactSymbol.analysis_id == request.analysis_id,
-                        FactSymbol.name.ilike(f"%{kw}%")
+                        FactSymbol.name.ilike(f"%{kw_clean}%")
                     ).limit(5).all()
                     for s in exact_symbols:
                         f_path = _extract_symbol_file_path(s)
@@ -294,6 +318,8 @@ class ContextAssembler:
                                 "name": s.name,
                                 "file_path": f_path,
                                 "kind": s.symbol_type,
+                                "symbol_type": s.symbol_type,
+                                "line_start": s.line_start or 1,
                             })
 
                 # Sort files by relevance score
@@ -312,6 +338,30 @@ class ContextAssembler:
                                 data={"file_path": f_path, "score": file_scores[f_path]},
                             )
                         )
+
+                # Enrich relevant symbols with symbols defined in the matched relevant files
+                if relevant_files and len(relevant_symbols) < budget.max_symbols:
+                    matched_db_files = db.query(FactFile).filter(
+                        FactFile.analysis_id == request.analysis_id,
+                        FactFile.path.in_(relevant_files)
+                    ).all()
+                    file_id_to_path = {f.id: f.path for f in matched_db_files}
+                    if file_id_to_path:
+                        file_symbols = db.query(FactSymbol).filter(
+                            FactSymbol.analysis_id == request.analysis_id,
+                            FactSymbol.file_id.in_(list(file_id_to_path.keys()))
+                        ).order_by(FactSymbol.line_start).limit(budget.max_symbols - len(relevant_symbols)).all()
+                        for s in file_symbols:
+                            if s.name not in seen_symbols:
+                                seen_symbols.add(s.name)
+                                f_path = file_id_to_path.get(s.file_id, _extract_symbol_file_path(s))
+                                relevant_symbols.append({
+                                    "name": s.name,
+                                    "file_path": f_path,
+                                    "kind": s.symbol_type,
+                                    "symbol_type": s.symbol_type,
+                                    "line_start": s.line_start or 1,
+                                })
             except Exception as err:
                 logger.debug(f"HybridRetriever query error: {err}")
 
@@ -345,12 +395,75 @@ class ContextAssembler:
 
 
         # ──────────────────────────────────────────────────────────────────────
-        # 3. RIM / Fact Store Relational Expansion
+        # 3. RIM / Fact Store Relational Expansion & Directed Graph Traversal
         # ──────────────────────────────────────────────────────────────────────
-        if db:
-            # Expand Symbols
+        if db and request.analysis_id:
+            from backend.agent.intent.semantic_query import classify_semantic_query, SemanticQueryClass
+            from backend.intelligence.retrieval.target_resolver import TargetEntityResolver
+            from backend.intelligence.retrieval.graph_traverser import FactStoreGraphTraverser
+
+            # A. Check for explicit semantic relationship intent
+            semantic_intent = classify_semantic_query(request.requirement)
+            if semantic_intent.target_raw_name:
+                resolver = TargetEntityResolver(db, request.analysis_id)
+                target_entity = resolver.resolve(semantic_intent.target_raw_name, hint=semantic_intent.target_hint)
+                if target_entity:
+                    traverser = FactStoreGraphTraverser(db, request.analysis_id)
+                    traversal_res = traverser.traverse(semantic_intent, target_entity)
+                    if traversal_res.related_entities:
+                        evidence_items.append(
+                            ContextEvidence(
+                                source_type="relationship_traversal",
+                                source_id=traversal_res.target_display_name,
+                                relevance=0.95,
+                                confidence=1.0,
+                                summary=traversal_res.explanation,
+                                data={
+                                    "query_class": traversal_res.query_class.value,
+                                    "target": traversal_res.target_display_name,
+                                    "direction": traversal_res.direction.value,
+                                    "related": [
+                                        {
+                                            "name": e.name,
+                                            "type": e.entity_type,
+                                            "location": e.location,
+                                            "line": e.line_number,
+                                            "role": e.relationship_role,
+                                        }
+                                        for e in traversal_res.related_entities
+                                    ]
+                                }
+                            )
+                        )
+
+                        # Enforce category population based on traversal
+                        for e in traversal_res.related_entities:
+                            if e.entity_type in ("function", "method", "class") and len(relevant_symbols) < budget.max_symbols:
+                                if e.name not in seen_symbols:
+                                    seen_symbols.add(e.name)
+                                    relevant_symbols.append({
+                                        "name": e.name,
+                                        "kind": e.entity_type,
+                                        "file_path": e.location or "",
+                                        "line_start": e.line_number or 1,
+                                    })
+                            elif e.entity_type == "file" and len(relevant_files) < budget.max_files:
+                                if e.location and e.location not in seen_files:
+                                    seen_files.add(e.location)
+                                    relevant_files.append(e.location)
+                            elif e.relationship_role in ("callee", "caller"):
+                                relevant_call_paths.append({
+                                    "source": traversal_res.target_display_name if traversal_res.direction.value == "FORWARD" else e.name,
+                                    "target": e.name if traversal_res.direction.value == "FORWARD" else traversal_res.target_display_name,
+                                    "rel_type": "CALLS"
+                                })
+
+            # B. Expand Symbols by Keywords
             for kw in keywords[:5]:
-                syms = db.query(FactSymbol).filter(FactSymbol.name.ilike(f"%{kw}%")).limit(10).all()
+                syms = db.query(FactSymbol).filter(
+                    FactSymbol.analysis_id == request.analysis_id,
+                    FactSymbol.name.ilike(f"%{kw}%")
+                ).limit(10).all()
                 for s in syms:
                     if s.name not in seen_symbols:
                         seen_symbols.add(s.name)
@@ -363,12 +476,12 @@ class ContextAssembler:
                             }
                         )
 
-                        if s.file_id:
-                            f_path = s.file_id.split(":")[-1]
-
-            # Expand Routes
+            # C. Expand Routes by Keywords
             for kw in keywords[:5]:
-                routes = db.query(FactRoute).filter(FactRoute.path.ilike(f"%{kw}%")).limit(5).all()
+                routes = db.query(FactRoute).filter(
+                    FactRoute.analysis_id == request.analysis_id,
+                    FactRoute.path.ilike(f"%{kw}%")
+                ).limit(5).all()
                 for r in routes:
                     relevant_routes.append(
                         {
@@ -389,9 +502,12 @@ class ContextAssembler:
                         )
                     )
 
-            # Expand Database Objects
+            # D. Expand Database Objects by Keywords
             for kw in keywords[:5]:
-                db_objs = db.query(FactDatabaseObject).filter(FactDatabaseObject.name.ilike(f"%{kw}%")).limit(5).all()
+                db_objs = db.query(FactDatabaseObject).filter(
+                    FactDatabaseObject.analysis_id == request.analysis_id,
+                    FactDatabaseObject.name.ilike(f"%{kw}%")
+                ).limit(5).all()
                 for d in db_objs:
                     relevant_db_objects.append(
                         {
@@ -405,10 +521,13 @@ class ContextAssembler:
         # ──────────────────────────────────────────────────────────────────────
         # 4. Capability Detection & First-Class Unknowns
         # ──────────────────────────────────────────────────────────────────────
-        if db:
-            matched_caps = []
+        matched_caps = []
+        if db and request.analysis_id:
             for kw in keywords:
-                caps = db.query(FactCapability).filter(FactCapability.name.ilike(f"%{kw}%")).limit(5).all()
+                caps = db.query(FactCapability).filter(
+                    FactCapability.analysis_id == request.analysis_id,
+                    FactCapability.name.ilike(f"%{kw}%")
+                ).limit(5).all()
                 for c in caps:
                     matched_caps.append(c)
                     capabilities.append(
@@ -431,12 +550,12 @@ class ContextAssembler:
                         )
                     )
 
-            # Check if domain requirement had no matching capability
-            if not matched_caps:
-                unknowns.append(
-                    f"No existing capability found for requirement keywords: {', '.join(keywords[:3])}. "
-                    "This appears to require a new capability rather than extending an existing one."
-                )
+        # Check if domain requirement had no matching capability
+        if not matched_caps:
+            unknowns.append(
+                f"No existing capability found for requirement keywords: {', '.join(keywords[:3])}. "
+                "This appears to require a new capability rather than extending an existing one."
+            )
 
         # ──────────────────────────────────────────────────────────────────────
         # 5. Dependency Inspection & Repository Tools
@@ -444,6 +563,7 @@ class ContextAssembler:
         try:
             tool_layer = RepositoryToolLayer(
                 repo_name=request.repository_id,
+                analysis_id=request.analysis_id,
                 db=db,
                 repo_root=request.worktree_path,
             )

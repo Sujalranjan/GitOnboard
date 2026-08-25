@@ -15,6 +15,17 @@ class PythonRouteVisitor(ast.NodeVisitor):
         self.entities: List[Entity] = []
         self.relationships: List[Relationship] = []
 
+    def _get_qualified_name(self, name: str) -> str:
+        parts = []
+        module_path = self.file_path.replace("/", ".").replace(".py", "")
+        if module_path.endswith(".__init__"):
+            module_path = module_path[:-9]
+        if module_path:
+            parts.append(module_path)
+        if name:
+            parts.append(name)
+        return ".".join(parts)
+
     def visit_FunctionDef(self, node: ast.FunctionDef):
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Call):
@@ -46,8 +57,7 @@ class PythonRouteVisitor(ast.NodeVisitor):
                             metadata={"method": method, "path": path, "framework": "FastAPI/Flask"}
                         ))
                         
-                        # Assuming the function ID
-                        func_qname = node.name # Simplification, ignoring class nesting
+                        func_qname = self._get_qualified_name(node.name)
                         func_id = generate_entity_id(EntityType.FUNCTION, self.file_path, func_qname)
                         
                         self.relationships.append(Relationship(

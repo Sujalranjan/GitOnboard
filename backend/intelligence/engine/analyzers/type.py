@@ -12,6 +12,8 @@ class PythonTypeVisitor(ast.NodeVisitor):
         self.file_path = file_path
         self.relationships: List[Relationship] = []
         self.namespace_stack: List[str] = []
+        self.imported_symbols: Dict[str, tuple[str, str, str]] = {}
+        self.imported_modules: Dict[str, str] = {}
         
     def _get_qualified_name(self, name: str) -> str:
         parts = []
@@ -24,25 +26,59 @@ class PythonTypeVisitor(ast.NodeVisitor):
         parts.append(name)
         return ".".join(parts)
 
+    def visit_Import(self, node: ast.Import):
+        for alias in node.names:
+            self.imported_modules[alias.asname or alias.name] = alias.name
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom):
+        module = node.module or ""
+        for alias in node.names:
+            full_name = f"{module}.{alias.name}" if module else alias.name
+            self.imported_symbols[alias.asname or alias.name] = (module, alias.name, full_name)
+        self.generic_visit(node)
+
+    def _extract_base_name(self, base_node: ast.AST) -> str:
+        if isinstance(base_node, ast.Name):
+            return base_node.id
+        elif isinstance(base_node, ast.Attribute):
+            val = self._extract_base_name(base_node.value)
+            return f"{val}.{base_node.attr}" if val else base_node.attr
+        return ""
+
     def visit_ClassDef(self, node: ast.ClassDef):
         class_qname = self._get_qualified_name(node.name)
         class_id = generate_entity_id(EntityType.CLASS, self.file_path, class_qname)
         
         for base in node.bases:
-            if isinstance(base, ast.Name):
-                base_name = base.id
-                # Heuristically assume the base is in the same file or a known import
-                # A true type resolver would find where `base_name` was imported from.
-                base_id = generate_entity_id(EntityType.CLASS, self.file_path, base_name)
+            base_name = self._extract_base_name(base)
+            if not base_name:
+                continue
+
+            if base_name in self.imported_symbols:
+                mod, sym_name, full_qname = self.imported_symbols[base_name]
+                target_file = mod.replace(".", "/") + ".py"
+                base_id = generate_entity_id(EntityType.CLASS, target_file, full_qname)
+            elif "." in base_name:
+                parts = base_name.split(".", 1)
+                if parts[0] in self.imported_modules:
+                    mod = self.imported_modules[parts[0]]
+                    target_file = mod.replace(".", "/") + ".py"
+                    base_id = generate_entity_id(EntityType.CLASS, target_file, f"{mod}.{parts[1]}")
+                else:
+                    base_id = generate_entity_id(EntityType.CLASS, "", base_name)
+            else:
+                base_qname = self._get_qualified_name(base_name)
+                base_id = generate_entity_id(EntityType.CLASS, self.file_path, base_qname)
                 
-                rel = Relationship(
-                    id=generate_relationship_id(RelationshipType.INHERITS, class_id, base_id),
-                    type=RelationshipType.INHERITS,
-                    source_id=class_id,
-                    target_id=base_id,
-                    metadata={"base": base_name}
-                )
-                self.relationships.append(rel)
+            rel = Relationship(
+                id=generate_relationship_id(RelationshipType.INHERITS, class_id, base_id),
+                type=RelationshipType.INHERITS,
+                source_id=class_id,
+                target_id=base_id,
+                metadata={"base": base_name, "line": node.lineno}
+            )
+            self.relationships.append(rel)
                 
         self.namespace_stack.append(node.name)
         self.generic_visit(node)
@@ -61,6 +97,4 @@ class TypeAnalyzer(BaseAnalyzer):
             visitor.visit(parsed.ast)
             
             for rel in visitor.relationships:
-                # We do not create dummy class entities here because we don't know where they live
-                # if they are external. If they are local, SymbolAnalyzer should have created them.
                 repository.relationships[rel.id] = rel

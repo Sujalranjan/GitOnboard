@@ -133,7 +133,17 @@ def classify_deterministic(requirement: str) -> Optional[IntentResult]:
                 classification_method="deterministic",
             )
 
-    # 3. Check EXPLORE
+    # 3. Check EXPLORE via semantic query classifier
+    from backend.agent.intent.semantic_query import classify_semantic_query, SemanticQueryClass
+    sem_intent = classify_semantic_query(requirement)
+    if sem_intent.query_class != SemanticQueryClass.GENERIC_LOOKUP and sem_intent.confidence >= 0.85:
+        return IntentResult(
+            intent=Intent.EXPLORE,
+            confidence=sem_intent.confidence,
+            reason=f"Matched semantic repository exploration pattern '{sem_intent.query_class.value}'",
+            classification_method="deterministic",
+        )
+
     for pattern in EXPLORE_PATTERNS:
         if re.search(pattern, norm):
             return IntentResult(
