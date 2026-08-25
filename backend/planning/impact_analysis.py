@@ -126,7 +126,14 @@ class ImpactAnalyzer:
             for sym in symbols:
                 file_path = ""
                 if sym.file_id:
-                    f = self.db.query(FactFile).filter(FactFile.id == sym.file_id).first()
+                    f = (
+                        self.db.query(FactFile)
+                        .filter(
+                            FactFile.analysis_id == self.analysis_id,
+                            FactFile.id == sym.file_id,
+                        )
+                        .first()
+                    )
                     file_path = f.path if f else ""
                 items.append(EvidenceItem(
                     evidence_id=next_id(),
@@ -158,22 +165,34 @@ class ImpactAnalyzer:
             # Outbound relationships
             rels = (
                 self.db.query(FactRelationship)
-                .filter(FactRelationship.analysis_id == self.analysis_id)
-                .filter(FactRelationship.from_symbol_id == sym.id)
+                .filter(
+                    FactRelationship.analysis_id == self.analysis_id,
+                    FactRelationship.from_symbol_id == sym.id,
+                )
                 .limit(5)
                 .all()
             )
             for rel in rels:
                 target = (
                     self.db.query(FactSymbol)
-                    .filter(FactSymbol.id == rel.to_symbol_id)
+                    .filter(
+                        FactSymbol.analysis_id == self.analysis_id,
+                        FactSymbol.id == rel.to_symbol_id,
+                    )
                     .first()
                 )
                 if not target:
                     continue
                 file_path = ""
                 if target.file_id:
-                    f = self.db.query(FactFile).filter(FactFile.id == target.file_id).first()
+                    f = (
+                        self.db.query(FactFile)
+                        .filter(
+                            FactFile.analysis_id == self.analysis_id,
+                            FactFile.id == target.file_id,
+                        )
+                        .first()
+                    )
                     file_path = f.path if f else ""
                 counter += 1
                 items.append(EvidenceItem(

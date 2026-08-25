@@ -19,8 +19,12 @@ semantic_router = APIRouter(tags=["semantic"])
 
 @semantic_router.get("/{repo_name}/semantic-status")
 def semantic_status_repo(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    repos_dir = CHROMA_BASE_DIR
-    target_dir = repos_dir / f"{current_user.id}_{repo_name}"
+    from backend.routers.repo.services.analysis import get_latest_analysis
+    try:
+        repo, latest_analysis = get_latest_analysis(repo_name, db, current_user)
+    except HTTPException:
+        return {"has_index": False}
+    target_dir = CHROMA_BASE_DIR / f"user_{current_user.id}" / f"repo_{repo.id}" / f"analysis_{latest_analysis.id}"
     if not target_dir.exists() or not target_dir.is_dir():
         return {"has_index": False}
         
@@ -40,8 +44,10 @@ def semantic_index_repo(repo_name: str, background_tasks: BackgroundTasks, db: S
         bg_db = SessionLocal()
         try:
             import chromadb
+            from backend.routers.repo.services.analysis import get_latest_analysis
+            repo, latest_analysis = get_latest_analysis(repo_name, bg_db, current_user)
             query_layer = get_or_build_model(repo_name, bg_db, current_user)
-            target_dir = CHROMA_BASE_DIR / f"{current_user.id}_{repo_name}"
+            target_dir = CHROMA_BASE_DIR / f"user_{current_user.id}" / f"repo_{repo.id}" / f"analysis_{latest_analysis.id}"
             chroma_dir = target_dir / "chroma"
             chroma_dir.mkdir(parents=True, exist_ok=True)
             state_file = target_dir / "semantic_index_state.json"
@@ -62,9 +68,9 @@ def semantic_index_repo(repo_name: str, background_tasks: BackgroundTasks, db: S
                     path = f.location.repository_path
                     try:
                         mtime = (target_dir / path).stat().st_mtime
-                        current_files[path] = mtime
                     except Exception:
-                        pass
+                        mtime = 0
+                    current_files[path] = mtime
             deleted_files = set(state.keys()) - set(current_files.keys())
             modified_files = set()
             new_files = set(current_files.keys()) - set(state.keys())
@@ -165,20 +171,16 @@ def semantic_index_repo(repo_name: str, background_tasks: BackgroundTasks, db: S
     return {"status": "processing"}
 
 def get_chroma_collection(repo_name: str, current_user: User, db: Session):
-    repos_dir = CHROMA_BASE_DIR
-    target_dir = repos_dir / f"{current_user.id}_{repo_name}"
+    from backend.routers.repo.services.analysis import get_latest_analysis
+    repo, latest_analysis = get_latest_analysis(repo_name, db, current_user)
+    target_dir = CHROMA_BASE_DIR / f"user_{current_user.id}" / f"repo_{repo.id}" / f"analysis_{latest_analysis.id}"
     chroma_dir = target_dir / "chroma"
     
     if not chroma_dir.exists():
-        repo = db.query(Repository).filter(Repository.user_id == current_user.id).filter(Repository.url.endswith(repo_name) | Repository.url.endswith(f"{repo_name}.git")).first()
-        if not repo:
-            raise HTTPException(status_code=404, detail="Repository not found")
-        
-        latest_analysis = db.query(Analysis).filter(Analysis.repository_id == repo.id).order_by(Analysis.created_at.desc()).first()
-        if not latest_analysis:
-            raise HTTPException(status_code=404, detail="No analysis found")
-            
-        semantic_artifact = db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == latest_analysis.id, AnalysisArtifact.type == "semantic_index_db").first()
+        semantic_artifact = db.query(AnalysisArtifact).filter(
+            AnalysisArtifact.analysis_id == latest_analysis.id,
+            AnalysisArtifact.type == "semantic_index_db"
+        ).first()
         if not semantic_artifact or not semantic_artifact.blob_data:
             raise HTTPException(status_code=404, detail="Semantic index not found in analysis artifacts")
             

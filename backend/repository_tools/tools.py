@@ -58,17 +58,11 @@ class RepositoryToolLayer:
         )
 
         # Resolve latest analysis_id if not explicitly provided
-        if self.analysis_id is None and self.db is not None:
-            repo = self.db.query(Repository).filter(Repository.url.contains(repo_name)).first()
-            if repo:
-                latest = (
-                    self.db.query(Analysis)
-                    .filter(Analysis.repository_id == repo.id)
-                    .order_by(Analysis.created_at.desc())
-                    .first()
-                )
-                if latest:
-                    self.analysis_id = latest.id
+        if self.analysis_id is None and self.db is not None and repo_name and repo_name != "default":
+            from backend.agent.modes import resolve_target_repository_and_analysis
+            _, resolved_analysis_id, _ = resolve_target_repository_and_analysis(self.db, repo_name, user_id)
+            if resolved_analysis_id:
+                self.analysis_id = resolved_analysis_id
 
     # ──────────────────────────────────────────────────────────────────────────
     # 1. read_file

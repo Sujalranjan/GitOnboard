@@ -20,7 +20,8 @@ if SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
             import psycopg2
             SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
         except ImportError:
-            SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+            fallback_db = "sqlite:///:memory:" if os.getenv("DEPLOYMENT_TYPE") == "TEST" else "sqlite:///data/local.db"
+            SQLALCHEMY_DATABASE_URL = fallback_db
 elif "postgresql" in SQLALCHEMY_DATABASE_URL:
     try:
         if "psycopg2" in SQLALCHEMY_DATABASE_URL:
@@ -28,7 +29,8 @@ elif "postgresql" in SQLALCHEMY_DATABASE_URL:
         else:
             import psycopg
     except ImportError:
-        SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+        fallback_db = "sqlite:///:memory:" if os.getenv("DEPLOYMENT_TYPE") == "TEST" else "sqlite:///data/local.db"
+        SQLALCHEMY_DATABASE_URL = fallback_db
 
 engine_args = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):

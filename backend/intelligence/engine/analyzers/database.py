@@ -15,6 +15,17 @@ class PythonDatabaseVisitor(ast.NodeVisitor):
         self.entities: List[Entity] = []
         self.relationships: List[Relationship] = []
 
+    def _get_qualified_name(self, name: str) -> str:
+        parts = []
+        module_path = self.file_path.replace("/", ".").replace(".py", "")
+        if module_path.endswith(".__init__"):
+            module_path = module_path[:-9]
+        if module_path:
+            parts.append(module_path)
+        if name:
+            parts.append(name)
+        return ".".join(parts)
+
     def visit_ClassDef(self, node: ast.ClassDef):
         # Extremely simplistic heuristic: SQLAlchemy classes usually inherit from Base, Model, etc.
         # Or have __tablename__
@@ -40,7 +51,8 @@ class PythonDatabaseVisitor(ast.NodeVisitor):
                 metadata={"orm_class": node.name}
             ))
             
-            class_id = generate_entity_id(EntityType.CLASS, self.file_path, node.name) # simplified
+            class_qname = self._get_qualified_name(node.name)
+            class_id = generate_entity_id(EntityType.CLASS, self.file_path, class_qname)
             self.relationships.append(Relationship(
                 id=generate_relationship_id(RelationshipType.USES, class_id, table_id),
                 type=RelationshipType.USES,

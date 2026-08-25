@@ -109,6 +109,10 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                 file_records.append(file_rec)
                 if entity.location.repository_path:
                     file_id_map[entity.location.repository_path] = db_id
+                    file_id_map[entity.location.repository_path.replace("\\", "/").lstrip("./")] = db_id
+                if entity.name:
+                    file_id_map[entity.name] = db_id
+                file_id_map[entity.id] = db_id
 
         if file_records:
             db.add_all(file_records)
@@ -118,24 +122,31 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
         seen_symbol_ids = set()
         symbol_records = []
         for entity_id, entity in model.entities.items():
-            if entity.type != EntityType.FILE and entity.id not in seen_symbol_ids:
+            if entity.type not in (EntityType.FILE, EntityType.DIRECTORY) and entity.id not in seen_symbol_ids:
                 seen_symbol_ids.add(entity.id)
-                f_id = entity.metadata.get("file_id")
-                f_db_id = f"{analysis_id}:{f_id}" if f_id else None
-                if not f_db_id and entity.location.repository_path in file_id_map:
-                    f_db_id = file_id_map[entity.location.repository_path]
+                f_id = entity.metadata.get("file_id") if entity.metadata else None
+                f_path = entity.location.repository_path if entity.location else None
+                
+                # Resolve foreign key to FactFile.id
+                f_db_id = None
+                if f_id and f_id in file_id_map:
+                    f_db_id = file_id_map[f_id]
+                elif f_path and f_path in file_id_map:
+                    f_db_id = file_id_map[f_path]
+                elif f_path and f_path.replace("\\", "/").lstrip("./") in file_id_map:
+                    f_db_id = file_id_map[f_path.replace("\\", "/").lstrip("./")]
 
                 db_id = f"{analysis_id}:{entity.id}"
                 symbol_rec = FactSymbol(
                     id=db_id,
                     analysis_id=analysis_id,
-                    file_id=f_db_id if f_id in seen_file_ids else None,
+                    file_id=f_db_id,
                     name=entity.name,
                     qualified_name=entity.qualified_name or entity.name,
                     symbol_type=entity.type.value if hasattr(entity.type, "value") else str(entity.type),
                     line_start=entity.location.start_line,
                     line_end=entity.location.end_line,
-                    signature_hash=entity.metadata.get("signature_hash"),
+                    signature_hash=entity.metadata.get("signature_hash") if entity.metadata else None,
                     metadata_json=entity.metadata,
                 )
                 symbol_records.append(symbol_rec)
@@ -150,8 +161,7 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
         for rel_id, rel in model.relationships.items():
             if rel.id not in seen_rel_ids:
                 seen_rel_ids.add(rel.id)
-                if (rel.source_id in seen_symbol_ids or rel.source_id in seen_file_ids) and \
-                   (rel.target_id in seen_symbol_ids or rel.target_id in seen_file_ids):
+                if (rel.source_id in seen_symbol_ids or rel.source_id in seen_file_ids):
                     rel_type_str = rel.type.value if hasattr(rel.type, "value") else str(rel.type)
                     db_id = f"{analysis_id}:{rel.id}"
                     rel_rec = FactRelationship(
@@ -178,7 +188,9 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
         route_handler_map = {}
         for rel in model.relationships.values():
             rel_type_str = rel.type.value if hasattr(rel.type, "value") else str(rel.type)
-            if rel_type_str in ("HANDLED_BY", "EXPOSES"):
+            if rel_type_str == "EXPOSES":
+                route_handler_map[rel.target_id] = rel.source_id
+            elif rel_type_str == "HANDLED_BY":
                 route_handler_map[rel.source_id] = rel.target_id
 
         for idx, entity in enumerate(model.entities.values()):
