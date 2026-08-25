@@ -11,12 +11,14 @@ Phase 1 Responsibilities:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from backend.config import settings
 from backend.agent.event_coordinator import AgentEventCoordinator
 from backend.agent.state_machine import AgentStateMachine, InvalidStateTransitionError
 from backend.agent.context.assembler import ContextAssembler
@@ -117,6 +119,7 @@ class EngineeringAgent:
         custom_run_id: Optional[str] = None,
         implementation_id: Optional[str] = None,
         user_id: Optional[int] = None,
+        worktree_path: Optional[str] = None,
     ) -> AgentRun:
         """
         Initializes and persists a new AgentRun, transitioning it from IDLE to UNDERSTANDING.
@@ -136,6 +139,7 @@ class EngineeringAgent:
             implementation_id=implementation_id,
             current_state=AgentState.IDLE,
             status=AgentRunStatus.QUEUED,
+            worktree_path=worktree_path,
             metadata_json=config or {},
             started_at=datetime.now(timezone.utc),
         )
@@ -491,6 +495,12 @@ class EngineeringAgent:
             # 2. Build assembly request
             meta = run.metadata_json or {}
             analysis_id = meta.get("analysis_id")
+            if not analysis_id and run.repository_id:
+                from backend.agent.modes import resolve_target_repository_and_analysis
+                _, analysis_id, _ = resolve_target_repository_and_analysis(db, run.repository_id, getattr(run, "user_id", None))
+                if analysis_id:
+                    meta["analysis_id"] = analysis_id
+
             request = ContextAssemblyRequest(
                 repository_id=run.repository_id or "default",
                 requirement=run.user_requirement,
@@ -538,6 +548,44 @@ class EngineeringAgent:
             )
             raise EngineeringAgentError(f"Repository context assembly failed: {err}") from err
 
+    def get_repository_revision(
+        self,
+        repository_id: Optional[str] = None,
+        worktree_path: Optional[str] = None,
+    ) -> str:
+        """
+        Retrieves the deterministic Git commit SHA / repository revision snapshot.
+        Checks active worktree, cloned repository directory, or deterministic fallback.
+        """
+        import subprocess
+        # 1. If worktree_path provided and exists
+        if worktree_path and Path(worktree_path).exists():
+            try:
+                res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=worktree_path, capture_output=True, text=True, timeout=5)
+                if res.returncode == 0 and res.stdout.strip():
+                    return res.stdout.strip()
+            except Exception:
+                pass
+
+        # 2. If repository_id resolves to local repo
+        if repository_id:
+            storage_dir = getattr(settings, "storage_path", "data")
+            candidate_paths = [
+                Path(repository_id),
+                Path(storage_dir) / "repos" / repository_id,
+                Path(storage_dir) / repository_id,
+            ]
+            for cp in candidate_paths:
+                if cp.exists():
+                    try:
+                        res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cp, capture_output=True, text=True, timeout=5)
+                        if res.returncode == 0 and res.stdout.strip():
+                            return res.stdout.strip()
+                    except Exception:
+                        pass
+
+        return f"rev:{repository_id or 'default'}"
+
     def create_plan(
         self,
         db: Session,
@@ -559,8 +607,14 @@ class EngineeringAgent:
         # Idempotency / Deduplication: If already in AWAITING_APPROVAL with a valid plan, return existing plan
         existing_plan = self.get_plan(db, run_id)
         if run.current_state == AgentState.AWAITING_APPROVAL and existing_plan and (existing_plan.validation and existing_plan.validation.valid):
-            logger.info(f"Plan already synthesized and validated for run '{run_id}' in AWAITING_APPROVAL. Returning existing plan.")
-            return existing_plan
+            existing_app = db.query(ApprovalRequest).filter(
+                ApprovalRequest.agent_run_id == run.id,
+                ApprovalRequest.action_type == ApprovalActionType.PLAN_APPROVAL,
+                ApprovalRequest.status.in_([ApprovalStatus.PENDING, ApprovalStatus.APPROVED]),
+            ).first()
+            if existing_app:
+                logger.info(f"Plan and ApprovalRequest already active for run '{run_id}' in AWAITING_APPROVAL. Returning existing plan.")
+                return existing_plan
 
         # Transition to PLANNING state if currently in IDLE, UNDERSTANDING, or AWAITING_APPROVAL (replanning)
         if run.current_state in (AgentState.IDLE, AgentState.UNDERSTANDING, AgentState.AWAITING_APPROVAL):
@@ -580,6 +634,9 @@ class EngineeringAgent:
             # 2. Assemble/fetch repository context
             context = self.assemble_repository_context(db, run.id, budget=budget)
 
+            # Capture repository revision at plan synthesis time
+            repo_revision = self.get_repository_revision(run.repository_id, run.worktree_path)
+
             # Determine plan revision version
             meta = run.metadata_json or {}
             existing_plan_data = meta.get("plan")
@@ -595,6 +652,7 @@ class EngineeringAgent:
                 requirement=run.user_requirement,
                 db=db,
                 version=new_version,
+                repository_revision=repo_revision,
             )
 
             # 4. Handle validation outcome
@@ -638,7 +696,7 @@ class EngineeringAgent:
                     db.add(pa)
                 db.commit()
 
-                # Create plan-specific ApprovalRequest bound to exact plan_id and version
+                # Create plan-specific ApprovalRequest bound to exact plan_id, version, and repository revision
                 aff_files = [
                     a.get("file") if isinstance(a, dict) else getattr(a, "file", str(a))
                     for a in (plan.affected_areas or [])
@@ -653,11 +711,12 @@ class EngineeringAgent:
                         "plan_id": plan.plan_id,
                         "version": plan.version,
                         "repository_id": run.repository_id or "default",
+                        "repository_revision": plan.repository_revision,
                         "task_count": len(plan.tasks),
                     },
                     affected_files=aff_files,
                     reason=f"Human authorization required for plan v{plan.version} ({plan.requirement[:60]})",
-                    metadata={"plan_id": plan.plan_id, "version": plan.version},
+                    metadata={"plan_id": plan.plan_id, "version": plan.version, "repository_revision": plan.repository_revision},
                     run_model=run,
                 )
 
@@ -721,17 +780,23 @@ class EngineeringAgent:
         run_id: str,
         plan_id: Optional[str] = None,
         plan_version: Optional[int] = None,
+        user_id: Optional[int] = None,
     ) -> None:
         """
         Server-side central execution authorization gate.
         Enforces:
-          1. Run exists and is in a valid execution state (AWAITING_APPROVAL or EXECUTING).
-          2. Plan exists, is marked APPROVED, and has valid validation result.
-          3. A persisted ApprovalRequest with status == APPROVED exists for this run and plan identity.
-          4. Plan ID and Version match between approval and active plan (prevents stale approval).
+          1. Requester ownership: If user_id is provided, verifies user owns the run.
+          2. Run state: Run exists and is in a valid execution state (AWAITING_APPROVAL or EXECUTING).
+          3. Plan validation: Plan exists, is marked APPROVED, and has valid validation result.
+          4. Persisted approval: A persisted ApprovalRequest with status == APPROVED exists for this run and plan identity.
+          5. Plan identity & version matching: Plan ID and Version match between approval and active plan (prevents stale approval).
+          6. Repository revision binding: Approved repository revision matches current repository revision.
         Raises EngineeringAgentError if any authorization condition fails.
         """
         run = self.get_run(db, run_id)
+        if user_id is not None and run.user_id is not None and run.user_id != user_id:
+            raise EngineeringAgentError(f"Execution not authorized: User '{user_id}' does not own run '{run_id}'")
+
         if run.current_state not in (AgentState.AWAITING_APPROVAL, AgentState.EXECUTING):
             raise EngineeringAgentError(
                 f"Execution not authorized: Run '{run_id}' is in state '{run.current_state.value}', expected EXECUTING or AWAITING_APPROVAL"
@@ -789,13 +854,34 @@ class EngineeringAgent:
                 f"Execution not authorized: Target plan version mismatch (v{plan_version} != active v{plan.version})"
             )
 
-    def approve_plan(self, db: Session, run_id: str, resolved_by: str = "human_user") -> AgentRun:
+        # Enforce repository revision binding
+        approved_revision = op.get("repository_revision") or getattr(plan, "repository_revision", None)
+        current_revision = self.get_repository_revision(run.repository_id, run.worktree_path)
+        if approved_revision and current_revision and approved_revision != current_revision:
+            raise EngineeringAgentError(
+                f"Execution not authorized: Repository revision mismatch (approved '{approved_revision}' != current '{current_revision}')"
+            )
+
+    def approve_plan(
+        self,
+        db: Session,
+        run_id: str,
+        resolved_by: str = "human_user",
+        user_id: Optional[int] = None,
+    ) -> AgentRun:
         """
         Explicitly approves the synthesized plan.
         CRITICAL INVARIANT: Approval does NOT execute tasks (PLAN_APPROVED != TASK_EXECUTION_STARTED).
         Run remains in AWAITING_APPROVAL state until Phase 5 TaskOrchestrator initiates execution.
+        Safe & Idempotent: Repeated approval requests on already approved/executing runs return without duplicate execution.
         """
         run = self.get_run(db, run_id)
+        if user_id is not None and run.user_id is not None and run.user_id != user_id:
+            raise EngineeringAgentError(f"Approval not authorized: User '{user_id}' does not own run '{run_id}'")
+
+        if run.current_state == AgentState.EXECUTING:
+            logger.info(f"Run '{run_id}' is already in EXECUTING state. Returning current state idempotently.")
+            return run
 
         if run.current_state != AgentState.AWAITING_APPROVAL:
             raise EngineeringAgentError(
@@ -806,6 +892,10 @@ class EngineeringAgent:
         plan = self.get_plan(db, run_id)
         if not plan:
             raise EngineeringAgentError(f"No plan found to approve for run '{run_id}'")
+
+        if plan.status == PlanStatus.APPROVED:
+            logger.info(f"Plan '{plan.plan_id}' is already APPROVED for run '{run_id}'. Returning current state idempotently.")
+            return run
 
         if plan.status != PlanStatus.READY_FOR_APPROVAL:
             raise EngineeringAgentError(
@@ -853,13 +943,27 @@ class EngineeringAgent:
 
         return run
 
-    def reject_plan(self, db: Session, run_id: str, reason: Optional[str] = None, resolved_by: str = "human_user") -> AgentRun:
+    def reject_plan(
+        self,
+        db: Session,
+        run_id: str,
+        reason: Optional[str] = None,
+        resolved_by: str = "human_user",
+        user_id: Optional[int] = None,
+    ) -> AgentRun:
         """
         Explicitly rejects the synthesized plan.
         CRITICAL INVARIANT: Rejection NEVER triggers task implementation.
         Transitions the run state to CANCELLED (terminal non-executing state).
+        Safe & Idempotent: Repeated rejections on CANCELLED runs return current state without error.
         """
         run = self.get_run(db, run_id)
+        if user_id is not None and run.user_id is not None and run.user_id != user_id:
+            raise EngineeringAgentError(f"Rejection not authorized: User '{user_id}' does not own run '{run_id}'")
+
+        if run.current_state == AgentState.CANCELLED:
+            logger.info(f"Run '{run_id}' is already CANCELLED. Returning current state idempotently.")
+            return run
 
         if run.current_state != AgentState.AWAITING_APPROVAL:
             raise EngineeringAgentError(
@@ -911,17 +1015,29 @@ class EngineeringAgent:
 
         return run
 
-    def start_plan_execution(self, db: Session, run_id: str) -> AgentRun:
+    def start_plan_execution(
+        self,
+        db: Session,
+        run_id: str,
+        user_id: Optional[int] = None,
+    ) -> AgentRun:
         """
         Initiates controlled execution of an approved implementation plan.
         Strict preconditions:
-          - AgentRun.current_state == AgentState.AWAITING_APPROVAL
+          - AgentRun.current_state == AgentState.AWAITING_APPROVAL (or already EXECUTING idempotently)
           - Plan.status == PlanStatus.APPROVED
           - Plan.validation.valid is True
           - A persisted APPROVED ApprovalRequest exists matching active plan
+          - Repository revision matches approved plan revision
         Transitions run state from AWAITING_APPROVAL -> EXECUTING and marks initial eligible tasks READY.
         """
         run = self.get_run(db, run_id)
+        if user_id is not None and run.user_id is not None and run.user_id != user_id:
+            raise EngineeringAgentError(f"Execution not authorized: User '{user_id}' does not own run '{run_id}'")
+
+        if run.current_state == AgentState.EXECUTING:
+            logger.info(f"Run '{run_id}' is already in EXECUTING state. Returning current state idempotently.")
+            return run
 
         if run.current_state != AgentState.AWAITING_APPROVAL:
             raise EngineeringAgentError(
@@ -930,7 +1046,7 @@ class EngineeringAgent:
             )
 
         # Enforce server-side execution authorization gate
-        self.assert_execution_authorized(db, run_id)
+        self.assert_execution_authorized(db, run_id, user_id=user_id)
 
         plan = self.get_plan(db, run_id)
         if not plan:

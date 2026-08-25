@@ -46,6 +46,7 @@ class PlanningOrchestrator:
         requirement: str,
         db: Optional[Session] = None,
         version: int = 1,
+        repository_revision: Optional[str] = None,
     ) -> Plan:
         """
         Synthesizes a validated Plan from the user requirement and Phase 3 RepositoryContext.
@@ -202,6 +203,7 @@ class PlanningOrchestrator:
             requirement=requirement,
             version=version,
             status=PlanStatus.DRAFT,
+            repository_revision=repository_revision,
             repository_understanding=repo_understanding_summary,
             architecture_context=arch_summary,
             affected_areas=truthful_affected_areas,
@@ -349,13 +351,39 @@ class PlanningOrchestrator:
         else:
             action_title = " ".join(w.capitalize() for w in cleaned_action.split())
 
-        # Detect repo archetype
-        is_ts_repo = any(
-            f.endswith((".ts", ".tsx", ".js", ".jsx")) or "package.json" in f or "src/" in f
-            for f in files
-        )
-        if not files and context.architecture_constraints:
-            is_ts_repo = any("typescript" in c.lower() or "next" in c.lower() or "react" in c.lower() for c in context.architecture_constraints)
+        # Detect repo archetype dynamically from context files and constraints
+        all_detected_paths: List[str] = list(files)
+        for ev in context.evidence:
+            if ev.data and isinstance(ev.data, dict):
+                f_list = ev.data.get("files") or []
+                if isinstance(f_list, list):
+                    all_detected_paths.extend(f_list)
+
+        py_files = [p for p in all_detected_paths if p.endswith(".py")]
+        ts_files = [p for p in all_detected_paths if p.endswith((".ts", ".tsx", ".js", ".jsx"))]
+        go_files = [p for p in all_detected_paths if p.endswith(".go")]
+
+        is_py_repo = len(py_files) > len(ts_files) or any("Python" in c for c in context.architecture_constraints)
+        is_ts_repo = len(ts_files) >= len(py_files) and not is_py_repo and (len(ts_files) > 0 or any("Frontend" in c or "TypeScript" in c for c in context.architecture_constraints))
+        is_go_repo = len(go_files) > 0 and not is_py_repo and not is_ts_repo
+
+        # Determine target source directory and test directory
+        src_dir = ""
+        test_dir = "tests"
+        if is_py_repo:
+            # Find python package directory (e.g. pls_cli/, src/, etc.)
+            for p in py_files:
+                parts = p.replace("\\", "/").split("/")
+                if len(parts) > 1 and parts[0] not in {"tests", "test", "docs", ".github", ".venv", "venv"}:
+                    src_dir = parts[0]
+                    break
+            if not src_dir:
+                src_dir = "src" if any(p.startswith("src/") for p in all_detected_paths) else ""
+            if any(p.startswith("test/") for p in all_detected_paths):
+                test_dir = "test"
+        elif is_ts_repo:
+            src_dir = "src/lib" if any(p.startswith("src/") for p in all_detected_paths) else "lib"
+            test_dir = "__tests__" if any(p.startswith("__tests__") for p in all_detected_paths) else "tests"
 
         safe_name = re.sub(r"[^\w]+", "_", action_title.lower()).strip("_")
         slug_words = [w for w in safe_name.split("_") if w not in {"what", "would", "it", "take", "to", "add", "implement", "a", "an", "the", "feature", "system", "for", "in", "of", "and", "integration", "support", "server", "side", "layer", "client", "provider", "module", "across"}]
@@ -365,7 +393,7 @@ class PlanningOrchestrator:
             # Verified EXISTING files in repository FactStore
             impl_files = files[:4]
             test_candidates = [f for f in files if "test" in f.lower() or "spec" in f.lower()]
-            test_files = test_candidates[:2] if test_candidates else ([f"tests/{slug}.test.ts"] if is_ts_repo else [f"tests/test_{slug}.py"])
+            test_files = test_candidates[:2] if test_candidates else ([f"{test_dir}/{slug}.test.ts"] if is_ts_repo else [f"{test_dir}/test_{slug}.py"])
 
             # Detail rationale
             if "role" in slug or "rbac" in slug:
@@ -403,32 +431,28 @@ class PlanningOrchestrator:
                 )
             )
         else:
-            # Explicitly justified NEW component proposing appropriate repo locations
-            if is_ts_repo or True:  # Default to repo structure based on context
-                if "payment" in act_lower or "stripe" in act_lower or "payment" in slug:
-                    slug = "payment_gateway"
-                    new_impl = ["src/lib/payment.ts", "src/services/paymentService.ts"]
-                    new_test = ["tests/payment.test.ts"]
-                    reason = "Encapsulates payment gateway client initialization and checkout session handling"
-                elif "redis" in act_lower or "cache" in act_lower or "redis" in slug:
-                    slug = "redis_caching"
-                    new_impl = ["src/lib/cache/redis.ts"]
-                    new_test = ["tests/redis_caching.test.ts"]
-                    reason = "Architectural boundary: Redis requires server infrastructure; provides server cache adapter for Next.js Route Handlers"
-                elif "notification" in act_lower or "email" in act_lower or "notification" in slug:
-                    slug = "notifications"
-                    new_impl = ["src/services/notificationService.ts"]
-                    new_test = ["tests/notifications.test.ts"]
-                    reason = "Required capability not present in repository: provides client notification adapter for backend mailer dispatch"
-                elif "auth" in act_lower or "oauth" in act_lower or "auth" in slug:
-                    slug = "oauth_auth"
-                    new_impl = ["lib/auth.ts", "src/services/authService.ts"]
-                    new_test = ["tests/google_oauth.test.ts"]
-                    reason = "Implements OAuth 2.0 token verification and session handlers"
-                else:
-                    new_impl = [f"src/lib/{slug}.ts"]
-                    new_test = [f"tests/{slug}.test.ts"]
-                    reason = f"Implements client/API support for {action_title}"
+            # Explicitly justified NEW component proposing appropriate repo locations based on target repository
+            if is_py_repo:
+                prefix = f"{src_dir}/" if src_dir else ""
+                new_impl = [f"{prefix}{slug}.py"]
+                new_test = [f"{test_dir}/test_{slug}.py"]
+                reason = f"Implements Python {action_title.lower()} module in target repository package ({prefix or 'root'})"
+            elif is_ts_repo:
+                prefix = f"{src_dir}/" if src_dir else "src/"
+                new_impl = [f"{prefix}{slug}.ts"]
+                new_test = [f"{test_dir}/{slug}.test.ts"]
+                reason = f"Implements TypeScript {action_title.lower()} module in target repository ({prefix})"
+            elif is_go_repo:
+                new_impl = [f"pkg/{slug}/{slug}.go"]
+                new_test = [f"pkg/{slug}/{slug}_test.go"]
+                reason = f"Implements Go {action_title.lower()} package in pkg/{slug}"
+            else:
+                # Generic fallback using target directory layout
+                prefix = f"{src_dir}/" if src_dir else ""
+                ext = ".py" if is_py_repo else (".ts" if is_ts_repo else ".code")
+                new_impl = [f"{prefix}{slug}{ext}"]
+                new_test = [f"{test_dir}/test_{slug}{ext}"]
+                reason = f"Implements {action_title} module in {prefix or 'repository root'}"
 
             # Step 1: Create new component
             steps.append(

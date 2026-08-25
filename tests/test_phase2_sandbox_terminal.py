@@ -26,13 +26,6 @@ from backend.services.sandbox_manager import SandboxManager
 
 
 @pytest.fixture(scope="module")
-def client():
-    """TestClient instance for API tests."""
-    with TestClient(app, raise_server_exceptions=False) as c:
-        yield c
-
-
-@pytest.fixture(scope="module")
 def sandbox_run_fixture():
     """Creates a temporary isolated worktree directory for testing sandbox execution."""
     run_id = f"test-run-{uuid.uuid4().hex[:8]}"

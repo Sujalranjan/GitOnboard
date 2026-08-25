@@ -203,17 +203,14 @@ class WorktreeProvisioner:
                         break
 
             # Source 2: Check active project root if repo matches current workspace (e.g. GitOnboard)
-            if files_populated == 0:
+            if files_populated == 0 and not (getattr(settings, "deployment_type", "").upper() == "TEST" or os.environ.get("DEPLOYMENT_TYPE", "").upper() == "TEST"):
                 workspace_dir = Path(settings.workspace_dir).resolve()
                 clean_name = repo_identifier.lower().replace("-", "").replace("_", "")
                 ws_name = workspace_dir.name.lower().replace("-", "").replace("_", "")
 
                 is_active_ws = (
-                    clean_name in ws_name
-                    or ws_name in clean_name
-                    or ws_name == "app"
-                    or (workspace_dir / "backend").exists()
-                    or repo_identifier.lower() in ("default", "gitonboard")
+                    clean_name == ws_name
+                    or (clean_name in ("default", "gitonboard") and ws_name in ("gitonboard", "app"))
                 )
 
                 if is_active_ws and workspace_dir != worktree_path:

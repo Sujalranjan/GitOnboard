@@ -18,6 +18,7 @@ Verifies:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy import create_engine
@@ -45,9 +46,11 @@ from backend.models.implementation import (
 )
 
 
+from sqlalchemy.pool import StaticPool
+
 @pytest.fixture
 def db_session():
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -355,3 +358,287 @@ def test_cancellation_blocks_execution(db_session):
     # Attempting to approve must fail
     with pytest.raises(EngineeringAgentError, match="Run must be in 'AWAITING_APPROVAL' state"):
         service.approve_plan(db=db_session, run_id=run.id)
+
+
+def test_repository_revision_binding_matches_and_mismatch_safety(db_session):
+    """
+    Test 11: Repository revision binding invariant:
+      - Plan records repository revision snapshot at creation time.
+      - Approved plan with same repository revision executes successfully.
+      - If repository revision changes before execution, execution is strictly blocked.
+      - Replanning creates a new approval context bound to updated revision.
+    """
+    service = EngineeringAgent()
+    run = service.create_run(
+        db=db_session,
+        repository_id="1",
+        user_requirement="Add Google OAuth login support",
+    )
+    plan = service.create_plan(db=db_session, run_id=run.id)
+
+    assert plan.repository_revision is not None
+    approval = db_session.query(ApprovalRequest).filter(
+        ApprovalRequest.agent_run_id == run.id,
+        ApprovalRequest.action_type == ApprovalActionType.PLAN_APPROVAL,
+    ).first()
+    assert approval.requested_operation.get("repository_revision") == plan.repository_revision
+
+    # Approve plan
+    service.approve_plan(db=db_session, run_id=run.id, resolved_by="testuser")
+
+    # Case A: Same revision -> Execution authorized
+    service.assert_execution_authorized(db=db_session, run_id=run.id)
+
+    # Case B: Repository changes revision to R2 -> Execution blocked
+    with patch.object(service, "get_repository_revision", return_value="rev:commit_sha_r2_modified"):
+        with pytest.raises(EngineeringAgentError, match="Repository revision mismatch"):
+            service.assert_execution_authorized(db=db_session, run_id=run.id)
+
+        with pytest.raises(EngineeringAgentError, match="Repository revision mismatch"):
+            service.start_plan_execution(db=db_session, run_id=run.id)
+
+
+def test_run_ownership_requester_authorization(db_session):
+    """
+    Test 12: Run Ownership / Requester Authorization invariant:
+      - Requester must own the AgentRun to approve, reject, or execute.
+      - Unauthorized user B attempts are rejected server-side without state change or mutation.
+    """
+    service = EngineeringAgent()
+
+    # User A (id=1) creates run
+    user_a = db_session.query(User).filter(User.id == 1).first()
+    run = service.create_run(
+        db=db_session,
+        repository_id="1",
+        user_requirement="Add Google OAuth login support",
+        user_id=user_a.id,
+    )
+    plan = service.create_plan(db=db_session, run_id=run.id)
+
+    # User B (id=2) exists
+    user_b = User(id=2, github_id="gh456", email="attacker@example.com", username="attacker")
+    db_session.add(user_b)
+    db_session.commit()
+
+    # User B attempts approve -> Rejected
+    with pytest.raises(EngineeringAgentError, match="Approval not authorized"):
+        service.approve_plan(db=db_session, run_id=run.id, resolved_by="attacker", user_id=user_b.id)
+
+    # User B attempts reject -> Rejected
+    with pytest.raises(EngineeringAgentError, match="Rejection not authorized"):
+        service.reject_plan(db=db_session, run_id=run.id, reason="Malicious reject", resolved_by="attacker", user_id=user_b.id)
+
+    # User B attempts execute -> Rejected
+    with pytest.raises(EngineeringAgentError, match="Execution not authorized"):
+        service.start_plan_execution(db=db_session, run_id=run.id, user_id=user_b.id)
+
+    # Verify state remains untouched in AWAITING_APPROVAL with PENDING approval
+    db_session.refresh(run)
+    assert run.current_state == AgentState.AWAITING_APPROVAL
+    app_req = db_session.query(ApprovalRequest).filter(ApprovalRequest.agent_run_id == run.id).first()
+    assert app_req.status == ApprovalStatus.PENDING
+
+
+def test_concurrent_and_duplicate_approval_safety(db_session):
+    """
+    Test 13: Concurrent and Duplicate Approval Safety:
+      - Double approval calls return idempotently without duplicate workers or errors.
+      - Double execute calls return idempotently.
+    """
+    service = EngineeringAgent()
+    run = service.create_run(
+        db=db_session,
+        repository_id="1",
+        user_requirement="Add Google OAuth login support",
+    )
+    plan = service.create_plan(db=db_session, run_id=run.id)
+
+    # First approval
+    run_app1 = service.approve_plan(db=db_session, run_id=run.id, resolved_by="testuser")
+    # Second approval (double click)
+    run_app2 = service.approve_plan(db=db_session, run_id=run.id, resolved_by="testuser")
+    assert run_app1.id == run_app2.id
+
+    # Start execution
+    run_exec1 = service.start_plan_execution(db=db_session, run_id=run.id)
+    assert run_exec1.current_state == AgentState.EXECUTING
+
+    # Second start execution (double click)
+    run_exec2 = service.start_plan_execution(db=db_session, run_id=run.id)
+    assert run_exec2.current_state == AgentState.EXECUTING
+
+    # Approval while executing is idempotent
+    run_app3 = service.approve_plan(db=db_session, run_id=run.id, resolved_by="testuser")
+    assert run_app3.current_state == AgentState.EXECUTING
+
+
+def test_direct_execute_api_bypass_cases(db_session):
+    """
+    Test 14: Direct /execute API bypass prevention across full router HTTP path:
+      Case A: No approval (PENDING) -> 400 Bad Request
+      Case B: Rejected plan -> 400 Bad Request
+      Case C: Stale approval (v1 approved, replanned to v2) -> 400 Bad Request
+      Case D: Valid approved plan -> 200 OK
+      Case E: Unauthorized user -> 403 Forbidden
+    """
+    from fastapi.testclient import TestClient
+    from backend.main import app
+    from backend.database import get_db
+    from backend.routers.auth import get_current_user
+
+    service = EngineeringAgent()
+    user1 = db_session.query(User).filter(User.id == 1).first()
+
+    app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[get_current_user] = lambda: user1
+
+    client = TestClient(app)
+
+    try:
+        # --- Case A: No approval ---
+        run_a = service.create_run(db=db_session, repository_id="1", user_requirement="Feature A", user_id=user1.id)
+        service.create_plan(db=db_session, run_id=run_a.id)
+
+        resp_a = client.post(f"/api/v1/agent/runs/{run_a.id}/execute")
+        assert resp_a.status_code == 400
+        assert "Execution not authorized" in resp_a.text
+
+        # --- Case B: Rejected plan ---
+        run_b = service.create_run(db=db_session, repository_id="1", user_requirement="Feature B", user_id=user1.id)
+        service.create_plan(db=db_session, run_id=run_b.id)
+        service.reject_plan(db=db_session, run_id=run_b.id, reason="No", resolved_by="testuser", user_id=user1.id)
+
+        resp_b = client.post(f"/api/v1/agent/runs/{run_b.id}/execute")
+        assert resp_b.status_code in (400, 409)
+
+        # --- Case C: Stale approval (v1 approved, replanned to v2) ---
+        run_c = service.create_run(db=db_session, repository_id="1", user_requirement="Feature C", user_id=user1.id)
+        service.create_plan(db=db_session, run_id=run_c.id)
+        service.approve_plan(db=db_session, run_id=run_c.id, resolved_by="testuser", user_id=user1.id)
+        service.transition_state(db_session, run_c.id, to_state=AgentState.PLANNING, reason="Replan")
+        service.create_plan(db=db_session, run_id=run_c.id)  # v2
+
+        resp_c = client.post(f"/api/v1/agent/runs/{run_c.id}/execute")
+        assert resp_c.status_code == 400
+        assert "Execution not authorized" in resp_c.text
+
+        # --- Case D: Valid approved plan ---
+        run_d = service.create_run(db=db_session, repository_id="1", user_requirement="Feature D", user_id=user1.id)
+        service.create_plan(db=db_session, run_id=run_d.id)
+        service.approve_plan(db=db_session, run_id=run_d.id, resolved_by="testuser", user_id=user1.id)
+
+        resp_d = client.post(f"/api/v1/agent/runs/{run_d.id}/execute")
+        assert resp_d.status_code == 200
+        data_d = resp_d.json()
+        assert data_d["current_state"] == AgentState.EXECUTING.value
+
+        # --- Case E: Unauthorized user (User 2 attempts to execute User 1's run) ---
+        user2 = User(id=2, github_id="gh999", email="other@example.com", username="otheruser")
+        db_session.add(user2)
+        db_session.commit()
+
+        app.dependency_overrides[get_current_user] = lambda: user2
+        resp_e = client.post(f"/api/v1/agent/runs/{run_d.id}/execute")
+        assert resp_e.status_code == 403
+
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_duplicate_approval_request_deduplication(db_session):
+    """
+    Test 15: Repeated planning requests for the same plan maintain exactly ONE active ApprovalRequest.
+    """
+    service = EngineeringAgent()
+    run = service.create_run(
+        db=db_session,
+        repository_id="1",
+        user_requirement="Add Google OAuth login support",
+    )
+    plan1 = service.create_plan(db=db_session, run_id=run.id)
+    plan2 = service.create_plan(db=db_session, run_id=run.id)
+
+    assert plan1.plan_id == plan2.plan_id
+
+    pending_approvals = db_session.query(ApprovalRequest).filter(
+        ApprovalRequest.agent_run_id == run.id,
+        ApprovalRequest.action_type == ApprovalActionType.PLAN_APPROVAL,
+        ApprovalRequest.status == ApprovalStatus.PENDING,
+    ).all()
+
+    assert len(pending_approvals) == 1
+
+
+def test_implement_planning_zero_repository_mutation(db_session, tmp_path):
+    """
+    Test 16: Proves zero pre-approval repository mutation:
+      - Real Git repository initialized with clean working tree.
+      - Before planning: records HEAD commit SHA, file hashes, and porcelain status.
+      - Runs IMPLEMENT mode planning.
+      - After planning: proves HEAD commit, working tree, and file hashes are 100% identical.
+      - Proves zero file writes, creations, deletions, or git modifications.
+    """
+    import subprocess
+    import hashlib
+
+    # 1. Initialize real Git repo in tmp_path
+    repo_dir = tmp_path / "target_repo"
+    repo_dir.mkdir()
+    (repo_dir / "src").mkdir()
+    (repo_dir / "src" / "index.ts").write_text("console.log('hello');\n", encoding="utf-8")
+    (repo_dir / "src" / "auth.ts").write_text("export function login() { return true; }\n", encoding="utf-8")
+
+    subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_dir, check=True, capture_output=True)
+
+    # Record baseline state before planning
+    head_sha_before = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_dir, capture_output=True, text=True).stdout.strip()
+    status_before = subprocess.run(["git", "status", "--porcelain"], cwd=repo_dir, capture_output=True, text=True).stdout.strip()
+    assert status_before == ""
+
+    def hash_files(root: Path) -> dict[str, str]:
+        hashes = {}
+        for p in root.rglob("*"):
+            if ".git" not in p.parts and p.is_file():
+                hashes[str(p.relative_to(root))] = hashlib.sha256(p.read_bytes()).hexdigest()
+        return hashes
+
+    file_hashes_before = hash_files(repo_dir)
+
+    # 2. Execute IMPLEMENT planning
+    service = EngineeringAgent()
+    run = service.create_run(
+        db=db_session,
+        repository_id="test_repo",
+        user_requirement="Add OAuth2 authentication provider to src/auth.ts",
+        worktree_path=str(repo_dir),
+    )
+    plan = service.create_plan(db=db_session, run_id=run.id)
+
+    res_implement = execute_implement(
+        user_requirement="Add OAuth2 authentication provider to src/auth.ts",
+        repository_id="test_repo",
+        agent_run_id=run.id,
+        db=db_session,
+    )
+
+    # 3. Verify zero repository mutation after planning
+    head_sha_after = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_dir, capture_output=True, text=True).stdout.strip()
+    status_after = subprocess.run(["git", "status", "--porcelain"], cwd=repo_dir, capture_output=True, text=True).stdout.strip()
+    file_hashes_after = hash_files(repo_dir)
+
+    assert head_sha_after == head_sha_before
+    assert status_after == ""
+    assert file_hashes_after == file_hashes_before
+
+    # Durable database workflow state exists and is in AWAITING_APPROVAL
+    db_session.refresh(run)
+    assert run.current_state == AgentState.AWAITING_APPROVAL
+    app_req = db_session.query(ApprovalRequest).filter(ApprovalRequest.agent_run_id == run.id).first()
+    assert app_req is not None
+    assert app_req.status == ApprovalStatus.PENDING
+
