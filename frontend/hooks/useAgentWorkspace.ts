@@ -173,14 +173,16 @@ export function useAgentWorkspace({
         });
 
         // Trigger snapshot refresh on key milestones
-        if (
-          payload.event_type === "PLAN_READY_FOR_APPROVAL" ||
-          payload.event_type === "PLAN_APPROVED" ||
-          payload.event_type === "TASK_COMPLETED" ||
-          payload.event_type === "TASK_FAILED" ||
-          payload.event_type === "VERIFICATION_COMPLETED" ||
-          payload.event_type === "REPAIR_REVERIFY_COMPLETED"
-        ) {
+        // Note: These event types are defined in backend/agent/events.py SNAPSHOT_REFRESH_TRIGGERS
+        const SNAPSHOT_REFRESH_EVENTS = [
+          "PLAN_READY_FOR_APPROVAL",
+          "PLAN_APPROVED",
+          "TASK_COMPLETED",
+          "TASK_FAILED",
+          "VERIFICATION_COMPLETED",
+          "REPAIR_REVERIFY_COMPLETED",
+        ];
+        if (SNAPSHOT_REFRESH_EVENTS.includes(payload.event_type)) {
           fetchSnapshot(targetRunId);
         }
       } catch (err) {
