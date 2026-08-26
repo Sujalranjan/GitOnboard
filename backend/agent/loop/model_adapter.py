@@ -246,10 +246,10 @@ CRITICAL RULES:
         if not self.llm_service:
             raise RuntimeError("ModelAdapter: No LLMService provided.")
 
-        from backend.ai.schemas import LLMRequest, LLMMessage
+        from backend.ai.schemas import LLMRequest, Message, MessageRole
 
         llm_messages = [
-            LLMMessage(role=m.role, content=m.content) for m in messages
+            Message(role=MessageRole(m.role), content=m.content) for m in messages
         ]
         request = LLMRequest(
             messages=llm_messages,
