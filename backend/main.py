@@ -111,9 +111,23 @@ def drop_legacy_fk_constraints(bind_engine):
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up application...")
-    Base.metadata.create_all(bind=engine)
-    ensure_db_schema_up_to_date(engine)
-    drop_legacy_fk_constraints(engine)
+
+    # Retry database connection on startup (handles docker compose race conditions)
+    max_retries = 10
+    retry_delay = 2
+    for attempt in range(max_retries):
+        try:
+            Base.metadata.create_all(bind=engine)
+            ensure_db_schema_up_to_date(engine)
+            drop_legacy_fk_constraints(engine)
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"Database connection failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {retry_delay}s...")
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error(f"Failed to connect to database after {max_retries} attempts")
+                raise
     
     # Wire the running event loop into TaskManager so background
     # threads can safely push SSE notifications via call_soon_threadsafe
