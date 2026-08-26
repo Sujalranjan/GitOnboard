@@ -103,29 +103,34 @@ class Plan(BaseModel):
     version: int = Field(default=1, description="Plan revision number")
     status: PlanStatus = Field(default=PlanStatus.DRAFT, description="Current plan approval status")
     repository_revision: Optional[str] = Field(default=None, description="Repository commit SHA or revision snapshot at plan creation time")
-    
+
     # Bounded summaries of repository context
     repository_understanding: Dict[str, Any] = Field(default_factory=dict, description="Bounded summary of understanding")
     architecture_context: Dict[str, Any] = Field(default_factory=dict, description="Bounded summary of architecture context")
     affected_areas: List[Dict[str, Any]] = Field(default_factory=list, description="Affected components and files")
     constraints: List[str] = Field(default_factory=list, description="Architectural constraints")
-    
+
     # Canonical Code-Level Repository Investigation
     investigation: Optional[RepositoryInvestigationResult] = Field(default=None, description="Detailed repository investigation, evidence, and assessment")
 
     # Task Graph
     tasks: List[PlanTask] = Field(default_factory=list, description="Actionable tasks forming a DAG")
     task_dependencies: Dict[str, List[str]] = Field(default_factory=dict, description="DAG map: task_id -> [dependency_task_ids]")
-    
+
     # Global acceptance and verification
     acceptance_criteria: List[str] = Field(default_factory=list, description="Global acceptance criteria")
     verification_strategy: str = Field(default="verify_static", description="Global verification strategy")
-    
+
     # Uncertainty & validation
     risks: List[str] = Field(default_factory=list, description="Identified technical and architectural risks")
     unknowns: List[str] = Field(default_factory=list, description="Explicit unresolved questions or missing context")
     validation: Optional[PlanValidationResult] = Field(default=None, description="Validation result from PlanValidator")
-    
+
+    # Approval/Rejection Audit Trail
+    resolved_by: Optional[str] = Field(default=None, description="Username of user who approved or rejected this plan")
+    resolved_at: Optional[datetime] = Field(default=None, description="Timestamp when plan was approved or rejected")
+    rejection_reason: Optional[str] = Field(default=None, description="Human-provided reason if plan was rejected")
+
     # Audit timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

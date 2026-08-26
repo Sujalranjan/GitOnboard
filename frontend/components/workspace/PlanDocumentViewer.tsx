@@ -170,6 +170,39 @@ export function PlanDocumentViewer({
             <span className="text-sm font-bold text-emerald-400">Verified</span>
           </div>
         </div>
+
+        {/* Approval/Rejection Audit Trail */}
+        {(plan.resolved_by || plan.resolved_at) && (
+          <div className="bg-[#0D1117] p-3 rounded-lg border border-[#21262D] space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] text-zinc-500 uppercase font-bold">
+              <span>Approval Audit Trail</span>
+              {plan.status === "APPROVED" && <span className="text-emerald-400">Approved</span>}
+              {plan.status === "REJECTED" && <span className="text-rose-400">Rejected</span>}
+            </div>
+            <div className="space-y-1 text-xs text-zinc-300 font-mono">
+              {plan.resolved_by && (
+                <div>
+                  <span className="text-zinc-500">Resolved by:</span>{" "}
+                  <span className="text-zinc-100">{plan.resolved_by}</span>
+                </div>
+              )}
+              {plan.resolved_at && (
+                <div>
+                  <span className="text-zinc-500">Resolved at:</span>{" "}
+                  <span className="text-zinc-100">
+                    {new Date(plan.resolved_at).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {plan.rejection_reason && (
+                <div className="pt-1 border-t border-zinc-800">
+                  <span className="text-zinc-500">Rejection reason:</span>
+                  <p className="text-zinc-200 pt-0.5">{plan.rejection_reason}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2. Stale Plan Warning Banner */}

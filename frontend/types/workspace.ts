@@ -192,6 +192,10 @@ export interface ImplementationPlanData {
     errors: string[];
     warnings: string[];
   };
+  // Approval/Rejection Audit Trail
+  resolved_by?: string;
+  resolved_at?: string;
+  rejection_reason?: string;
 }
 
 export interface ApprovalRequestItem {
