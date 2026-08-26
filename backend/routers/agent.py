@@ -244,12 +244,22 @@ def _background_execute_approved_plan(run_id: str):
     with SessionLocal() as db:
         try:
             logger.info(f"Starting background task execution for approved run '{run_id}'")
+            has_failure = False
             while True:
                 task, exec_res = agent_service.execute_next_task(db=db, run_id=run_id)
                 if not task:
+                    # All tasks completed
+                    if has_failure:
+                        agent_service.complete_run(db, run_id, success=False, failure_reason="One or more tasks failed")
+                    else:
+                        agent_service.complete_run(db, run_id, success=True)
                     break
+                # Check if this task execution failed
+                if exec_res and not exec_res.success:
+                    has_failure = True
         except Exception as err:
             logger.error(f"Background task execution failed for run '{run_id}': {err}", exc_info=True)
+            agent_service.complete_run(db, run_id, success=False, failure_reason=str(err))
 
 
 # ──────────────────────────────────────────────────────────────────────────────

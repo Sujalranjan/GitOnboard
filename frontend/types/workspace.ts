@@ -118,6 +118,7 @@ export interface AgentRunRecord {
   task_id: string;
   repository_id?: string;
   user_requirement?: string;
+  description?: string;
   current_state: AgentState | string;
   status: string;
   started_at: string;
@@ -181,6 +182,7 @@ export interface ImplementationPlanData {
   version: number;
   status: string;
   requirement?: string;
+  description?: string;
   acceptance_criteria?: string[];
   architecture_context?: Record<string, any>;
   repository_understanding?: Record<string, any>;

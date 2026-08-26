@@ -262,8 +262,15 @@ export function useAgentWorkspace({
   const approvePlan = async () => {
     if (!runId) return;
     try {
-      const res = await fetch(`/api/v1/agent/runs/${runId}/plan/approve`, { method: "POST" });
-      if (!res.ok) throw new Error("Failed to approve plan");
+      // 1. Approve the plan
+      const approveRes = await fetch(`/api/v1/agent/runs/${runId}/plan/approve`, { method: "POST" });
+      if (!approveRes.ok) throw new Error("Failed to approve plan");
+
+      // 2. Start execution immediately after approval
+      const executeRes = await fetch(`/api/v1/agent/runs/${runId}/execute`, { method: "POST" });
+      if (!executeRes.ok) throw new Error("Failed to start execution");
+
+      // 3. Refresh snapshot to show updated state
       await fetchSnapshot(runId);
     } catch (err: any) {
       setError(err.message || "Plan approval failed");

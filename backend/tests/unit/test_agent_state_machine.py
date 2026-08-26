@@ -53,6 +53,14 @@ def test_state_machine_valid_happy_path():
 def test_state_machine_fast_path():
     sm = AgentStateMachine()
 
+    # UNDERSTANDING -> AWAITING_APPROVAL (Direct plan synthesis)
+    assert sm.can_transition(AgentState.UNDERSTANDING, AgentState.AWAITING_APPROVAL)
+    assert sm.validate_transition(AgentState.UNDERSTANDING, AgentState.AWAITING_APPROVAL) == AgentState.AWAITING_APPROVAL
+
+    # UNDERSTANDING -> COMPLETED (Direct query/explore/explain completion)
+    assert sm.can_transition(AgentState.UNDERSTANDING, AgentState.COMPLETED)
+    assert sm.validate_transition(AgentState.UNDERSTANDING, AgentState.COMPLETED) == AgentState.COMPLETED
+
     # UNDERSTANDING -> EXECUTING (Direct execution without explicit approval)
     assert sm.can_transition(AgentState.UNDERSTANDING, AgentState.EXECUTING)
     assert sm.validate_transition(AgentState.UNDERSTANDING, AgentState.EXECUTING) == AgentState.EXECUTING

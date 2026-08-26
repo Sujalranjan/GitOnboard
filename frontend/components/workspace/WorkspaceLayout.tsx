@@ -172,6 +172,13 @@ export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayout
   const toggleAIAgent = useCallback(() => setIsAIAgentOpen((prev) => !prev), []);
   const toggleShortcutsModal = useCallback(() => setIsShortcutsModalOpen((prev) => !prev), []);
 
+  // Ensure Agent Workspace (virtual://plan) is open by default
+  useEffect(() => {
+    if (openTabs.length === 0) {
+      handleSelectFile("virtual://plan");
+    }
+  }, [openTabs.length, handleSelectFile]);
+
   // Global Keybindings Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

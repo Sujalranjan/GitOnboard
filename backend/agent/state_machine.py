@@ -48,7 +48,9 @@ VALID_TRANSITIONS: Dict[AgentState, Set[AgentState]] = {
     },
     AgentState.UNDERSTANDING: {
         AgentState.PLANNING,
+        AgentState.AWAITING_APPROVAL,  # Direct transition upon single-pass plan synthesis
         AgentState.EXECUTING,  # Fast-path for direct controlled action
+        AgentState.COMPLETED,  # Fast-path for informational chat/explore/explain/clarify queries
         AgentState.FAILED,
         AgentState.CANCELLED,
     },

@@ -33,6 +33,9 @@ interface CodeEditorPanelProps {
   onSelectPlan?: (plan: ImplementationPlanData) => void;
 }
 
+// Plan tab constants
+const PLAN_TAB_KEY = "virtual://plan";
+
 export function CodeEditorPanel({
   activeFile,
   onSelectFile,
@@ -89,8 +92,7 @@ export function CodeEditorPanel({
   const getFileBasename = (path: string) => {
     if (!path) return "";
     if (isPlanDoc(path)) {
-      const planVer = selectedPlan?.version || activePlan?.version || 1;
-      return `Implementation Plan · v${planVer}`;
+      return "Agent Workspace";
     }
     const parts = path.split("/");
     return parts[parts.length - 1];
