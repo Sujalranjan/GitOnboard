@@ -572,6 +572,92 @@ def get_run_plan(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
 
 
+@router.get("/runs/{run_id}/plan/history", response_model=List[Dict[str, Any]])
+def get_run_plan_history(
+    run_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    """
+    Retrieves the complete history of implementation plans for an authorized agent run.
+    Plans are ordered by version descending (newest first).
+    """
+    _get_authorized_run(run_id, current_user, db)
+    try:
+        from backend.models.implementation import AgentRunPlanHistory
+        plans = (
+            db.query(AgentRunPlanHistory)
+            .filter(AgentRunPlanHistory.agent_run_id == run_id)
+            .order_by(AgentRunPlanHistory.version.desc())
+            .all()
+        )
+        return [
+            {
+                "plan_id": p.plan_id,
+                "version": p.version,
+                "status": p.status.value if hasattr(p.status, "value") else str(p.status),
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "resolved_by": p.resolved_by,
+                "resolved_at": p.resolved_at.isoformat() if p.resolved_at else None,
+                "rejection_reason": p.rejection_reason,
+                "superseded_at": p.superseded_at.isoformat() if p.superseded_at else None,
+                **p.plan_json,  # Unpack the full plan data
+            }
+            for p in plans
+        ]
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except Exception as err:
+        logger.error(f"Get plan history failed for run '{run_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+@router.get("/runs/{run_id}/plan/history/{plan_id}", response_model=Dict[str, Any])
+def get_run_plan_by_id(
+    run_id: str,
+    plan_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Retrieves a specific plan version from an authorized agent run's history.
+    """
+    _get_authorized_run(run_id, current_user, db)
+    try:
+        from backend.models.implementation import AgentRunPlanHistory
+        plan_record = (
+            db.query(AgentRunPlanHistory)
+            .filter(
+                AgentRunPlanHistory.agent_run_id == run_id,
+                AgentRunPlanHistory.plan_id == plan_id,
+            )
+            .first()
+        )
+        if not plan_record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Plan '{plan_id}' not found in run '{run_id}'",
+            )
+        return {
+            "plan_id": plan_record.plan_id,
+            "version": plan_record.version,
+            "status": plan_record.status.value if hasattr(plan_record.status, "value") else str(plan_record.status),
+            "created_at": plan_record.created_at.isoformat() if plan_record.created_at else None,
+            "resolved_by": plan_record.resolved_by,
+            "resolved_at": plan_record.resolved_at.isoformat() if plan_record.resolved_at else None,
+            "rejection_reason": plan_record.rejection_reason,
+            "superseded_at": plan_record.superseded_at.isoformat() if plan_record.superseded_at else None,
+            **plan_record.plan_json,  # Unpack the full plan data
+        }
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.error(f"Get plan by ID failed for run '{run_id}', plan '{plan_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
 @router.post("/runs/{run_id}/plan/approve", response_model=AgentRunResponse)
 def approve_run_plan(
     run_id: str,

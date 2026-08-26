@@ -68,6 +68,19 @@ export function useAgentWorkspace({
         addPlanToHistory(data.plan);
       }
 
+      // Fetch plan history from backend
+      try {
+        const historyRes = await fetch(`/api/v1/agent/runs/${targetRunId}/plan/history`);
+        if (historyRes.ok) {
+          const historyData: ImplementationPlanData[] = await historyRes.json();
+          if (Array.isArray(historyData)) {
+            historyData.forEach((plan) => addPlanToHistory(plan));
+          }
+        }
+      } catch (historyErr) {
+        console.warn("Failed to fetch plan history from backend:", historyErr);
+      }
+
       // Re-seed processed events
       if (data.latest_events && Array.isArray(data.latest_events)) {
         data.latest_events.forEach((e) => {
@@ -94,7 +107,7 @@ export function useAgentWorkspace({
     } finally {
       setIsLoading(false);
     }
-  }, [activeFile]);
+  }, [activeFile, addPlanToHistory]);
 
   // 2. Connect SSE Stream
   const connectSSE = useCallback((targetRunId: string) => {

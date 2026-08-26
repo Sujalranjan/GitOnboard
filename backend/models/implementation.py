@@ -548,6 +548,59 @@ class AgentEvent(Base):
         return f"<AgentEvent run={self.agent_run_id!r} type={self.event_type!r}>"
 
 
+class AgentRunPlanHistoryStatus(str, Enum):
+    """Plan approval lifecycle status in persistent history."""
+    DRAFT = "DRAFT"
+    VALIDATING = "VALIDATING"
+    READY_FOR_APPROVAL = "READY_FOR_APPROVAL"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    INVALID = "INVALID"
+    SUPERSEDED = "SUPERSEDED"
+
+
+class AgentRunPlanHistory(Base):
+    """
+    Persistent historical record of implementation plans generated for an AgentRun.
+    Each plan version is immutable once stored; superseded plans are marked as such.
+    """
+    __tablename__ = "agent_run_plan_history"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    agent_run_id = Column(
+        String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    plan_id = Column(String, nullable=False, unique=True, index=True)
+    version = Column(Integer, nullable=False, index=True)
+
+    # Plan lifecycle
+    status = Column(
+        SAEnum(AgentRunPlanHistoryStatus, name="agent_run_plan_history_status"),
+        nullable=False,
+        default=AgentRunPlanHistoryStatus.DRAFT,
+        index=True,
+    )
+
+    # Approval/rejection metadata
+    resolved_by = Column(String, nullable=True)  # Username who approved/rejected
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+
+    # Plan supersession
+    superseded_by_plan_id = Column(String, ForeignKey("agent_run_plan_history.plan_id"), nullable=True)
+    superseded_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Complete plan JSON (immutable snapshot)
+    plan_json = Column(JSONType, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False, index=True)
+
+    agent_run = relationship("AgentRun")
+
+    def __repr__(self) -> str:
+        return f"<AgentRunPlanHistory run={self.agent_run_id!r} v{self.version} status={self.status.value}>"
+
+
 class FileChange(Base):
     """A single file's change, parsed from an AgentRun's captured git diff."""
     __tablename__ = "file_changes"
