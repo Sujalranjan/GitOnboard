@@ -932,10 +932,13 @@ class EngineeringAgent:
                 f"Plan '{plan.plan_id}' is in status '{plan.status.value}'. Only plans in READY_FOR_APPROVAL can be approved."
             )
 
-        # Mark plan as approved
+        # Mark plan as approved with audit trail
         from sqlalchemy.orm.attributes import flag_modified
+        now = datetime.now(timezone.utc)
         plan.status = PlanStatus.APPROVED
-        plan.updated_at = datetime.now(timezone.utc)
+        plan.resolved_by = resolved_by
+        plan.resolved_at = now
+        plan.updated_at = now
 
         meta = run.metadata_json or {}
         meta["plan"] = plan.model_dump(mode="json")
@@ -953,7 +956,7 @@ class EngineeringAgent:
             if plan_history:
                 plan_history.status = AgentRunPlanHistoryStatus.APPROVED
                 plan_history.resolved_by = resolved_by
-                plan_history.resolved_at = datetime.now(timezone.utc)
+                plan_history.resolved_at = now
                 db.add(plan_history)
                 db.commit()
         except Exception as err:
@@ -1035,8 +1038,12 @@ class EngineeringAgent:
         plan = self.get_plan(db, run_id)
         if plan:
             from sqlalchemy.orm.attributes import flag_modified
+            now = datetime.now(timezone.utc)
             plan.status = PlanStatus.REJECTED
-            plan.updated_at = datetime.now(timezone.utc)
+            plan.resolved_by = resolved_by
+            plan.resolved_at = now
+            plan.rejection_reason = reason
+            plan.updated_at = now
             meta = run.metadata_json or {}
             meta["plan"] = plan.model_dump(mode="json")
             run.metadata_json = meta
@@ -1053,7 +1060,7 @@ class EngineeringAgent:
                 if plan_history:
                     plan_history.status = AgentRunPlanHistoryStatus.REJECTED
                     plan_history.resolved_by = resolved_by
-                    plan_history.resolved_at = datetime.now(timezone.utc)
+                    plan_history.resolved_at = now
                     plan_history.rejection_reason = reason
                     db.add(plan_history)
                     db.commit()
