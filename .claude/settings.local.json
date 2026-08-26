@@ -3,7 +3,8 @@
     "allow": [
       "Bash(uv run *)",
       "Bash(python -m pytest backend/tests/unit/test_agent_state_machine.py -xvs)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }
