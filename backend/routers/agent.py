@@ -452,28 +452,6 @@ def execute_controlled_action(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
 
 
-@router.post("/runs/{run_id}/context")
-def assemble_run_context(
-    run_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> Dict[str, Any]:
-    """
-    Assembles bounded repository context and evidence for the run's requirement.
-    """
-    _get_authorized_run(run_id, current_user, db)
-    try:
-        ctx = agent_service.assemble_repository_context(db, run_id=run_id)
-        return ctx.model_dump(mode="json")
-    except RunNotFoundError as err:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
-    except EngineeringAgentError as err:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
-    except Exception as err:
-        logger.error(f"Context assembly error for run '{run_id}': {err}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
-
-
 @router.post("/runs/{run_id}/cancel", response_model=AgentRunResponse)
 def cancel_agent_run(
     run_id: str,
