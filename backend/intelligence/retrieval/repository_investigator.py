@@ -59,6 +59,7 @@ class RepositoryInvestigator:
     ) -> RepositoryInvestigationResult:
         """
         Executes multi-stage investigation and returns a deterministic RepositoryInvestigationResult.
+        Coverage score and assessment thresholds are calculated from actual search results.
         """
         if base_path:
             self.source_reader = RepositorySourceReader(base_path=base_path)
@@ -71,14 +72,15 @@ class RepositoryInvestigator:
         relevant_symbols: Set[str] = set()
         relevant_routes: Set[str] = set()
 
+        # Initialize coverage with False flags (will be set to True when searches occur)
         coverage = InvestigationCoverage(
-            fact_routes_searched=bool(db and analysis_id),
-            fact_symbols_searched=bool(db and analysis_id),
-            fact_files_searched=bool(db and analysis_id),
-            lexical_searched=True,
-            source_snippets_inspected=True,
-            semantic_searched=True,
-            coverage_score=1.0 if (db and analysis_id) else 0.5,
+            fact_routes_searched=False,
+            fact_symbols_searched=False,
+            fact_files_searched=False,
+            lexical_searched=False,
+            source_snippets_inspected=False,
+            semantic_searched=False,
+            coverage_score=0.0,  # Will be calculated below
         )
 
         if not db or not analysis_id:
@@ -105,6 +107,8 @@ class RepositoryInvestigator:
         # 2. Query FactRoute for Existing API Endpoints
         # ──────────────────────────────────────────────────────────────────────
         db_routes = db.query(FactRoute).filter(FactRoute.analysis_id == analysis_id).all()
+        coverage.fact_routes_searched = True  # Mark that routes were searched
+
         for r in db_routes:
             path_lower = r.path.lower()
             method_lower = (r.method or "GET").lower()
@@ -202,6 +206,8 @@ class RepositoryInvestigator:
         # 3. Query FactSymbol for Functions, Classes, and Methods
         # ──────────────────────────────────────────────────────────────────────
         db_symbols = db.query(FactSymbol).filter(FactSymbol.analysis_id == analysis_id).all()
+        coverage.fact_symbols_searched = True  # Mark that symbols were searched
+
         for s in db_symbols:
             name_lower = s.name.lower()
             qname_lower = (s.qualified_name or "").lower()
@@ -269,6 +275,9 @@ class RepositoryInvestigator:
         # 4. Query FactFile for Target Structure
         # ──────────────────────────────────────────────────────────────────────
         db_files = db.query(FactFile).filter(FactFile.analysis_id == analysis_id).all()
+        coverage.fact_files_searched = True  # Mark that files were searched
+        coverage.source_snippets_inspected = True  # Lexical search includes snippet inspection
+
         for f in db_files:
             f_lower = f.path.lower()
             # Ignore documentation files for code implementation evidence
@@ -299,10 +308,26 @@ class RepositoryInvestigator:
             and any(k in e.candidate.symbol_or_route.lower() for k in ["/health", "/status", "/ping", "/healthz"])
         ]
 
+        # ──────────────────────────────────────────────────────────────────────
+        # Calculate Coverage Score Based on Actual Evidence Found
+        # ──────────────────────────────────────────────────────────────────────
+        # Coverage = (routes found + symbols found + files checked + snippets inspected) / 4
+        coverage_components = [
+            bool(db_routes),  # Routes exist in analysis
+            bool(db_symbols),  # Symbols exist in analysis
+            bool(db_files),  # Files exist in analysis
+            coverage.source_snippets_inspected,  # Snippets were inspected
+        ]
+        coverage.coverage_score = sum(coverage_components) / len(coverage_components)
+        coverage.lexical_searched = True  # Lexical search is always done
+
+        # ──────────────────────────────────────────────────────────────────────
+        # Assessment with Explicit Thresholds
+        # ──────────────────────────────────────────────────────────────────────
         if exact_route_matches:
-            # If the requirement is literally "implement health check" and route /health already exists with full health semantics
+            # If the requirement is literally "implement health check" and route /health already exists
             has_health_route = any("/health" in e.candidate.symbol_or_route.lower() for e in exact_route_matches)
-            
+
             if has_health_route and "database" not in req_lower:
                 assessment = ImplementationAssessment.EXISTING
                 primary_ev = exact_route_matches[0]
@@ -313,7 +338,7 @@ class RepositoryInvestigator:
                 assessment = ImplementationAssessment.PARTIAL
                 primary_ev = exact_route_matches[0]
                 assessment_reason = f"Related status/ping route '{primary_ev.candidate.symbol_or_route}' found in '{primary_ev.source_file}'."
-                decision_rationale = f"Extend the existing '{primary_ev.source_file}' ({primary_ev.candidate.symbol_or_route}) endpoint rather than creating a duplicate health file."
+                decision_rationale = f"Extend the existing '{primary_ev.source_file}' ({primary_ev.candidate.symbol_or_route}) endpoint rather than creating a duplicate."
         elif any(e.semantic_role in ("IMPLEMENTATION", "EXTENSION_POINT") for e in evidence_items):
             # Symbols or helpers exist (e.g. check_database_connection or status helper)
             assessment = ImplementationAssessment.PARTIAL
@@ -321,14 +346,24 @@ class RepositoryInvestigator:
             assessment_reason = f"Existing extension point '{primary_ev.candidate.symbol_or_route}' verified in '{primary_ev.source_file}'."
             decision_rationale = f"Extend existing repository module '{primary_ev.source_file}'."
         else:
-            # Hard gate for NEW
-            if coverage.is_complete and not any(e.evidence_status == EvidenceStatus.CONFIRMED for e in evidence_items):
+            # Hard gate for NEW: requires complete coverage AND no confirmed evidence
+            has_confirmed_evidence = any(e.evidence_status == EvidenceStatus.CONFIRMED for e in evidence_items)
+
+            if coverage.is_complete and coverage.coverage_score >= 0.95 and not has_confirmed_evidence:
                 assessment = ImplementationAssessment.NEW
-                assessment_reason = f"Investigation confirmed 0 matching routes or symbols for '{requirement}' across {len(db_files)} repository files."
+                assessment_reason = f"Investigation confirmed 0 matching routes or symbols for '{requirement}' across {len(db_files)} repository files (coverage: {coverage.coverage_score:.0%})."
                 decision_rationale = "No existing implementation found. Proposing a new module in the appropriate repository structure."
             else:
+                # Fallback to UNCERTAIN if coverage incomplete
                 assessment = ImplementationAssessment.UNCERTAIN
-                assessment_reason = "Available repository evidence is ambiguous or incomplete."
+                reason_parts = []
+                if not coverage.is_complete:
+                    reason_parts.append("Investigation coverage incomplete")
+                if coverage.coverage_score < 0.95:
+                    reason_parts.append(f"coverage too low ({coverage.coverage_score:.0%})")
+                if has_confirmed_evidence:
+                    reason_parts.append("conflicting evidence found")
+                assessment_reason = "; ".join(reason_parts) if reason_parts else "Available repository evidence is ambiguous or incomplete."
                 decision_rationale = "Deeper clarification required before safe modification."
 
         return RepositoryInvestigationResult(
