@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "repository": {
+      "name": "07_complex_monorepo",
+      "primary_language": "TypeScript",
+      "frameworks": [
+        "Next.js",
+        "FastAPI",
+        "Celery",
+        "React"
+      ]
+    },
+    "entrypoints": [],
+    "modules": []
+  },
+  "metrics": {
+    "total_files": 6,
+    "lines_of_code": 17,
+    "total_functions": 5,
+    "total_classes": 2
+  },
+  "ground_truth": {
+    "languages": [
+      "TypeScript",
+      "Python"
+    ],
+    "frameworks": [
+      "Next.js",
+      "FastAPI",
+      "Celery",
+      "React"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "web_app",
+      "backend_api",
+      "background_worker",
+      "shared_library"
+    ],
+    "entrypoints": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "repository": {
+      "name": "14_large_repo_10k",
+      "primary_language": "Python",
+      "frameworks": [
+        "FastAPI",
+        "SQLAlchemy",
+        "Celery",
+        "Pydantic",
+        "Alembic"
+      ]
+    },
+    "entrypoints": [
+      "services/api/main.py"
+    ],
+    "modules": []
+  },
+  "metrics": {
+    "total_files": 8,
+    "lines_of_code": 19,
+    "total_functions": 5,
+    "total_classes": 2
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "SQLAlchemy",
+      "Celery",
+      "Pydantic",
+      "Alembic"
+    ],
+    "databases": [
+      "PostgreSQL"
+    ],
+    "deployable_units": [
+      "backend_api",
+      "background_worker"
+    ],
+    "entrypoints": [
+      "services/api/main.py"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

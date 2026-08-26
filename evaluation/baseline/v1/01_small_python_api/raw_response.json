@@ -1,0 +1,12 @@
+{
+  "summary": "# 01_small_python_api \u2014 Repository Summary\n\n## 1. Overview\nMinimal Python script using requests and click\n\n## 2. Tech Stack\nLanguages: Python\n\n## 3. Key Components\nAuto-discovered components.",
+  "stats": {
+    "total_chars": 78,
+    "primary_count": 1,
+    "supporting_count": 0,
+    "diagram_count": 0,
+    "agent_count": 0,
+    "omitted_count": 0
+  },
+  "tools": []
+}

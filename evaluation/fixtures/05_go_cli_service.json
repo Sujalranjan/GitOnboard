@@ -1,0 +1,28 @@
+{
+  "repo_id": "05_go_cli_service",
+  "description": "Go CLI utility with cobra and go.mod",
+  "files": {
+    "go.mod": "module github.com/example/gocli\n\ngo 1.21\n\nrequire (\n\tgithub.com/spf13/cobra v1.8.0\n)\n",
+    "cmd/root.go": "package cmd\n\nimport (\n\t\"github.com/spf13/cobra\"\n)\n\nvar rootCmd = &cobra.Command{Use: \"gocli\"}\n\nfunc Execute() { rootCmd.Execute() }\n",
+    "main.go": "package main\n\nimport \"github.com/example/gocli/cmd\"\n\nfunc main() {\n\tcmd.Execute()\n}\n",
+    "README.md": "# Go CLI\nA command line interface utility in Go."
+  },
+  "ground_truth": {
+    "languages": [
+      "Go"
+    ],
+    "frameworks": [
+      "Cobra"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "cli_tool"
+    ],
+    "entrypoints": [
+      "main.go"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

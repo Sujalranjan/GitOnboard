@@ -1,0 +1,493 @@
+{
+  "01_small_python_api": [
+    {
+      "fact_id": "01_fact_01",
+      "category": "framework",
+      "statement": "Click is used for CLI command parsing",
+      "evidence_ids": [
+        "ev_0002"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "01_fact_02",
+      "category": "dependency",
+      "statement": "Requests is used for HTTP client calls",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "01_fact_03",
+      "category": "entrypoint",
+      "statement": "main.py is the primary entrypoint",
+      "evidence_ids": [
+        "ev_0002"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "01_fact_04",
+      "category": "deployable_unit",
+      "statement": "Repository represents a single CLI tool deployable unit",
+      "evidence_ids": [
+        "ev_0002"
+      ],
+      "importance": "high"
+    }
+  ],
+  "02_fastapi_backend": [
+    {
+      "fact_id": "02_fact_01",
+      "category": "framework",
+      "statement": "FastAPI is the primary web framework",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "02_fact_02",
+      "category": "database",
+      "statement": "PostgreSQL database is configured in Docker Compose and models",
+      "evidence_ids": [
+        "ev_0004",
+        "ev_0007"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "02_fact_03",
+      "category": "entrypoint",
+      "statement": "src/main.py is the application entrypoint",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "02_fact_04",
+      "category": "deployable_unit",
+      "statement": "Repository represents a backend API deployable unit",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "02_fact_05",
+      "category": "dependency",
+      "statement": "SQLAlchemy is used for ORM data modeling",
+      "evidence_ids": [
+        "ev_0003"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "02_fact_06",
+      "category": "api_surface",
+      "statement": "Exposes /api/v1/users route endpoints",
+      "evidence_ids": [
+        "ev_0006"
+      ],
+      "importance": "medium"
+    },
+    {
+      "fact_id": "02_fact_07",
+      "category": "deployment",
+      "statement": "Docker Compose configures api and db services",
+      "evidence_ids": [
+        "ev_0007"
+      ],
+      "importance": "medium"
+    }
+  ],
+  "03_nextjs_frontend": [
+    {
+      "fact_id": "03_fact_01",
+      "category": "framework",
+      "statement": "Next.js is the web application framework",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "03_fact_02",
+      "category": "framework",
+      "statement": "React is the UI library",
+      "evidence_ids": [
+        "ev_0002",
+        "ev_0003"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "03_fact_03",
+      "category": "entrypoint",
+      "statement": "app/page.tsx is the primary page entrypoint",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "03_fact_04",
+      "category": "deployable_unit",
+      "statement": "Repository represents a web application deployable unit",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    }
+  ],
+  "04_fullstack_monorepo": [
+    {
+      "fact_id": "04_fact_01",
+      "category": "deployable_unit",
+      "statement": "Monorepo contains backend API and web application units",
+      "evidence_ids": [
+        "ev_0001",
+        "ev_0002"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "04_fact_02",
+      "category": "framework",
+      "statement": "Backend is built with FastAPI",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "04_fact_03",
+      "category": "framework",
+      "statement": "Frontend is built with React",
+      "evidence_ids": [
+        "ev_0002"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "04_fact_04",
+      "category": "entrypoint",
+      "statement": "backend/app.py and frontend/src/index.tsx are unit entrypoints",
+      "evidence_ids": [
+        "ev_0001",
+        "ev_0002"
+      ],
+      "importance": "high"
+    }
+  ],
+  "05_go_cli_service": [
+    {
+      "fact_id": "05_fact_01",
+      "category": "framework",
+      "statement": "Cobra is used for Go CLI commands",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "05_fact_02",
+      "category": "entrypoint",
+      "statement": "main.go is the service entrypoint",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "05_fact_03",
+      "category": "deployable_unit",
+      "statement": "Repository represents a CLI tool unit",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    }
+  ],
+  "06_rust_web_service": [
+    {
+      "fact_id": "06_fact_01",
+      "category": "framework",
+      "statement": "Actix-web is the web framework",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "06_fact_02",
+      "category": "framework",
+      "statement": "Tokio is the async runtime",
+      "evidence_ids": [
+        "ev_0002"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "06_fact_03",
+      "category": "entrypoint",
+      "statement": "src/main.rs is the entrypoint",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "06_fact_04",
+      "category": "deployable_unit",
+      "statement": "Repository represents a backend API unit",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    }
+  ],
+  "07_complex_monorepo": [
+    {
+      "fact_id": "07_fact_01",
+      "category": "deployable_unit",
+      "statement": "Monorepo contains web app, backend API, worker, and shared library",
+      "evidence_ids": [
+        "ev_0001",
+        "ev_0002",
+        "ev_0003",
+        "ev_0004"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "07_fact_02",
+      "category": "framework",
+      "statement": "FastAPI powers the backend API",
+      "evidence_ids": [
+        "ev_0002"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "07_fact_03",
+      "category": "framework",
+      "statement": "Next.js powers the frontend web app",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "07_fact_04",
+      "category": "worker",
+      "statement": "Celery is used for background workers",
+      "evidence_ids": [
+        "ev_0004"
+      ],
+      "importance": "high"
+    }
+  ],
+  "08_outdated_readme_sqlite": [
+    {
+      "fact_id": "08_fact_01",
+      "category": "contradiction",
+      "statement": "README claims SQLite but code and docker-compose use PostgreSQL",
+      "evidence_ids": [
+        "ev_0001",
+        "ev_0002"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "08_fact_02",
+      "category": "framework",
+      "statement": "FastAPI is the web framework",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "08_fact_03",
+      "category": "database",
+      "statement": "PostgreSQL is the active database",
+      "evidence_ids": [
+        "ev_0001",
+        "ev_0002"
+      ],
+      "importance": "high"
+    }
+  ],
+  "09_misleading_doc_redis": [
+    {
+      "fact_id": "09_fact_01",
+      "category": "documentation",
+      "statement": "README claims Redis caching but Redis is not in manifest or code",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "09_fact_02",
+      "category": "framework",
+      "statement": "FastAPI is the web framework",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    }
+  ],
+  "10_generated_code_repo": [
+    {
+      "fact_id": "10_fact_01",
+      "category": "architecture",
+      "statement": "Generated gRPC/Protobuf files are excluded from core application business logic",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "10_fact_02",
+      "category": "framework",
+      "statement": "FastAPI is the active web framework",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    }
+  ],
+  "11_vendored_heavy_node": [
+    {
+      "fact_id": "11_fact_01",
+      "category": "architecture",
+      "statement": "Vendored node_modules are excluded from project architecture",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "11_fact_02",
+      "category": "framework",
+      "statement": "Express is the web framework",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    }
+  ],
+  "12_sparse_docs_repo": [
+    {
+      "fact_id": "12_fact_01",
+      "category": "framework",
+      "statement": "Typer is used for CLI commands",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "12_fact_02",
+      "category": "framework",
+      "statement": "Rich is used for terminal formatting",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "12_fact_03",
+      "category": "deployable_unit",
+      "statement": "Repository represents a CLI tool unit",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    }
+  ],
+  "13_agent_heavy_repo": [
+    {
+      "fact_id": "13_fact_01",
+      "category": "framework",
+      "statement": "FastAPI is the application framework",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "13_fact_02",
+      "category": "deployable_unit",
+      "statement": "Repository represents a backend API unit",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    }
+  ],
+  "14_large_repo_10k": [
+    {
+      "fact_id": "14_fact_01",
+      "category": "deployable_unit",
+      "statement": "Contains backend API and background worker deployable units",
+      "evidence_ids": [
+        "ev_0001",
+        "ev_0002"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "14_fact_02",
+      "category": "framework",
+      "statement": "FastAPI is the API framework",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "14_fact_03",
+      "category": "database",
+      "statement": "PostgreSQL is the database managed with Alembic migrations",
+      "evidence_ids": [
+        "ev_0001",
+        "ev_0002"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "14_fact_04",
+      "category": "worker",
+      "statement": "Celery is the distributed task worker",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    }
+  ],
+  "15_legacy_dead_code": [
+    {
+      "fact_id": "15_fact_01",
+      "category": "framework",
+      "statement": "FastAPI is the active web framework",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    },
+    {
+      "fact_id": "15_fact_02",
+      "category": "dependency",
+      "statement": "Deprecated legacy frameworks are declared but unused or isolated",
+      "evidence_ids": [
+        "ev_0001"
+      ],
+      "importance": "high"
+    }
+  ]
+}

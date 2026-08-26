@@ -1,0 +1,42 @@
+{
+  "metadata": {
+    "repository": {
+      "name": "15_legacy_dead_code",
+      "primary_language": "Python",
+      "frameworks": [
+        "FastAPI"
+      ]
+    },
+    "entrypoints": [
+      "app/main.py"
+    ],
+    "modules": []
+  },
+  "metrics": {
+    "total_files": 3,
+    "lines_of_code": 9,
+    "total_functions": 5,
+    "total_classes": 2
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "entrypoints": [
+      "app/main.py"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": [
+      "boto3",
+      "pandas"
+    ]
+  }
+}

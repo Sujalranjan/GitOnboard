@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "repository": {
+      "name": "05_go_cli_service",
+      "primary_language": "Go",
+      "frameworks": [
+        "Cobra"
+      ]
+    },
+    "entrypoints": [
+      "main.go"
+    ],
+    "modules": []
+  },
+  "metrics": {
+    "total_files": 4,
+    "lines_of_code": 25,
+    "total_functions": 5,
+    "total_classes": 2
+  },
+  "ground_truth": {
+    "languages": [
+      "Go"
+    ],
+    "frameworks": [
+      "Cobra"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "cli_tool"
+    ],
+    "entrypoints": [
+      "main.go"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

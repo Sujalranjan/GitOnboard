@@ -1,0 +1,9 @@
+{
+  "rejected_claims": [],
+  "stats": {
+    "total_evidence_items": 1,
+    "total_doc_chunks": 0,
+    "deployable_units_count": 1,
+    "verified_claims_count": 1
+  }
+}

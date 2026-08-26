@@ -1,0 +1,34 @@
+{
+  "repo_id": "04_fullstack_monorepo",
+  "description": "Monorepo containing backend FastAPI and frontend React packages",
+  "files": {
+    "backend/pyproject.toml": "[project]\nname = 'backend'\ndependencies = ['fastapi>=0.100.0', 'uvicorn>=0.20.0']\n",
+    "backend/app.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+    "frontend/package.json": "{\n  \"name\": \"frontend\",\n  \"dependencies\": { \"react\": \"^18.0.0\" }\n}",
+    "frontend/src/index.tsx": "import React from 'react';\nexport const App = () => <div>App</div>;\n",
+    "docker-compose.yml": "services:\n  api:\n    build: ./backend\n  web:\n    build: ./frontend\n",
+    "README.md": "# Fullstack Platform\nContains backend API in Python and frontend in React."
+  },
+  "ground_truth": {
+    "languages": [
+      "Python",
+      "TypeScript"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "React"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "backend_api",
+      "web_app"
+    ],
+    "entrypoints": [
+      "backend/app.py",
+      "frontend/src/index.tsx"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

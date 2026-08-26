@@ -1,0 +1,29 @@
+{
+  "repo_id": "06_rust_web_service",
+  "description": "Rust web service with Actix-web and Cargo.toml",
+  "files": {
+    "Cargo.toml": "[package]\nname = \"rust-service\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\nactix-web = \"4.4\"\ntokio = { version = \"1.0\", features = [\"full\"] }\nserde = { version = \"1.0\", features = [\"derive\"] }\n",
+    "src/main.rs": "use actix_web::{get, App, HttpServer, Responder};\n\n#[get(\"/\")]\nasync fn hello() -> impl Responder {\n    \"Hello world!\"\n}\n\n#[actix_web::main]\nasync fn main() -> std::io::Result<()> {\n    HttpServer::new(|| App::new().service(hello))\n        .bind((\"127.0.0.1\", 8080))?\n        .run()\n        .await\n}\n",
+    "README.md": "# Rust Service\nHigh performance web service in Rust."
+  },
+  "ground_truth": {
+    "languages": [
+      "Rust"
+    ],
+    "frameworks": [
+      "Actix-web",
+      "Tokio",
+      "Serde"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "entrypoints": [
+      "src/main.rs"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "repo_id": "08_outdated_readme_sqlite",
+  "description": "Doc claims SQLite, but code and docker-compose use PostgreSQL",
+  "files": {
+    "pyproject.toml": "[project]\nname = 'app'\ndependencies = ['fastapi', 'psycopg2-binary', 'sqlalchemy']\n",
+    "app/database.py": "from sqlalchemy import create_engine\nengine = create_engine('postgresql://user:pass@db:5432/appdb')\n",
+    "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+    "docker-compose.yml": "services:\n  db:\n    image: postgres:15\n",
+    "README.md": "# SQLite App\nThis application uses an embedded SQLite database for zero-config persistence."
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "SQLAlchemy"
+    ],
+    "databases": [
+      "PostgreSQL"
+    ],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "entrypoints": [
+      "app/main.py"
+    ],
+    "known_contradictions": [
+      {
+        "claimed": "SQLite database",
+        "actual": "PostgreSQL via psycopg2, SQLAlchemy connection string, and Docker Compose postgres service"
+      }
+    ],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

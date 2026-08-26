@@ -1,0 +1,32 @@
+{
+  "repo_id": "09_misleading_doc_redis",
+  "description": "Doc claims Redis caching, but 0 Redis dependencies or imports exist",
+  "files": {
+    "pyproject.toml": "[project]\nname = 'app'\ndependencies = ['fastapi', 'uvicorn']\n",
+    "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n\n@app.get('/')\ndef home(): return {'ok': True}\n",
+    "README.md": "# Fast Service\nThis microservice leverages a high-throughput Redis distributed cache for fast token validation."
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "entrypoints": [
+      "app/main.py"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [
+      {
+        "claimed": "Redis distributed cache",
+        "reason": "No Redis dependencies, imports, or connection strings in codebase"
+      }
+    ],
+    "declared_unused": []
+  }
+}

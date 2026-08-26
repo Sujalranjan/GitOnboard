@@ -1,0 +1,12 @@
+{
+  "summary": "# 13_agent_heavy_repo \u2014 Repository Summary\n\n## 1. Overview\nContains 20+ agent prompt files (.cursorrules, AGENTS.md, skill.md)\n\n## 2. Tech Stack\nLanguages: Python\n\n## 3. Key Components\nAuto-discovered components.",
+  "stats": {
+    "total_chars": 171,
+    "primary_count": 1,
+    "supporting_count": 0,
+    "diagram_count": 0,
+    "agent_count": 2,
+    "omitted_count": 1
+  },
+  "tools": []
+}

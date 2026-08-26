@@ -1,0 +1,27 @@
+{
+  "repo_id": "12_sparse_docs_repo",
+  "description": "Repository with zero markdown documentation files",
+  "files": {
+    "pyproject.toml": "[project]\nname = 'sparse-tool'\ndependencies = ['typer>=0.9.0', 'rich>=13.0.0']\n",
+    "main.py": "import typer\nfrom rich import print\napp = typer.Typer()\n@app.command()\ndef run(): print('Running')\nif __name__ == '__main__': app()\n"
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "Typer",
+      "Rich"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "cli_tool"
+    ],
+    "entrypoints": [
+      "main.py"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "metadata": {
+    "repository": {
+      "name": "09_misleading_doc_redis",
+      "primary_language": "Python",
+      "frameworks": [
+        "FastAPI"
+      ]
+    },
+    "entrypoints": [
+      "app/main.py"
+    ],
+    "modules": []
+  },
+  "metrics": {
+    "total_files": 3,
+    "lines_of_code": 10,
+    "total_functions": 5,
+    "total_classes": 2
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "entrypoints": [
+      "app/main.py"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [
+      {
+        "claimed": "Redis distributed cache",
+        "reason": "No Redis dependencies, imports, or connection strings in codebase"
+      }
+    ],
+    "declared_unused": []
+  }
+}

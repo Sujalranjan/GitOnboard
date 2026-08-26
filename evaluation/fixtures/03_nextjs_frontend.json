@@ -1,0 +1,30 @@
+{
+  "repo_id": "03_nextjs_frontend",
+  "description": "Next.js 14 App Router TypeScript frontend with Tailwind CSS",
+  "files": {
+    "package.json": "{\n  \"name\": \"frontend-app\",\n  \"dependencies\": {\n    \"next\": \"14.1.0\",\n    \"react\": \"^18.2.0\",\n    \"react-dom\": \"^18.2.0\",\n    \"lucide-react\": \"^0.300.0\"\n  }\n}",
+    "next.config.js": "module.exports = { reactStrictMode: true };\n",
+    "app/page.tsx": "export default function Home() { return <main><h1>GitOnBoard UI</h1></main>; }\n",
+    "app/layout.tsx": "export default function RootLayout({ children }: { children: React.ReactNode }) { return <html><body>{children}</body></html>; }\n",
+    "README.md": "# Next.js Frontend\nInteractive frontend web application built on Next.js 14."
+  },
+  "ground_truth": {
+    "languages": [
+      "TypeScript"
+    ],
+    "frameworks": [
+      "Next.js",
+      "React"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "web_app"
+    ],
+    "entrypoints": [
+      "app/page.tsx"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "metadata": {
+    "repository": {
+      "name": "08_outdated_readme_sqlite",
+      "primary_language": "Python",
+      "frameworks": [
+        "FastAPI",
+        "SQLAlchemy"
+      ]
+    },
+    "entrypoints": [
+      "app/main.py"
+    ],
+    "modules": []
+  },
+  "metrics": {
+    "total_files": 5,
+    "lines_of_code": 12,
+    "total_functions": 5,
+    "total_classes": 2
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "SQLAlchemy"
+    ],
+    "databases": [
+      "PostgreSQL"
+    ],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "entrypoints": [
+      "app/main.py"
+    ],
+    "known_contradictions": [
+      {
+        "claimed": "SQLite database",
+        "actual": "PostgreSQL via psycopg2, SQLAlchemy connection string, and Docker Compose postgres service"
+      }
+    ],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}
