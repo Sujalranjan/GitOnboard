@@ -685,6 +685,36 @@ class EngineeringAgent:
                 db.add(run)
                 db.commit()
 
+                # Persist plan to history table for long-term audit trail
+                try:
+                    from backend.models.implementation import AgentRunPlanHistory, AgentRunPlanHistoryStatus
+
+                    # Mark previous plan versions as SUPERSEDED
+                    prev_plans = db.query(AgentRunPlanHistory).filter(
+                        AgentRunPlanHistory.agent_run_id == run.id,
+                        AgentRunPlanHistory.version < plan.version,
+                    ).all()
+                    for prev_plan in prev_plans:
+                        if prev_plan.status != AgentRunPlanHistoryStatus.SUPERSEDED:
+                            prev_plan.status = AgentRunPlanHistoryStatus.SUPERSEDED
+                            prev_plan.superseded_at = plan.updated_at
+                            prev_plan.superseded_by_plan_id = plan.plan_id
+                            db.add(prev_plan)
+
+                    # Create new history record for this plan
+                    plan_history = AgentRunPlanHistory(
+                        agent_run_id=run.id,
+                        plan_id=plan.plan_id,
+                        version=plan.version,
+                        status=AgentRunPlanHistoryStatus.READY_FOR_APPROVAL,
+                        plan_json=plan.model_dump(mode="json"),
+                    )
+                    db.add(plan_history)
+                    db.commit()
+                except Exception as err:
+                    logger.warning(f"Failed to persist plan to history table for run '{run_id}': {err}")
+                    # Don't fail plan creation if history persistence fails
+
                 # Invalidate any previous approvals (PENDING or APPROVED) for older plan revisions
                 prev_approvals = db.query(ApprovalRequest).filter(
                     ApprovalRequest.agent_run_id == run.id,
@@ -914,6 +944,21 @@ class EngineeringAgent:
         db.add(run)
         db.commit()
 
+        # Update plan history record to mark as APPROVED
+        try:
+            from backend.models.implementation import AgentRunPlanHistory, AgentRunPlanHistoryStatus
+            plan_history = db.query(AgentRunPlanHistory).filter(
+                AgentRunPlanHistory.plan_id == plan.plan_id
+            ).first()
+            if plan_history:
+                plan_history.status = AgentRunPlanHistoryStatus.APPROVED
+                plan_history.resolved_by = resolved_by
+                plan_history.resolved_at = datetime.now(timezone.utc)
+                db.add(plan_history)
+                db.commit()
+        except Exception as err:
+            logger.warning(f"Failed to update plan history for approval of plan '{plan.plan_id}': {err}")
+
         # Resolve pending ApprovalRequest
         pending_approvals = self.approval_controller.get_pending_approvals(db, agent_run_id=run.id)
         plan_approval = next((a for a in pending_approvals if a.action_type == ApprovalActionType.PLAN_APPROVAL), None)
@@ -998,6 +1043,22 @@ class EngineeringAgent:
             flag_modified(run, "metadata_json")
             db.add(run)
             db.commit()
+
+            # Update plan history record to mark as REJECTED
+            try:
+                from backend.models.implementation import AgentRunPlanHistory, AgentRunPlanHistoryStatus
+                plan_history = db.query(AgentRunPlanHistory).filter(
+                    AgentRunPlanHistory.plan_id == plan.plan_id
+                ).first()
+                if plan_history:
+                    plan_history.status = AgentRunPlanHistoryStatus.REJECTED
+                    plan_history.resolved_by = resolved_by
+                    plan_history.resolved_at = datetime.now(timezone.utc)
+                    plan_history.rejection_reason = reason
+                    db.add(plan_history)
+                    db.commit()
+            except Exception as err:
+                logger.warning(f"Failed to update plan history for rejection of plan '{plan.plan_id}': {err}")
 
         reject_msg = reason or "Plan rejected by user."
 
