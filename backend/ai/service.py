@@ -58,7 +58,7 @@ def build_default_service() -> "LLMService":
         # LOCAL Mode (Default): Ollama only
         ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
         ollama_model = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b")
-        ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "300.0"))
+        ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "15.0"))
         from .providers.ollama import OllamaProvider
         providers.append(OllamaProvider(base_url=ollama_url, model=ollama_model, timeout=ollama_timeout))
         logger.info(f"LLMService: LOCAL mode - OllamaProvider registered ({ollama_url}).")

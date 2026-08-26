@@ -35,11 +35,12 @@ from backend.models.implementation import (
 )
 from backend.task_manager import task_manager
 from backend.agent.graph import AgentGraphOrchestrator
+from backend.ai.service import build_default_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/agent", tags=["Engineering Agent"])
-agent_service = EngineeringAgent()
+agent_service = EngineeringAgent(llm_service=build_default_service())
 graph_orchestrator = AgentGraphOrchestrator(agent_service=agent_service)
 
 _EVENT_CHANNEL_USER_ID = 0
