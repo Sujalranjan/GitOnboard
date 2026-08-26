@@ -934,7 +934,7 @@ def get_workspace_snapshot(
         recent_events = [_serialize_event(e, idx + 1) for idx, e in enumerate(run.events or [])]
         logger.info(f"[WORKSPACE] Events retrieved - count: {len(recent_events)}")
         if recent_events:
-            logger.info(f"[WORKSPACE] First 5 events: {[e.get('event_type') for e in recent_events[:5]]}")
+            logger.info(f"[WORKSPACE] First 5 events: {[e.event_type if hasattr(e, 'event_type') else str(e) for e in recent_events[:5]]}")
 
         logger.info(f"[WORKSPACE] Returning workspace snapshot")
         return WorkspaceSnapshotResponse(
