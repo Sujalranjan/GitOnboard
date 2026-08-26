@@ -1,0 +1,12 @@
+{
+  "summary": "# 10_generated_code_repo \u2014 Repository Summary\n\n## 1. Overview\nRepository containing auto-generated OpenAPI client and protobuf files\n\n## 2. Tech Stack\nLanguages: Python\n\n## 3. Key Components\nAuto-discovered components.",
+  "stats": {
+    "total_chars": 51,
+    "primary_count": 1,
+    "supporting_count": 0,
+    "diagram_count": 0,
+    "agent_count": 0,
+    "omitted_count": 0
+  },
+  "tools": []
+}

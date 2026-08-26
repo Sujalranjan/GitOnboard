@@ -1,0 +1,12 @@
+{
+  "summary": "# 05_go_cli_service \u2014 Repository Summary\n\n## 1. Overview\nGo CLI utility with cobra and go.mod\n\n## 2. Tech Stack\nLanguages: Go\n\n## 3. Key Components\nAuto-discovered components.",
+  "stats": {
+    "total_chars": 48,
+    "primary_count": 1,
+    "supporting_count": 0,
+    "diagram_count": 0,
+    "agent_count": 0,
+    "omitted_count": 0
+  },
+  "tools": []
+}

@@ -1,0 +1,30 @@
+{
+  "repo_id": "15_legacy_dead_code",
+  "description": "Contains declared but completely unused dependencies (boto3, pandas)",
+  "files": {
+    "pyproject.toml": "[project]\nname = 'clean-api'\ndependencies = ['fastapi', 'boto3', 'pandas']\n",
+    "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n@app.get('/ping')\ndef ping(): return 'pong'\n",
+    "README.md": "# Clean API\nA simple health check API service."
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "entrypoints": [
+      "app/main.py"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": [
+      "boto3",
+      "pandas"
+    ]
+  }
+}

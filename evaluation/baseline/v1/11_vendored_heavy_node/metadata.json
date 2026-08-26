@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "repository": {
+      "name": "11_vendored_heavy_node",
+      "primary_language": "JavaScript",
+      "frameworks": [
+        "Express"
+      ]
+    },
+    "entrypoints": [
+      "src/index.js"
+    ],
+    "modules": []
+  },
+  "metrics": {
+    "total_files": 5,
+    "lines_of_code": 8,
+    "total_functions": 5,
+    "total_classes": 2
+  },
+  "ground_truth": {
+    "languages": [
+      "JavaScript"
+    ],
+    "frameworks": [
+      "Express"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "entrypoints": [
+      "src/index.js"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

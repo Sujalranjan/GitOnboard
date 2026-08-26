@@ -1,0 +1,28 @@
+{
+  "repo_id": "01_small_python_api",
+  "description": "Minimal Python script using requests and click",
+  "files": {
+    "main.py": "import requests\nimport click\n\n@click.command()\ndef fetch():\n    r = requests.get('https://api.example.com')\n    click.echo(r.text)\n\nif __name__ == '__main__':\n    fetch()",
+    "requirements.txt": "requests>=2.31.0\nclick>=8.1.0\n",
+    "README.md": "# Small CLI\nA simple CLI script to fetch remote data using Requests and Click."
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "Click",
+      "Requests"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "cli_tool"
+    ],
+    "entrypoints": [
+      "main.py"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

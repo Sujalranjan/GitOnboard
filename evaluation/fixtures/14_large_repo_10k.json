@@ -1,0 +1,39 @@
+{
+  "repo_id": "14_large_repo_10k",
+  "description": "Simulates large volume repo with dozens of modules across multiple services",
+  "files": {
+    "pyproject.toml": "[project]\nname = 'large-platform'\ndependencies = ['fastapi', 'sqlalchemy', 'celery', 'pydantic', 'alembic']\n",
+    "services/api/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+    "services/worker/tasks.py": "from celery import Celery\ncelery_app = Celery('tasks')\n",
+    "models/user.py": "class User: pass\n",
+    "models/order.py": "class Order: pass\n",
+    "models/payment.py": "class Payment: pass\n",
+    "docker-compose.yml": "services:\n  api:\n    build: ./services/api\n  worker:\n    build: ./services/worker\n  postgres:\n    image: postgres:15\n",
+    "README.md": "# Large Platform\nMulti-service architecture with API and Background Worker."
+  },
+  "ground_truth": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "SQLAlchemy",
+      "Celery",
+      "Pydantic",
+      "Alembic"
+    ],
+    "databases": [
+      "PostgreSQL"
+    ],
+    "deployable_units": [
+      "backend_api",
+      "background_worker"
+    ],
+    "entrypoints": [
+      "services/api/main.py"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "repo_id": "07_complex_monorepo",
+  "description": "Multi-package monorepo with multiple apps and shared packages",
+  "files": {
+    "apps/web/package.json": "{\"name\": \"@repo/web\", \"dependencies\": {\"next\": \"14.0.0\"}}",
+    "apps/api/pyproject.toml": "[project]\nname = 'api'\ndependencies = ['fastapi>=0.100.0']\n",
+    "packages/ui/package.json": "{\"name\": \"@repo/ui\", \"dependencies\": {\"react\": \"^18.0.0\"}}",
+    "apps/worker/pyproject.toml": "[project]\nname = 'worker'\ndependencies = ['celery>=5.3.0', 'redis>=5.0.0']\n",
+    "docker-compose.yml": "services:\n  web:\n    build: ./apps/web\n  api:\n    build: ./apps/api\n  worker:\n    build: ./apps/worker\n",
+    "README.md": "# Enterprise Monorepo\nModular monorepo with frontend web, backend API, celery worker, and shared UI package."
+  },
+  "ground_truth": {
+    "languages": [
+      "TypeScript",
+      "Python"
+    ],
+    "frameworks": [
+      "Next.js",
+      "FastAPI",
+      "Celery",
+      "React"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "web_app",
+      "backend_api",
+      "background_worker",
+      "shared_library"
+    ],
+    "entrypoints": [],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

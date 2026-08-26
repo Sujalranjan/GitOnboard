@@ -1,0 +1,29 @@
+{
+  "repo_id": "11_vendored_heavy_node",
+  "description": "Repository containing 50MB checked-in node_modules/ and vendor/ folder",
+  "files": {
+    "package.json": "{\"name\": \"my-app\", \"dependencies\": {\"express\": \"^4.18.0\"}}",
+    "src/index.js": "const express = require('express');\nconst app = express();\napp.listen(3000);\n",
+    "vendor/legacy-lib/index.js": "module.exports = { legacy: true };\n",
+    "node_modules/express/index.js": "module.exports = function express() {};\n",
+    "README.md": "# Express App\nBasic express application with vendored third-party code."
+  },
+  "ground_truth": {
+    "languages": [
+      "JavaScript"
+    ],
+    "frameworks": [
+      "Express"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "backend_api"
+    ],
+    "entrypoints": [
+      "src/index.js"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

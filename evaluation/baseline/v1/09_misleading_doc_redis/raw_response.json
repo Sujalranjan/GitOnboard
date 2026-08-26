@@ -1,0 +1,12 @@
+{
+  "summary": "# 09_misleading_doc_redis \u2014 Repository Summary\n\n## 1. Overview\nDoc claims Redis caching, but 0 Redis dependencies or imports exist\n\n## 2. Tech Stack\nLanguages: Python\n\n## 3. Key Components\nAuto-discovered components.",
+  "stats": {
+    "total_chars": 111,
+    "primary_count": 1,
+    "supporting_count": 0,
+    "diagram_count": 0,
+    "agent_count": 0,
+    "omitted_count": 0
+  },
+  "tools": []
+}

@@ -1,0 +1,41 @@
+{
+  "metadata": {
+    "repository": {
+      "name": "03_nextjs_frontend",
+      "primary_language": "TypeScript",
+      "frameworks": [
+        "Next.js",
+        "React"
+      ]
+    },
+    "entrypoints": [
+      "app/page.tsx"
+    ],
+    "modules": []
+  },
+  "metrics": {
+    "total_files": 5,
+    "lines_of_code": 14,
+    "total_functions": 5,
+    "total_classes": 2
+  },
+  "ground_truth": {
+    "languages": [
+      "TypeScript"
+    ],
+    "frameworks": [
+      "Next.js",
+      "React"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "web_app"
+    ],
+    "entrypoints": [
+      "app/page.tsx"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}

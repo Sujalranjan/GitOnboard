@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "repository": {
+      "name": "04_fullstack_monorepo",
+      "primary_language": "Python",
+      "frameworks": [
+        "FastAPI",
+        "React"
+      ]
+    },
+    "entrypoints": [
+      "backend/app.py",
+      "frontend/src/index.tsx"
+    ],
+    "modules": []
+  },
+  "metrics": {
+    "total_files": 6,
+    "lines_of_code": 18,
+    "total_functions": 5,
+    "total_classes": 2
+  },
+  "ground_truth": {
+    "languages": [
+      "Python",
+      "TypeScript"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "React"
+    ],
+    "databases": [],
+    "deployable_units": [
+      "backend_api",
+      "web_app"
+    ],
+    "entrypoints": [
+      "backend/app.py",
+      "frontend/src/index.tsx"
+    ],
+    "known_contradictions": [],
+    "unverified_doc_claims": [],
+    "declared_unused": []
+  }
+}
