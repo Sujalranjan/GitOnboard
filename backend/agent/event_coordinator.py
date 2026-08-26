@@ -75,6 +75,7 @@ class AgentEventCoordinator:
 
         task_id = run_obj.task_id if run_obj else None
 
+        logger.info(f"[EVENT] Creating event for run '{actual_run_id}' - type: {ev_type.value}")
         event = AgentEvent(
             agent_run_id=actual_run_id,
             event_type=ev_type,
@@ -82,7 +83,9 @@ class AgentEventCoordinator:
             payload=safe_payload,
         )
         db.add(event)
+        logger.info(f"[EVENT] Event added to DB session")
         db.commit()
+        logger.info(f"[EVENT] Event committed to DB with ID: {event.id}")
         db.refresh(event)
 
         created_iso = (
@@ -108,12 +111,15 @@ class AgentEventCoordinator:
         if 0 not in target_uids:
             target_uids.append(0)
 
+        logger.info(f"[EVENT] Broadcasting to {len(target_uids)} user(s): {target_uids}")
         for uid in target_uids:
+            logger.info(f"[EVENT] → Notifying user {uid} on channel: {_channel_for_run(actual_run_id)}")
             cls._safe_notify(uid, _channel_for_run(actual_run_id), ev_type.value, event_payload_json)
             if task_id and task_id != actual_run_id:
+                logger.info(f"[EVENT] → Also notifying user {uid} on channel: {_channel_for_run(task_id)}")
                 cls._safe_notify(uid, _channel_for_run(task_id), ev_type.value, event_payload_json)
 
-        logger.debug(f"AgentEvent emitted: run_id={actual_run_id} type={ev_type.value} msg='{message}'")
+        logger.info(f"[EVENT] Event emission complete: run_id={actual_run_id} type={ev_type.value}")
         return event
 
     @staticmethod

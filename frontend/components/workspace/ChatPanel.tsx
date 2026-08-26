@@ -62,48 +62,64 @@ export function ChatPanel({
 
   // Track execution events from snapshot and format as live activity items
   useEffect(() => {
-    if (!snapshot?.latest_events || snapshot.latest_events.length === 0) return;
+    console.log(`[ChatPanel] latest_events changed, count: ${snapshot?.latest_events?.length || 0}`);
+    if (!snapshot?.latest_events || snapshot.latest_events.length === 0) {
+      console.log(`[ChatPanel] No events to process`);
+      return;
+    }
 
     const events = snapshot.latest_events;
+    console.log(`[ChatPanel] Processing ${events.length} events`);
     const activityList: Array<{
       type: "read" | "write" | "test" | "verify" | "info";
       text: string;
       file?: string;
     }> = [];
 
-    events.forEach((ev) => {
+    events.forEach((ev, idx) => {
       const type = ev.event_type;
       const msg = ev.message || "";
       const p = ev.payload || {};
+      console.log(`[ChatPanel] Event ${idx}: type=${type}, message=${msg.substring(0, 100)}`);
 
       if (type === "TASK_STARTED" || type === "TOOL_CALL_STARTED") {
         const file = p.file_path || p.target_file || (p.tool_name === "read_file" ? p.arguments?.file_path : null);
         if (file) {
+          console.log(`[ChatPanel] → Adding read activity for file: ${file}`);
           activityList.push({ type: "read", text: `Reading ${file}`, file });
         } else {
+          console.log(`[ChatPanel] → Adding info activity`);
           activityList.push({ type: "info", text: msg });
         }
       } else if (type === "FILE_WRITTEN" || (type === "TOOL_CALL_COMPLETED" && p.tool_name === "write_file")) {
         const file = p.file_path || p.target_file || p.arguments?.file_path;
+        console.log(`[ChatPanel] → Adding write activity for file: ${file}`);
         activityList.push({ type: "write", text: `Writing ${file || "file"}`, file });
       } else if (type === "TASK_VERIFYING" || type === "VERIFICATION_STARTED") {
+        console.log(`[ChatPanel] → Adding test activity`);
         activityList.push({ type: "test", text: "Running tests..." });
       } else if (type === "TASK_PASSED" || type === "VERIFICATION_PASSED") {
+        console.log(`[ChatPanel] → Adding verify activity`);
         activityList.push({ type: "verify", text: "Verification passed" });
       } else if (type === "PLAN_READY_FOR_APPROVAL") {
+        console.log(`[ChatPanel] → Adding ready for approval info`);
         activityList.push({ type: "info", text: "Ready for approval" });
       }
     });
 
+    console.log(`[ChatPanel] Created ${activityList.length} activity items`);
     if (activityList.length > 0) {
       setMessages((prev) => {
         const lastMsg = prev[prev.length - 1];
+        console.log(`[ChatPanel] Updating messages, lastMsg role: ${lastMsg?.role}`);
         if (lastMsg && lastMsg.role === "assistant" && lastMsg.activityItems) {
+          console.log(`[ChatPanel] Updating existing assistant message with new activities`);
           return [
             ...prev.slice(0, -1),
             { ...lastMsg, activityItems: activityList },
           ];
         }
+        console.log(`[ChatPanel] No assistant message to update`);
         return prev;
       });
     }
