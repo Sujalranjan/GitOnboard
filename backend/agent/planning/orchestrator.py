@@ -34,6 +34,7 @@ from backend.planning.requirements import AnalyzedRequirement, RequirementAnalyz
 from backend.planning.impact_analysis import ImpactAnalyzer, ImpactResult
 from backend.planning.contract import ContractGenerator, ContractOutput
 from backend.planning.planner import StepPlanner, PlanStep
+from backend.planning.change_classifier import ChangeTypeClassifier, ChangeType
 from .contracts import Plan, PlanTask, PlanStatus, PlanTaskStatus, PlanValidationResult
 from .validator import PlanValidator
 
@@ -115,15 +116,23 @@ class PlanningOrchestrator:
         # 2. Requirement Decomposition (RequirementAnalyzer)
         # ──────────────────────────────────────────────────────────────────────
         analyzed_req = self._analyze_requirement(requirement)
-        extracted_kws = [w.lower() for w in requirement.split() if len(w) > 3]
 
         # ──────────────────────────────────────────────────────────────────────
-        # 3. Impact Analysis (ImpactAnalyzer)
+        # 2b. Change Type Classification (Prevents Scope Explosion)
+        # ──────────────────────────────────────────────────────────────────────
+        change_type = ChangeTypeClassifier.classify(requirement)
+        logger.info(f"PlanningOrchestrator: Classified change as {change_type.value}")
+
+        # ──────────────────────────────────────────────────────────────────────
+        # 3. Impact Analysis (ImpactAnalyzer) — Skip for Trivial Changes
         # ──────────────────────────────────────────────────────────────────────
         impact_result: Optional[ImpactResult] = None
-        if db and analysis_id:
+
+        # Only run ImpactAnalyzer for actual code changes, not comments/docs
+        if change_type == ChangeType.CODE_CHANGE and db and analysis_id:
             try:
                 analyzer = ImpactAnalyzer(db=db, analysis_id=analysis_id)
+                extracted_kws = [w.lower() for w in requirement.split() if len(w) > 3]
                 try:
                     loop = asyncio.get_running_loop()
                 except RuntimeError:
@@ -144,13 +153,18 @@ class PlanningOrchestrator:
         affected_symbols: List[str] = list(dict.fromkeys(
             [s.get("name", "") for s in context.relevant_symbols if s.get("name")] + investigation_result.relevant_symbols
         ))
-        if impact_result:
+
+        # Only add ImpactAnalyzer results for CODE_CHANGE type
+        if change_type == ChangeType.CODE_CHANGE and impact_result:
             for f in (impact_result.candidate_files or []):
                 if f and f not in affected_files:
                     affected_files.append(f)
             for s in (impact_result.candidate_symbols or []):
                 if s and s not in affected_symbols:
                     affected_symbols.append(s)
+
+        # Validate file relevance and remove semantically unrelated files
+        affected_files = self._validate_file_relevance(affected_files, requirement)
 
         # ──────────────────────────────────────────────────────────────────────
         # 4. Acceptance Contract Generation (ContractGenerator)
@@ -345,6 +359,64 @@ class PlanningOrchestrator:
             security_considerations=[],
             tests_required=[f"Automated test for {requirement[:40]}"],
         )
+
+    def _validate_file_relevance(self, files: List[str], requirement: str) -> List[str]:
+        """
+        Filter out semantically unrelated files that were included due to keyword matching.
+
+        Removes files that are clearly irrelevant to the actual implementation:
+        - Policy and legal documents (CODE_OF_CONDUCT, LICENSE, etc.)
+        - Unrelated GitHub workflows
+        - Generic configuration files unrelated to the requirement
+        - Build/deployment files unrelated to source changes
+
+        Keeps:
+        - Source code files
+        - Test files
+        - Configuration related to the change
+        - Documentation relevant to the change
+        """
+        if not files:
+            return files
+
+        req_lower = requirement.lower()
+        validated: List[str] = []
+        excluded_patterns = {
+            "code_of_conduct",
+            "license",
+            "contributing",
+            "changelog",
+            "authors",
+            "maintainers",
+            ".github/workflows",  # Generic workflows not related to feature
+            "renovate.json",
+            "dependabot.yml",
+            "package-lock.json",
+            "yarn.lock",
+            "uv.lock",
+        }
+
+        for f in files:
+            f_lower = f.lower()
+
+            # Reject files matching excluded patterns
+            excluded = False
+            for pattern in excluded_patterns:
+                if pattern in f_lower:
+                    # Exception: keep workflow files if explicitly mentioned in requirement
+                    if ".github/workflows" in f_lower and ("workflow" in req_lower or "github" in req_lower or "action" in req_lower):
+                        excluded = False
+                        break
+                    excluded = True
+                    break
+
+            if excluded:
+                logger.debug(f"PlanningOrchestrator: Filtering out semantically unrelated file: {f}")
+                continue
+
+            validated.append(f)
+
+        return validated if validated else files  # Return original if all were filtered (safety)
 
     def _generate_contract(
         self,
