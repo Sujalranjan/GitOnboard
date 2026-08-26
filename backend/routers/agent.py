@@ -131,6 +131,10 @@ class CancelAgentRunRequest(BaseModel):
     reason: Optional[str] = Field(default=None, description="Reason for cancellation")
 
 
+class RevisePlanRequest(BaseModel):
+    feedback: str = Field(..., description="Review comments or requested modifications to incorporate into the plan")
+
+
 class RejectPlanRequest(BaseModel):
     reason: Optional[str] = Field(default=None, description="Reason for rejecting the plan")
 
@@ -697,6 +701,32 @@ def approve_run_plan(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
     except Exception as err:
         logger.error(f"Plan approval endpoint failed for run '{run_id}': {err}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+
+
+@router.post("/runs/{run_id}/plan/revise", response_model=Dict[str, Any])
+def revise_run_plan(
+    run_id: str,
+    req: RevisePlanRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Revises the implementation plan for the authorized run by incorporating user feedback,
+    incrementing the plan version, and keeping the run in AWAITING_APPROVAL state.
+    """
+    _get_authorized_run(run_id, current_user, db)
+    try:
+        plan = agent_service.revise_plan(db=db, run_id=run_id, feedback=req.feedback)
+        return plan.model_dump(mode="json")
+    except RunNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except InvalidStateTransitionError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
+    except EngineeringAgentError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+    except Exception as err:
+        logger.error(f"Plan revision endpoint failed for run '{run_id}': {err}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
 
 

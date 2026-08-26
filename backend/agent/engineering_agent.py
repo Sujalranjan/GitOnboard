@@ -600,11 +600,40 @@ class EngineeringAgent:
 
         return f"rev:{repository_id or 'default'}"
 
+    def revise_plan(
+        self,
+        db: Session,
+        run_id: str,
+        feedback: str,
+        budget: Optional[ContextBudget] = None,
+    ) -> Plan:
+        """
+        Revises an existing implementation plan based on user review comments.
+        Incorporates feedback into the run requirement, creates an incremented plan version,
+        and returns the newly synthesized plan in AWAITING_APPROVAL state.
+        """
+        run = self.get_run(db, run_id)
+        if self.state_machine.is_terminal(run.current_state):
+            raise EngineeringAgentError(
+                f"Cannot revise plan on run '{run_id}' in terminal state '{run.current_state.value}'"
+            )
+
+        from sqlalchemy.orm.attributes import flag_modified
+        current_req = run.user_requirement or ""
+        run.user_requirement = f"{current_req}\n\n[Review Feedback / Revision]: {feedback.strip()}"
+        flag_modified(run, "user_requirement")
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+
+        return self.create_plan(db, run_id, budget=budget, force_replan=True)
+
     def create_plan(
         self,
         db: Session,
         run_id: str,
         budget: Optional[ContextBudget] = None,
+        force_replan: bool = False,
     ) -> Plan:
         """
         Synthesizes, validates, and records a structured implementation plan.
@@ -620,7 +649,7 @@ class EngineeringAgent:
 
         # Idempotency / Deduplication: If already in AWAITING_APPROVAL with a valid plan, return existing plan
         existing_plan = self.get_plan(db, run_id)
-        if run.current_state == AgentState.AWAITING_APPROVAL and existing_plan and (existing_plan.validation and existing_plan.validation.valid):
+        if not force_replan and run.current_state == AgentState.AWAITING_APPROVAL and existing_plan and (existing_plan.validation and existing_plan.validation.valid):
             existing_app = db.query(ApprovalRequest).filter(
                 ApprovalRequest.agent_run_id == run.id,
                 ApprovalRequest.action_type == ApprovalActionType.PLAN_APPROVAL,

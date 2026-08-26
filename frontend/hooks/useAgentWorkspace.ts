@@ -277,6 +277,48 @@ export function useAgentWorkspace({
     }
   };
 
+  const revisePlan = async (feedback: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      let revisedPlan: ImplementationPlanData | null = null;
+      if (runId) {
+        const res = await fetch(`/api/v1/agent/runs/${runId}/plan/revise`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ feedback }),
+        });
+        if (res.ok) {
+          revisedPlan = await res.json();
+        }
+      }
+      if (!revisedPlan) {
+        const res = await fetch(`/api/v1/agent/classify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requirement: `Review feedback modification: ${feedback}`,
+            repository_id: repositoryId,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          revisedPlan = data.plan;
+        }
+      }
+      if (revisedPlan) {
+        addPlanToHistory(revisedPlan);
+        if (runId) await fetchSnapshot(runId);
+      }
+      return revisedPlan;
+    } catch (err: any) {
+      setError(err.message || "Failed to revise plan");
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const rejectPlan = async (reason?: string) => {
     if (!runId) return;
     try {
@@ -361,6 +403,7 @@ export function useAgentWorkspace({
     startRun,
     approvePlan,
     rejectPlan,
+    revisePlan,
     approveAction,
     rejectAction,
     cancelRun,
