@@ -57,11 +57,23 @@ export function useAgentWorkspace({
     try {
       setIsLoading(true);
       setError(null);
-      const res = await fetch(`/api/v1/agent/runs/${targetRunId}/workspace`);
+      const snapshotUrl = `/api/v1/agent/runs/${targetRunId}/workspace`;
+      console.log(`[Workspace] Fetching snapshot from: ${snapshotUrl}`);
+      const res = await fetch(snapshotUrl);
+      console.log(`[Workspace] Response status: ${res.status}`);
       if (!res.ok) {
+        const errorText = await res.text();
+        console.error(`[Workspace] Error response: ${errorText}`);
         throw new Error(`Failed to load workspace snapshot: ${res.statusText}`);
       }
       const data: WorkspaceSnapshot = await res.json();
+      console.log(`[Workspace] Received snapshot:`, {
+        runId: data.run?.id,
+        currentState: data.run?.current_state,
+        planId: data.plan?.plan_id,
+        planStatus: data.plan?.status,
+        latestEventsCount: data.latest_events?.length || 0,
+      });
       setSnapshot(data);
 
       if (data.plan) {
@@ -111,23 +123,33 @@ export function useAgentWorkspace({
 
   // 2. Connect SSE Stream
   const connectSSE = useCallback((targetRunId: string) => {
+    console.log(`[SSE] Connecting to stream for run: ${targetRunId}`);
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
 
     setConnectionStatus("CONNECTING" as ConnectionStatus);
-    const es = new EventSource(`/api/v1/agent/runs/${targetRunId}/events/stream`);
+    const esUrl = `/api/v1/agent/runs/${targetRunId}/events/stream`;
+    console.log(`[SSE] Opening EventSource at: ${esUrl}`);
+    const es = new EventSource(esUrl);
     eventSourceRef.current = es;
 
     es.onopen = () => {
+      console.log(`[SSE] CONNECTED to stream for run: ${targetRunId}`);
       setConnectionStatus("CONNECTED");
     };
 
     es.onmessage = (event) => {
+      console.log(`[SSE] Received message from stream`);
       try {
-        if (!event.data || event.data.trim() === "") return;
+        if (!event.data || event.data.trim() === "") {
+          console.log(`[SSE] Empty message data, skipping`);
+          return;
+        }
+        console.log(`[SSE] Message data:`, event.data.substring(0, 200));
         const payload: EventStreamItem = JSON.parse(event.data);
+        console.log(`[SSE] Parsed event type: ${payload.event_type}, sequence: ${payload.sequence}`);
 
         // Deduplication Guardrail
         if (payload.event_id && processedEventIds.current.has(payload.event_id)) {
@@ -245,6 +267,7 @@ export function useAgentWorkspace({
     try {
       setIsLoading(true);
       setError(null);
+      console.log(`[Run] Starting new run with requirement: ${requirement}`);
       const res = await fetch("/api/v1/agent/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -253,16 +276,20 @@ export function useAgentWorkspace({
           user_requirement: requirement,
         }),
       });
+      console.log(`[Run] Create run response status: ${res.status}`);
       if (!res.ok) {
         const errData = await res.json();
+        console.error(`[Run] Create run error:`, errData);
         throw new Error(errData.detail || "Failed to start agent run");
       }
       const newRun: AgentRunRecord = await res.json();
+      console.log(`[Run] Created run with ID: ${newRun.id}, state: ${newRun.current_state}`);
       processedEventIds.current.clear();
       lastSequence.current = 0;
       setRunId(newRun.id);
       return newRun;
     } catch (err: any) {
+      console.error(`[Run] Error:`, err);
       setError(err.message || "Failed to start run");
       throw err;
     } finally {
@@ -271,18 +298,30 @@ export function useAgentWorkspace({
   };
 
   const approvePlan = async () => {
-    if (!runId) return;
+    if (!runId) {
+      console.error(`[Approve] No runId available`);
+      return;
+    }
     try {
+      console.log(`[Approve] Approving plan for run: ${runId}`);
       // Approve the plan and start execution (both done by the endpoint)
-      const approveRes = await fetch(`/api/v1/agent/runs/${runId}/plan/approve`, { method: "POST" });
+      const approveUrl = `/api/v1/agent/runs/${runId}/plan/approve`;
+      console.log(`[Approve] POST to: ${approveUrl}`);
+      const approveRes = await fetch(approveUrl, { method: "POST" });
+      console.log(`[Approve] Response status: ${approveRes.status}`);
       if (!approveRes.ok) {
         const errorText = await approveRes.text();
+        console.error(`[Approve] Error response:`, errorText);
         throw new Error(`Approval failed (${approveRes.status}): ${errorText}`);
       }
+      console.log(`[Approve] Plan approved successfully for run: ${runId}`);
 
       // Refresh snapshot to show updated state
+      console.log(`[Approve] Fetching updated snapshot...`);
       await fetchSnapshot(runId);
+      console.log(`[Approve] Snapshot refreshed`);
     } catch (err: any) {
+      console.error(`[Approve] Error:`, err);
       setError(err.message || "Plan approval failed");
       console.error("Approval error:", err);
     }

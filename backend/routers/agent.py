@@ -246,24 +246,35 @@ def _background_plan_run(run_id: str):
 
 def _background_execute_approved_plan(run_id: str):
     from backend.database import SessionLocal
+    logger.info(f"[BACKGROUND] Starting background task executor for run '{run_id}'")
     with SessionLocal() as db:
         try:
-            logger.info(f"Starting background task execution for approved run '{run_id}'")
+            logger.info(f"[BACKGROUND] DB session created for run '{run_id}'")
             has_failure = False
+            task_count = 0
             while True:
+                logger.info(f"[BACKGROUND] Calling execute_next_task for run '{run_id}' (iteration {task_count})")
                 task, exec_res = agent_service.execute_next_task(db=db, run_id=run_id)
+                logger.info(f"[BACKGROUND] execute_next_task returned - task: {task.task_id if task else None}, success: {exec_res.success if exec_res else None}")
+
                 if not task:
                     # All tasks completed
+                    logger.info(f"[BACKGROUND] No more tasks for run '{run_id}' - completing run (has_failure={has_failure})")
                     if has_failure:
+                        logger.info(f"[BACKGROUND] Completing run '{run_id}' with FAILURE")
                         agent_service.complete_run(db, run_id, success=False, failure_reason="One or more tasks failed")
                     else:
+                        logger.info(f"[BACKGROUND] Completing run '{run_id}' with SUCCESS")
                         agent_service.complete_run(db, run_id, success=True)
                     break
                 # Check if this task execution failed
+                task_count += 1
+                logger.info(f"[BACKGROUND] Task #{task_count} completed: {task.task_id}, success={exec_res.success if exec_res else None}")
                 if exec_res and not exec_res.success:
+                    logger.warning(f"[BACKGROUND] Task failed - marking run for eventual failure")
                     has_failure = True
         except Exception as err:
-            logger.error(f"Background task execution failed for run '{run_id}': {err}", exc_info=True)
+            logger.error(f"[BACKGROUND] Background task execution failed for run '{run_id}': {err}", exc_info=True)
             agent_service.complete_run(db, run_id, success=False, failure_reason=str(err))
 
 
@@ -597,6 +608,7 @@ def get_run_plan_history(
     Retrieves the complete history of implementation plans for an authorized agent run.
     Plans are ordered by version descending (newest first).
     """
+    logger.info(f"[PLAN_HISTORY] GET /runs/{run_id}/plan/history - User: {current_user.id if current_user else 'unknown'}")
     _get_authorized_run(run_id, current_user, db)
     try:
         from backend.models.implementation import AgentRunPlanHistory
@@ -606,6 +618,7 @@ def get_run_plan_history(
             .order_by(AgentRunPlanHistory.version.desc())
             .all()
         )
+        logger.info(f"[PLAN_HISTORY] Found {len(plans) if plans else 0} plans for run '{run_id}'")
         return [
             {
                 "plan_id": p.plan_id,
@@ -684,16 +697,28 @@ def approve_run_plan(
     Explicitly approves the synthesized plan and starts background execution of tasks.
     Idempotency: If run is already EXECUTING, returns current run without duplicate worker.
     """
+    logger.info(f"[APPROVE] POST /runs/{run_id}/plan/approve - User: {current_user.id if current_user else 'unknown'}")
     run = _get_authorized_run(run_id, current_user, db)
+    logger.info(f"[APPROVE] Run found - ID: {run.id}, current_state: {run.current_state}")
     if run.current_state == AgentState.EXECUTING:
-        logger.info(f"Run '{run_id}' is already in EXECUTING state; returning current run.")
+        logger.info(f"[APPROVE] Run '{run_id}' is already in EXECUTING state; returning current run.")
         return _serialize_run(run)
     try:
         resolved_by = current_user.username if hasattr(current_user, "username") else "human_user"
+        logger.info(f"[APPROVE] Calling agent_service.approve_plan for run '{run_id}'")
         run = agent_service.approve_plan(db=db, run_id=run_id, resolved_by=resolved_by, user_id=current_user.id)
+        logger.info(f"[APPROVE] Plan approved, run state: {run.current_state}")
+
+        logger.info(f"[APPROVE] Calling agent_service.start_plan_execution for run '{run_id}'")
         run = agent_service.start_plan_execution(db=db, run_id=run_id, user_id=current_user.id)
+        logger.info(f"[APPROVE] Plan execution started, run state: {run.current_state}")
+
         db.refresh(run)  # Ensure we have the latest state before returning
+        logger.info(f"[APPROVE] DB refreshed, run state: {run.current_state}")
+
+        logger.info(f"[APPROVE] Adding background task for run '{run_id}'")
         background_tasks.add_task(_background_execute_approved_plan, run_id)
+        logger.info(f"[APPROVE] Returning serialized run")
         return _serialize_run(run)
     except RunNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
@@ -873,12 +898,16 @@ def get_workspace_snapshot(
     """
     Atomic snapshot of the complete workspace state for an authorized run.
     """
+    logger.info(f"[WORKSPACE] GET /runs/{run_id}/workspace - User: {current_user.id if current_user else 'unknown'}")
     run = _get_authorized_run(run_id, current_user, db)
+    logger.info(f"[WORKSPACE] Run found - state: {run.current_state}, id: {run.id}")
     try:
         plan = agent_service.get_plan(db, run_id)
+        logger.info(f"[WORKSPACE] Plan retrieved - id: {plan.plan_id if plan else None}, status: {plan.status if plan else None}")
         plan_dict = plan.model_dump(mode="json") if plan else None
 
         tasks = agent_service.get_plan_tasks(db, run_id)
+        logger.info(f"[WORKSPACE] Tasks retrieved - count: {len(tasks) if tasks else 0}")
         tasks_list = [t.model_dump(mode="json") for t in tasks]
 
         # Determine active task
@@ -903,7 +932,11 @@ def get_workspace_snapshot(
 
         verification_data = run.metadata_json.get("verification_result") if run.metadata_json else None
         recent_events = [_serialize_event(e, idx + 1) for idx, e in enumerate(run.events or [])]
+        logger.info(f"[WORKSPACE] Events retrieved - count: {len(recent_events)}")
+        if recent_events:
+            logger.info(f"[WORKSPACE] First 5 events: {[e.get('event_type') for e in recent_events[:5]]}")
 
+        logger.info(f"[WORKSPACE] Returning workspace snapshot")
         return WorkspaceSnapshotResponse(
             run=_serialize_run_detail(run),
             plan=plan_dict,
@@ -1065,15 +1098,20 @@ async def stream_agent_events(
     """
     Server-Sent Events (SSE) stream for real-time AgentRun events for an authorized user.
     """
+    logger.info(f"[STREAM] GET /runs/{run_id}/events/stream - User: {current_user.id if current_user else 'unknown'}")
     run = _get_authorized_run(run_id, current_user, db)
+    logger.info(f"[STREAM] SSE stream opened for run '{run_id}', historical events: {len(run.events or [])}")
 
     channel = f"agent:{run.id}"
     queue = task_manager.subscribe(current_user.id, channel)
+    logger.info(f"[STREAM] Subscribed to channel: {channel}")
 
     async def event_generator():
         try:
             # 1. Replay historical events with sequence numbers
+            historical_count = 0
             for idx, evt in enumerate(run.events or []):
+                historical_count += 1
                 evt_dict = {
                     "event_id": evt.id,
                     "sequence": idx + 1,
@@ -1085,19 +1123,25 @@ async def stream_agent_events(
                     "created_at": evt.created_at.isoformat() if evt.created_at else None,
                     "timestamp": evt.created_at.isoformat() if evt.created_at else None,
                 }
+                logger.debug(f"[STREAM] Replaying historical event #{idx+1}: {evt.event_type}")
                 yield {
                     "event": evt.event_type.value if hasattr(evt.event_type, "value") else str(evt.event_type),
                     "data": json.dumps(evt_dict),
                 }
+            logger.info(f"[STREAM] Replayed {historical_count} historical events, now waiting for live events")
 
             # 2. Stream live events
             seq_counter = len(run.events or [])
+            live_event_count = 0
             while True:
                 if await request.is_disconnected():
+                    logger.info(f"[STREAM] Client disconnected from stream for run '{run_id}'")
                     break
                 try:
                     payload = await asyncio.wait_for(queue.get(), timeout=20.0)
                     seq_counter += 1
+                    live_event_count += 1
+                    logger.info(f"[STREAM] Received live event #{live_event_count} (sequence {seq_counter}): {payload[:100]}")
                     try:
                         parsed = json.loads(payload)
                         if isinstance(parsed, dict) and "sequence" not in parsed:
@@ -1108,8 +1152,10 @@ async def stream_agent_events(
                         pass
                     yield {"data": payload}
                 except asyncio.TimeoutError:
+                    logger.debug(f"[STREAM] Keepalive for run '{run_id}'")
                     yield {"comment": "keepalive"}
         finally:
+            logger.info(f"[STREAM] Closing stream for run '{run_id}' - live events received: {live_event_count}")
             task_manager.unsubscribe(current_user.id, channel, queue)
 
     return EventSourceResponse(event_generator())
