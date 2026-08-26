@@ -51,6 +51,10 @@ export async function getFileContent(
     throw new Error('No file selected');
   }
 
+  if (filePath.startsWith('virtual://') || filePath.startsWith('plan://')) {
+    return { content: '', language: 'markdown' };
+  }
+
   const res = await fetch(
     `${API_BASE}/${encodeURIComponent(repoName)}/file?path=${encodeURIComponent(filePath)}`
   );
@@ -88,6 +92,9 @@ export async function getFileSymbols(
   repoName: string,
   filePath: string
 ): Promise<SymbolItem[]> {
+  if (!filePath || !filePath.trim() || filePath.startsWith('virtual://') || filePath.startsWith('plan://')) {
+    return [];
+  }
   try {
     const res = await fetch(`${API_BASE}/${encodeURIComponent(repoName)}/parse?file_path=${encodeURIComponent(filePath)}`);
     if (res.ok) {

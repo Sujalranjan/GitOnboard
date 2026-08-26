@@ -30,6 +30,9 @@ interface AIAgentPanelProps {
   runState?: RunState;
   onStartTaskPrompt?: (prompt: string) => void;
   onTriggerRepair?: () => void;
+  onOpenPlanInEditor?: (plan: any) => void;
+  selectedPlanId?: string | null;
+  agentWorkspace?: ReturnType<typeof useAgentWorkspace>;
   width?: number;
 }
 
@@ -40,14 +43,25 @@ export function AIAgentPanel({
   runState,
   onStartTaskPrompt,
   onTriggerRepair,
+  onOpenPlanInEditor,
+  selectedPlanId,
+  agentWorkspace: externalAgentWorkspace,
   width = 380,
 }: AIAgentPanelProps) {
   const repoId = runState?.repoId || "default";
   const initialRunId = runState?.runId || null;
 
-  // Consume Phase 10 Agent Workspace Hook
+  // Consume Phase 10 Agent Workspace Hook (fallback to local if not provided)
+  const localWorkspace = useAgentWorkspace({
+    initialRunId,
+    repositoryId: repoId,
+  });
+
+  const workspace = externalAgentWorkspace || localWorkspace;
+
   const {
     snapshot,
+    planHistory,
     activeView,
     setActiveView,
     connectionStatus,
@@ -59,10 +73,7 @@ export function AIAgentPanel({
     rejectAction,
     cancelRun,
     refreshSnapshot,
-  } = useAgentWorkspace({
-    initialRunId,
-    repositoryId: repoId,
-  });
+  } = workspace;
 
   if (!isOpen) return null;
 
@@ -125,16 +136,11 @@ export function AIAgentPanel({
             className={`flex-1 py-1 px-1.5 rounded text-[11px] font-medium flex items-center justify-center gap-1 relative transition-all ${
               activeView === "plan"
                 ? "bg-purple-600 text-white shadow-sm"
-                : isAwaitingPlanApproval
-                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse"
                 : "text-zinc-400 hover:text-zinc-200 hover:bg-[#161B22]"
             }`}
           >
             <Layers className="w-3 h-3" />
-            <span>Plan</span>
-            {isAwaitingPlanApproval && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping absolute top-1 right-1" />
-            )}
+            <span>Plan History</span>
           </button>
 
           <button
@@ -187,6 +193,7 @@ export function AIAgentPanel({
             onApprovePlan={approvePlan}
             onRejectPlan={rejectPlan}
             onNavigateToPlan={() => setActiveView("plan")}
+            onOpenPlanInEditor={onOpenPlanInEditor}
             onSelectFile={onSelectFile}
             isLoading={isLoading}
           />
@@ -195,9 +202,9 @@ export function AIAgentPanel({
         {activeView === "plan" && (
           <PlanPanel
             snapshot={snapshot}
-            onApprovePlan={approvePlan}
-            onRejectPlan={rejectPlan}
-            onSelectFile={onSelectFile}
+            planHistory={planHistory}
+            onOpenPlanInEditor={onOpenPlanInEditor}
+            selectedPlanId={selectedPlanId}
             isLoading={isLoading}
           />
         )}

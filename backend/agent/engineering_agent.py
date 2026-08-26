@@ -926,6 +926,22 @@ class EngineeringAgent:
             ).order_by(ApprovalRequest.requested_at.desc()).first()
             if app_req and app_req.status == ApprovalStatus.PENDING:
                 self.approval_controller.approve_request(db, approval_id=app_req.id, resolved_by=resolved_by, run_model=run)
+            elif not app_req:
+                created_req = self.approval_controller.request_approval(
+                    db,
+                    agent_run_id=run.id,
+                    action_type=ApprovalActionType.PLAN_APPROVAL,
+                    description=f"Approve implementation plan v{plan.version} ({plan.plan_id}) with {len(plan.tasks)} tasks",
+                    requested_operation={
+                        "plan_id": plan.plan_id,
+                        "version": plan.version,
+                        "task_count": len(plan.tasks),
+                        "repository_revision": plan.repository_revision,
+                    },
+                    risk_level=RiskLevel.HIGH,
+                    run_model=run,
+                )
+                self.approval_controller.approve_request(db, approval_id=created_req.id, resolved_by=resolved_by, run_model=run)
 
         # Emit PLAN_APPROVED event
         self.events.emit_event(

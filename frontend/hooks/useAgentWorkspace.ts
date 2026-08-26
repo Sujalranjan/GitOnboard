@@ -13,8 +13,6 @@ import {
   WorkspaceSnapshot,
 } from "@/types/workspace";
 
-import { generatePlanMarkdown } from "@/utils/planMarkdown";
-
 interface UseAgentWorkspaceOptions {
   initialRunId?: string | null;
   repositoryId?: string;
@@ -26,6 +24,8 @@ export function useAgentWorkspace({
 }: UseAgentWorkspaceOptions = {}) {
   const [runId, setRunId] = useState<string | null>(initialRunId);
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null);
+  const [planHistory, setPlanHistory] = useState<ImplementationPlanData[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<AgentWorkspaceView>("chat");
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("DISCONNECTED");
@@ -36,6 +36,21 @@ export function useAgentWorkspace({
   const lastSequence = useRef<number>(0);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const addPlanToHistory = useCallback((plan: ImplementationPlanData) => {
+    if (!plan) return;
+    setPlanHistory((prev) => {
+      const exists = prev.some(
+        (p) => (p.plan_id && p.plan_id === plan.plan_id) || (p.version && p.version === plan.version)
+      );
+      if (exists) {
+        return prev.map((p) =>
+          (p.plan_id && p.plan_id === plan.plan_id) || (p.version && p.version === plan.version) ? plan : p
+        );
+      }
+      return [plan, ...prev];
+    });
+  }, []);
 
   // 1. Snapshot Fetcher (Authoritative Hydration & Reconnect Reconciliation)
   const fetchSnapshot = useCallback(async (targetRunId: string) => {
@@ -50,13 +65,7 @@ export function useAgentWorkspace({
       setSnapshot(data);
 
       if (data.plan) {
-        try {
-          const md = generatePlanMarkdown(data.plan, data.tasks || []);
-          localStorage.setItem("gitonboard_active_plan_markdown", md);
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("gitonboard_plan_updated", { detail: { plan: data.plan } }));
-          }
-        } catch {}
+        addPlanToHistory(data.plan);
       }
 
       // Re-seed processed events
@@ -315,6 +324,10 @@ export function useAgentWorkspace({
     runId,
     setRunId,
     snapshot,
+    planHistory,
+    selectedPlanId,
+    setSelectedPlanId,
+    addPlanToHistory,
     activeView,
     setActiveView,
     activeFile,

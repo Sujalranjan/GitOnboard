@@ -16,6 +16,16 @@ import uuid
 from pydantic import BaseModel, Field
 
 
+from backend.intelligence.contracts.investigation import (
+    EvidenceStatus,
+    ImplementationAssessment,
+    InvestigationCoverage,
+    InvestigationEvidence,
+    RepositoryInvestigationResult,
+    SourceSnippetEvidence,
+)
+
+
 class PlanStatus(str, Enum):
     """Lifecycle status of a synthesized implementation plan."""
     DRAFT = "DRAFT"
@@ -49,6 +59,7 @@ class PlanTask(BaseModel):
     step_number: int = Field(default=1, description="Sequential step index")
     title: str = Field(description="Short human-readable summary of the task")
     description: str = Field(description="Detailed technical description of the task actions")
+    rationale: Optional[str] = Field(default=None, description="Explicit justification: Why this file/change is necessary based on repository evidence")
     status: PlanTaskStatus = Field(default=PlanTaskStatus.PENDING, description="Task lifecycle status")
     dependencies: List[str] = Field(default_factory=list, description="IDs of tasks that must complete before this task")
     affected_files: List[str] = Field(default_factory=list, description="Files expected to be created or modified")
@@ -99,6 +110,9 @@ class Plan(BaseModel):
     affected_areas: List[Dict[str, Any]] = Field(default_factory=list, description="Affected components and files")
     constraints: List[str] = Field(default_factory=list, description="Architectural constraints")
     
+    # Canonical Code-Level Repository Investigation
+    investigation: Optional[RepositoryInvestigationResult] = Field(default=None, description="Detailed repository investigation, evidence, and assessment")
+
     # Task Graph
     tasks: List[PlanTask] = Field(default_factory=list, description="Actionable tasks forming a DAG")
     task_dependencies: Dict[str, List[str]] = Field(default_factory=dict, description="DAG map: task_id -> [dependency_task_ids]")
@@ -130,24 +144,26 @@ class Plan(BaseModel):
         return {
             "plan_id": self.plan_id,
             "version": self.version,
-            "status": self.status.value,
+            "status": self.status.value if hasattr(self.status, "value") else str(self.status),
+            "requirement": self.requirement,
             "task_count": len(self.tasks),
             "tasks": [
                 {
                     "task_id": t.task_id,
                     "title": t.title,
-                    "status": t.status.value,
-                    "dependencies": t.dependencies,
+                    "rationale": t.rationale,
+                    "status": t.status.value if hasattr(t.status, "value") else str(t.status),
+                    "component_type": t.component_type,
                     "affected_files": t.affected_files,
-                    "criteria_count": len(t.acceptance_criteria),
-                    "verification": t.verification_strategy,
                 }
                 for t in self.tasks
             ],
+            "investigation": self.investigation.model_dump(mode="json") if self.investigation else None,
             "unknowns_count": len(self.unknowns),
             "risks_count": len(self.risks),
             "is_valid": self.validation.valid if self.validation else False,
             "validation_errors": self.validation.errors if self.validation else [],
             "validation_warnings": self.validation.warnings if self.validation else [],
+            "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

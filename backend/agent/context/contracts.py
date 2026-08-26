@@ -83,6 +83,7 @@ class RepositoryContext(BaseModel):
     version: str = Field(default="v1", description="Context schema version")
     repository_id: str
     requirement: str
+    analysis_id: Optional[int] = Field(default=None, description="Analysis ID this context is assembled from")
     capabilities: List[Dict[str, Any]] = Field(default_factory=list, description="Existing matching capabilities")
     relevant_files: List[str] = Field(default_factory=list, description="Selected file paths")
     relevant_symbols: List[Dict[str, Any]] = Field(default_factory=list, description="Selected symbol definitions")

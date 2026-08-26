@@ -140,6 +140,40 @@ export interface PlanTaskItem {
   status: string;
   assigned_to?: string;
   error_message?: string;
+  rationale?: string;
+}
+
+export type ImplementationAssessment = "EXISTING" | "PARTIAL" | "NEW" | "UNCERTAIN";
+
+export interface SourceSnippetEvidence {
+  file_path: string;
+  line_start: number;
+  line_end: number;
+  code_snippet: string;
+  symbol_name?: string;
+  route_path?: string;
+  match_type: string;
+  evidence_status: string;
+  description?: string;
+}
+
+export interface RepositoryInvestigation {
+  requirement: string;
+  assessment: ImplementationAssessment;
+  assessment_reason: string;
+  decision_rationale: string;
+  coverage?: {
+    fact_routes_searched: boolean;
+    fact_symbols_searched: boolean;
+    fact_files_searched: boolean;
+    lexical_searched: boolean;
+    source_snippets_inspected: boolean;
+    coverage_score: number;
+  };
+  inspected_files: string[];
+  relevant_symbols: string[];
+  relevant_routes: string[];
+  source_snippets: SourceSnippetEvidence[];
 }
 
 export interface ImplementationPlanData {
@@ -150,6 +184,7 @@ export interface ImplementationPlanData {
   acceptance_criteria?: string[];
   architecture_context?: Record<string, any>;
   repository_understanding?: Record<string, any>;
+  investigation?: RepositoryInvestigation;
   risks?: string[];
   tasks: PlanTaskItem[];
   validation?: {
