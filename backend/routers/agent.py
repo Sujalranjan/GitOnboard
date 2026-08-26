@@ -692,6 +692,7 @@ def approve_run_plan(
         resolved_by = current_user.username if hasattr(current_user, "username") else "human_user"
         run = agent_service.approve_plan(db=db, run_id=run_id, resolved_by=resolved_by, user_id=current_user.id)
         run = agent_service.start_plan_execution(db=db, run_id=run_id, user_id=current_user.id)
+        db.refresh(run)  # Ensure we have the latest state before returning
         background_tasks.add_task(_background_execute_approved_plan, run_id)
         return _serialize_run(run)
     except RunNotFoundError as err:

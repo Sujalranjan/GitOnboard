@@ -60,7 +60,6 @@ export function PlanDocumentViewer({
   const isCompleted = plan.status === "COMPLETED" || plan.status === "PASSED";
 
   const tasks = plan.tasks || [];
-  const risks = plan.risks || [];
   const allAffectedFiles = Array.from(
     new Set(tasks.flatMap((t) => t.affected_files || []).concat(plan.investigation?.inspected_files || []))
   );
@@ -88,18 +87,6 @@ export function PlanDocumentViewer({
     }
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([getMarkdownPlan()], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `implementation-plan-v${plan.version || 1}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
@@ -118,16 +105,11 @@ export function PlanDocumentViewer({
   return (
     <div className="h-full overflow-y-auto bg-[#0A0D10] text-zinc-200 p-6 lg:p-8 font-sans selection:bg-purple-900 selection:text-white flex flex-col justify-between">
       <div className="space-y-5 max-w-3xl">
-        {/* 1. Header with [Copy] [Download] [Review v] [Proceed] */}
+        {/* 1. Header with [Copy] [Review v] [Proceed] */}
         <div className="flex items-center justify-between pb-3 border-b border-[#21262D]">
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-base font-bold text-white tracking-tight">
-              Implementation Plan
-            </h1>
-            <span className="text-xs text-zinc-400 font-sans">
-              1 day ago
-            </span>
-          </div>
+          <h1 className="text-base font-bold text-white tracking-tight">
+            Implementation Plan
+          </h1>
 
           <div className="flex items-center gap-2 relative">
             {/* Copy Icon Button */}
@@ -138,16 +120,6 @@ export function PlanDocumentViewer({
               title="Copy markdown plan"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-            </button>
-
-            {/* Download Icon Button */}
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="p-1.5 rounded-lg hover:bg-[#21262D] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-              title="Download markdown plan"
-            >
-              <Download className="w-4 h-4" />
             </button>
 
             {/* Review Dropdown Button */}
@@ -228,17 +200,7 @@ export function PlanDocumentViewer({
           </div>
         </div>
 
-        {/* 2. Plan Title & Description */}
-        <div className="space-y-1 pt-1">
-          <h2 className="text-base font-bold text-white tracking-tight">
-            {plan.requirement || "Add a hello function to please.py"}
-          </h2>
-          <p className="text-xs text-zinc-400 leading-relaxed">
-            {plan.description || "Add a simple hello() function that returns a greeting string and include automated tests."}
-          </p>
-        </div>
-
-        {/* 3. Files Section */}
+        {/* 2. Files Section */}
         <div className="space-y-2 pt-2">
           <div className="text-xs font-bold text-zinc-200">
             Files ({allAffectedFiles.length || 2})
@@ -262,7 +224,7 @@ export function PlanDocumentViewer({
           </ul>
         </div>
 
-        {/* 4. Steps Section */}
+        {/* 3. Steps Section */}
         <div className="space-y-2 pt-2">
           <div className="text-xs font-bold text-zinc-200">
             Steps ({tasks.length || 2})
@@ -283,57 +245,6 @@ export function PlanDocumentViewer({
               </li>
             ))}
           </ol>
-        </div>
-
-        {/* 5. Risks Section */}
-        <div className="space-y-2 pt-2">
-          <div className="text-xs font-bold text-zinc-200">Risks</div>
-          <div className="space-y-1.5 pl-1">
-            {risks.length > 0 ? (
-              risks.map((r, idx) => (
-                <div key={idx} className="flex items-center gap-2 text-xs text-zinc-300">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                  <span>{r}</span>
-                </div>
-              ))
-            ) : (
-              <div className="flex items-center gap-2 text-xs text-zinc-300">
-                <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                <span>Low - Simple additive change</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 6. Estimated Effort */}
-        <div className="space-y-1.5 pt-2">
-          <div className="text-xs font-bold text-zinc-200">Estimated Effort</div>
-          <div className="text-xs text-zinc-400 pl-1 font-mono">
-            ~{Math.max(5, tasks.length * 3)} minutes
-          </div>
-        </div>
-
-        {/* 7. Milestone Timeline */}
-        <div className="pt-4 border-t border-[#21262D] space-y-2.5">
-          <div className="flex items-center justify-between text-xs font-mono">
-            <div className="flex items-center gap-2 text-purple-300">
-              <div className="w-4 h-4 rounded-full bg-purple-600 text-white flex items-center justify-center text-[10px]">
-                <Check className="w-2.5 h-2.5" />
-              </div>
-              <span className="font-semibold text-zinc-200">Plan generated</span>
-            </div>
-            <span className="text-zinc-500 text-[11px]">10:30 AM</span>
-          </div>
-
-          {(isAwaitingApproval || isApproved || isExecuting || isCompleted) && (
-            <div className="flex items-center justify-between text-xs font-mono">
-              <div className="flex items-center gap-2 text-emerald-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="font-semibold text-zinc-200">Ready for approval</span>
-              </div>
-              <span className="text-zinc-500 text-[11px]">10:30 AM</span>
-            </div>
-          )}
         </div>
       </div>
 
