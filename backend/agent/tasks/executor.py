@@ -88,11 +88,12 @@ class EngineeringAgentTaskExecutor(TaskExecutor):
         loop: Optional[Any] = None,
         config: Optional[Any] = None,
         agent_loop: Optional[Any] = None,
+        llm_service: Optional[Any] = None,
     ):
         actual_loop = loop or agent_loop
         if actual_loop is None:
             from backend.agent.loop import EngineeringAgentLoop
-            self.loop = EngineeringAgentLoop()
+            self.loop = EngineeringAgentLoop(llm_service=llm_service)
         else:
             self.loop = actual_loop
         self.config = config
