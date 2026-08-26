@@ -25,6 +25,7 @@ from backend.agent.engineering_agent import EngineeringAgent
 from backend.database import SessionLocal
 from backend.models.implementation import AgentState, AgentEventType
 from backend.config import settings
+from backend.agent.safety import ApprovalActionType, RiskLevel
 from backend.agent.modes import execute_chat, execute_explore, execute_explain, execute_plan, execute_implement
 
 logger = logging.getLogger(__name__)
@@ -338,6 +339,24 @@ def build_agent_graph(
                         to_state=AgentState.AWAITING_APPROVAL,
                         reason="Implementation plan synthesized; awaiting user approval",
                     )
+                if hasattr(service, "approval_controller") and service.approval_controller is not None and plan_data:
+                    try:
+                        service.approval_controller.request_approval(
+                            db,
+                            agent_run_id=run.id,
+                            action_type=ApprovalActionType.PLAN_APPROVAL,
+                            description=f"Approve implementation plan v{plan_data.get('version', 1)} ({plan_data.get('plan_id', 'plan')}) with {len(plan_data.get('tasks', []))} tasks",
+                            requested_operation={
+                                "plan_id": plan_data.get("plan_id"),
+                                "version": plan_data.get("version", 1),
+                                "task_count": len(plan_data.get("tasks", [])),
+                                "repository_revision": plan_data.get("repository_revision"),
+                            },
+                            risk_level=RiskLevel.HIGH,
+                            run_model=run,
+                        )
+                    except Exception as err:
+                        logger.debug(f"Approval request already registered or error: {err}")
                 if hasattr(service, "events") and service.events is not None:
                     service.events.emit_event(
                         db=db,

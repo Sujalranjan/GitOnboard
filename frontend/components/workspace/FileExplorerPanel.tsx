@@ -281,7 +281,7 @@ export function FileExplorerPanel({
 
   // Fetch real AST symbols for active file
   useEffect(() => {
-    if (!activeFile) {
+    if (!activeFile || activeFile.startsWith("virtual://") || activeFile.startsWith("plan://")) {
       setSymbols([]);
       return;
     }

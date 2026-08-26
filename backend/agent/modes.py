@@ -84,7 +84,18 @@ def resolve_target_repository_and_analysis(
     if user_id is not None:
         query = query.filter(Repository.user_id == user_id)
 
-    # 3a. Exact URL match
+    # 3a. Primary numeric repository ID match
+    if clean_repo_id.isdigit():
+        repo_by_id = query.filter(Repository.id == int(clean_repo_id)).first()
+        if repo_by_id:
+            repo_name = repo_by_id.url.split("/")[-1].replace(".git", "") if repo_by_id.url else clean_repo_id
+            latest_analysis = db.query(Analysis).filter(
+                Analysis.repository_id == repo_by_id.id,
+                Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
+            ).order_by(Analysis.id.desc()).first()
+            return repo_by_id, latest_analysis.id if latest_analysis else None, repo_name
+
+    # 3b. Exact URL match
     exact_matches = query.filter(
         (Repository.url == clean_repo_id) |
         (Repository.url == f"https://github.com/{clean_repo_id}") |
@@ -628,6 +639,10 @@ def execute_plan(
             context_budget=ContextBudget(max_files=8, max_symbols=15, max_call_paths=5),
         )
         ctx = assembler.assemble(req, db=db)
+        if ctx.metadata is None:
+            ctx.metadata = {}
+        if analysis_id:
+            ctx.metadata["analysis_id"] = analysis_id
 
         # Iteration 2: 1-Hop Graph Expansion if anchor symbols exist
         expanded_symbols = list(ctx.relevant_symbols)
@@ -682,6 +697,12 @@ def execute_plan(
                 pass
 
         orchestrator = PlanningOrchestrator(llm_service=None)
+        if analysis_id:
+            ctx.analysis_id = analysis_id
+            if ctx.metadata is None:
+                ctx.metadata = {}
+            ctx.metadata["analysis_id"] = analysis_id
+
         plan = orchestrator.create_plan(
             context=ctx,
             agent_run_id=agent_run_id or f"run_plan_{repo_name_resolved}",
@@ -692,36 +713,14 @@ def execute_plan(
             repository_revision=repo_revision,
         )
 
-        # 5. Format Instant Structured Markdown Response from Verified DAG Plan
-        lines = [
-            f"## Repository-Aware Implementation Plan for: *{user_requirement}*",
-            "",
-            f"**Target Repository**: `{repo_name_resolved}` (Analysis #{analysis_id or 'N/A'})",
-            f"**Validation Status**: {'✅ Valid Plan (0 Cycles)' if plan.validation and plan.validation.valid else '⚠️ Draft with Warnings'}",
-            "",
-            "### Planned Implementation Steps (DAG):",
-        ]
-        for task in plan.tasks:
-            comp_badge = f"`[{task.component_type}]`"
-            files_str = ", ".join(f"`{f}`" for f in task.affected_files) if task.affected_files else "No files specified"
-            deps_str = f"(Depends on: {', '.join(task.dependencies)})" if task.dependencies else "(Initial task)"
-            lines.append(f"1. **{task.title}** {comp_badge} {deps_str}")
-            lines.append(f"   - **Files**: {files_str}")
-            lines.append(f"   - **Verification**: `{task.verification_strategy}`")
-            if task.acceptance_criteria:
-                lines.append(f"   - **Criteria**: {task.acceptance_criteria[0]}")
-
-        if plan.unknowns:
-            lines.append("\n### Identified Unknowns & Assumptions:")
-            for u in plan.unknowns:
-                lines.append(f"- ❓ {u}")
-
-        if plan.risks:
-            lines.append("\n### Technical Risks & Blast Radius:")
-            for r in plan.risks:
-                lines.append(f"- ⚠️ {r}")
-
-        response_text = "\n".join(lines)
+        # 5. Format Concise Executive Summary Response
+        task_count = len(plan.tasks)
+        file_count = len(ctx.relevant_files)
+        analysis_tag = f"Analysis #{analysis_id}" if analysis_id else "Analysis #N/A"
+        response_text = (
+            f"Repository-aware implementation plan synthesized for: *{user_requirement}* "
+            f"({repo_name_resolved}, {analysis_tag}, {task_count} {'task' if task_count == 1 else 'tasks'} · {file_count} {'file' if file_count == 1 else 'files'})."
+        )
 
         return {
             "response": response_text,
@@ -761,17 +760,17 @@ def execute_implement(
     res = execute_plan(
         user_requirement=user_requirement,
         repository_id=repository_id,
-        agent_run_id=agent_run_id,
         user_id=user_id,
+        agent_run_id=agent_run_id,
         db=db,
     )
+    task_count = len(res.get("plan", {}).get("tasks", []))
     res["intent"] = "implement"
     res["model"] = settings.model_terminal_implement
     res["status"] = "READY_FOR_APPROVAL"
     res["response"] = (
-        f"### 📋 Implementation Plan Generated (Awaiting Approval)\n\n"
-        f"{res.get('response', '')}\n\n"
-        f"> 🔒 **Approval Required**: Review the planned tasks above and click **Approve** to authorize repository mutation."
+        f"Implementation plan synthesized for: *{user_requirement}* "
+        f"({task_count} {'task' if task_count == 1 else 'tasks'}). Ready for review."
     )
     return res
 

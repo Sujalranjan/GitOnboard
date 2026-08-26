@@ -65,6 +65,7 @@ class PlanStep(BaseModel):
     step_number: int = 1
     title: str = "Implementation Step"
     description: str = ""
+    rationale: Optional[str] = None
     target_files: List[str] = Field(default_factory=list)
     affected_symbols: List[str] = Field(default_factory=list)
     component_type: str = "EXISTING"

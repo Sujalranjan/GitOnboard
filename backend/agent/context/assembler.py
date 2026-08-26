@@ -731,6 +731,7 @@ class ContextAssembler:
             version="v1",
             repository_id=request.repository_id,
             requirement=request.requirement,
+            analysis_id=request.analysis_id,
             capabilities=capabilities,
             relevant_files=dedup_files,
             relevant_symbols=dedup_symbols,
@@ -745,6 +746,7 @@ class ContextAssembler:
             unknowns=unknowns,
             contract=contract,
             metadata={
+                "analysis_id": request.analysis_id,
                 "duration_ms": round(duration_ms, 2),
                 "evidence_count": len(evidence_items),
                 "budget_applied": budget.model_dump(),

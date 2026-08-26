@@ -9,6 +9,8 @@ import { TerminalPanel } from "./TerminalPanel";
 import { AIAgentPanel } from "./AIAgentPanel";
 import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 import { useVerificationWorkspace } from "@/hooks/useVerificationWorkspace";
+import { useAgentWorkspace } from "@/hooks/useAgentWorkspace";
+import { ImplementationPlanData } from "@/types/workspace";
 
 interface WorkspaceLayoutProps {
   initialRepoName?: string;
@@ -20,6 +22,7 @@ export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayout
   const [isTerminalOpen, setIsTerminalOpen] = useState(true);
   const [isAIAgentOpen, setIsAIAgentOpen] = useState(true);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+  const [selectedPlanForEditor, setSelectedPlanForEditor] = useState<ImplementationPlanData | null>(null);
 
   // Resizable panel dimensions with localStorage persistence
   const [explorerWidth, setExplorerWidth] = useState<number>(240);
@@ -55,16 +58,16 @@ export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayout
       const newWidth = Math.max(180, Math.min(500, startWidth + delta));
       setExplorerWidth(newWidth);
       try {
-        localStorage.setItem("gitonboard_explorer_width", newWidth.toString());
+        localStorage.setItem("gitonboard_explorer_width", String(newWidth));
       } catch {}
     };
 
     const handleMouseUp = () => {
       setActiveResizer(null);
+      document.body.style.cursor = "default";
+      document.body.style.userSelect = "auto";
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
     };
 
     document.body.style.cursor = "col-resize";
@@ -82,19 +85,19 @@ export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayout
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = startY - moveEvent.clientY;
-      const newHeight = Math.max(120, Math.min(window.innerHeight * 0.75, startHeight + delta));
+      const newHeight = Math.max(120, Math.min(600, startHeight + delta));
       setTerminalHeight(newHeight);
       try {
-        localStorage.setItem("gitonboard_terminal_height", newHeight.toString());
+        localStorage.setItem("gitonboard_terminal_height", String(newHeight));
       } catch {}
     };
 
     const handleMouseUp = () => {
       setActiveResizer(null);
+      document.body.style.cursor = "default";
+      document.body.style.userSelect = "auto";
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
     };
 
     document.body.style.cursor = "row-resize";
@@ -115,16 +118,16 @@ export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayout
       const newWidth = Math.max(260, Math.min(650, startWidth + delta));
       setAiAgentWidth(newWidth);
       try {
-        localStorage.setItem("gitonboard_ai_agent_width", newWidth.toString());
+        localStorage.setItem("gitonboard_ai_agent_width", String(newWidth));
       } catch {}
     };
 
     const handleMouseUp = () => {
       setActiveResizer(null);
+      document.body.style.cursor = "default";
+      document.body.style.userSelect = "auto";
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
     };
 
     document.body.style.cursor = "col-resize";
@@ -146,6 +149,22 @@ export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayout
     handleStartTaskPrompt,
     handleTriggerRepair,
   } = useVerificationWorkspace(initialRepoName);
+
+  // Consume unified agent workspace hook
+  const agentWorkspace = useAgentWorkspace({
+    initialRunId: runState?.runId || null,
+    repositoryId: runState?.repoId || initialRepoName,
+  });
+
+  const handleOpenPlanInEditor = useCallback(
+    (plan: ImplementationPlanData) => {
+      if (!plan) return;
+      setSelectedPlanForEditor(plan);
+      agentWorkspace.addPlanToHistory(plan);
+      handleSelectFile("virtual://plan");
+    },
+    [handleSelectFile, agentWorkspace]
+  );
 
   // Panel toggle callbacks
   const toggleFileExplorer = useCallback(() => setIsFileExplorerOpen((prev) => !prev), []);
@@ -295,6 +314,14 @@ export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayout
             runState={runState}
             editorMode={editorMode}
             onSetEditorMode={setEditorMode}
+            activePlan={agentWorkspace.snapshot?.plan}
+            selectedPlan={selectedPlanForEditor || agentWorkspace.snapshot?.plan}
+            onApprovePlan={agentWorkspace.approvePlan}
+            onRejectPlan={agentWorkspace.rejectPlan}
+            onSelectPlan={(plan) => {
+              setSelectedPlanForEditor(plan);
+              handleSelectFile("virtual://plan");
+            }}
           />
 
           {/* Bottom Half: Collapsible & Resizable Terminal Panel */}
@@ -346,6 +373,12 @@ export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayout
               runState={runState}
               onStartTaskPrompt={handleStartTaskPrompt}
               onTriggerRepair={handleTriggerRepair}
+              onOpenPlanInEditor={handleOpenPlanInEditor}
+              selectedPlanId={
+                selectedPlanForEditor?.plan_id ||
+                (selectedPlanForEditor?.version ? `v${selectedPlanForEditor.version}` : null)
+              }
+              agentWorkspace={agentWorkspace}
               width={aiAgentWidth}
             />
           </>

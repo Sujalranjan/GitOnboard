@@ -26,6 +26,7 @@ interface ChatPanelProps {
   onApprovePlan?: () => void;
   onRejectPlan?: (reason?: string) => void;
   onNavigateToPlan?: () => void;
+  onOpenPlanInEditor?: (plan: any) => void;
   onApproveAction?: (approvalId: string) => void;
   onRejectAction?: (approvalId: string, reason: string) => void;
   onSelectFile?: (file: string) => void;
@@ -49,7 +50,15 @@ interface ChatMessage {
   timestamp: string;
 }
 
-export function ChatPanel({ onStartRun, snapshot, repoId, onSelectFile }: ChatPanelProps) {
+export function ChatPanel({
+  onStartRun,
+  snapshot,
+  repoId,
+  onSelectFile,
+  onNavigateToPlan,
+  onOpenPlanInEditor,
+  isLoading: externalLoading,
+}: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputPrompt, setInputPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -140,11 +149,8 @@ export function ChatPanel({ onStartRun, snapshot, repoId, onSelectFile }: ChatPa
       const data = await res.json();
       const planText = data.response || "Request processed.";
 
-      if (data.intent === "plan" || planText.includes("Plan")) {
-        try {
-          sessionStorage.setItem("gitonboard_active_plan_markdown", planText);
-          localStorage.setItem("gitonboard_active_plan_markdown", planText);
-        } catch {}
+      if (data.intent === "implement" && onStartRun) {
+        onStartRun(trimmed);
       }
 
       const finalAssistantMsg: ChatMessage = {
@@ -192,14 +198,6 @@ export function ChatPanel({ onStartRun, snapshot, repoId, onSelectFile }: ChatPa
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     handleSend(inputPrompt);
-  };
-
-  const openPlanInEditor = (markdownText: string) => {
-    try {
-      sessionStorage.setItem("gitonboard_active_plan_markdown", markdownText);
-      localStorage.setItem("gitonboard_active_plan_markdown", markdownText);
-    } catch {}
-    onSelectFile?.("implementation_plan.md");
   };
 
   const getIntentStyle = (intentKey?: string) => {
@@ -405,123 +403,69 @@ export function ChatPanel({ onStartRun, snapshot, repoId, onSelectFile }: ChatPa
                           <div className="w-3.5 h-3.5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin shrink-0" />
                           <span>Synthesizing repository-grounded plan...</span>
                         </div>
-                      ) : msg.intent?.intent === "plan" ? (
+                      ) : (msg.planData || msg.intent?.intent === "plan" || msg.intent?.intent === "implement") ? (
                         /* Compact Implementation Plan Preview Card */
-                        <div className="space-y-3 pt-1">
-                          <div
-                            onClick={() => openPlanInEditor(msg.text)}
-                            className="bg-gradient-to-b from-[#1A1F2C] to-[#121620] border border-purple-500/40 hover:border-purple-500/80 rounded-xl p-3.5 space-y-3 cursor-pointer transition-all hover:shadow-lg hover:shadow-purple-950/30 group select-none"
-                          >
+                        <div className="space-y-2.5 pt-1">
+                          <div className="bg-gradient-to-b from-[#181C26] to-[#12151E] border border-purple-500/40 rounded-xl p-3.5 space-y-3 shadow-md select-none">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-lg bg-purple-600/30 border border-purple-500/50 flex items-center justify-center text-purple-300 group-hover:bg-purple-600 group-hover:text-white transition-colors shadow-inner">
+                                <div className="w-7 h-7 rounded-lg bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shadow-inner">
                                   <Layers className="w-4 h-4" />
                                 </div>
-                                <div>
+                                <div className="min-w-0">
                                   <div className="text-xs font-bold text-white flex items-center gap-1.5">
                                     <span>Implementation Plan</span>
                                     <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-500/30 font-mono">
-                                      {msg.planData?.tasks?.length || 2} Tasks
+                                      v{msg.planData?.version || 1}
                                     </span>
                                   </div>
-                                  <div className="text-[10px] text-zinc-400 font-mono">
-                                    Target: {repoId || snapshot?.run?.repository_id || "Deep-Guard-Frontend"}
+                                  <div className="text-[11px] text-zinc-300 font-mono truncate max-w-[240px]">
+                                    {msg.planData?.requirement || msg.text}
                                   </div>
                                 </div>
                               </div>
-
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openPlanInEditor(msg.text);
-                                }}
-                                className="text-[11px] px-2.5 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/40 flex items-center gap-1.5 transition-all font-semibold font-mono shadow-sm cursor-pointer"
-                              >
-                                <FileCode className="w-3.5 h-3.5" />
-                                <span>Open in Editor</span>
-                                <ExternalLink className="w-3 h-3 opacity-80" />
-                              </button>
-                            </div>
-
-                            {/* Task List DAG Preview */}
-                            <div className="space-y-1.5 bg-[#0D1117]/90 p-2.5 rounded-lg border border-zinc-800/80">
-                              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider font-mono flex items-center justify-between">
-                                <span>Planned DAG Tasks:</span>
-                                <span className="text-emerald-400 text-[9px] font-mono lowercase">0 cycles • verified</span>
-                              </div>
-                              <div className="space-y-1">
-                                {msg.planData?.tasks?.length ? (
-                                  msg.planData.tasks.map((task: any, idx: number) => (
-                                    <div
-                                      key={idx}
-                                      className="flex items-center justify-between text-xs font-mono text-zinc-300 hover:text-white transition-colors"
-                                    >
-                                      <div className="flex items-center gap-1.5 truncate">
-                                        <span className="text-purple-400 font-bold">{idx + 1}.</span>
-                                        <span className="truncate">{task.title}</span>
-                                      </div>
-                                      <span
-                                        className={`text-[9px] px-1.5 py-0.2 rounded font-mono shrink-0 ml-2 ${
-                                          task.component_type === "EXISTING"
-                                            ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
-                                            : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                        }`}
-                                      >
-                                        [{task.component_type}]
-                                      </span>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div className="text-xs text-zinc-300 font-mono space-y-0.5">
-                                    <div className="flex items-center justify-between">
-                                      <span>1. Implement components</span>
-                                      <span className="text-[9px] text-emerald-400">[NEW]</span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                      <span>2. Add automated regression tests</span>
-                                      <span className="text-[9px] text-emerald-400">[NEW]</span>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="text-[10px] text-zinc-400 flex items-center justify-between pt-0.5">
-                              <span className="text-emerald-400 font-mono">⚡ In-memory scratch tab • 0 Git mutations</span>
-                              <span className="text-purple-400 font-mono flex items-center gap-0.5 underline">
-                                Click to view full Markdown <ChevronRight className="w-3 h-3" />
+                              <span className="text-[10px] px-2 py-0.5 rounded font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0">
+                                {msg.planData?.status || "READY"}
                               </span>
                             </div>
-                          </div>
 
-                          {/* Review & Refinement Bar */}
-                          <div className="bg-[#141820] border border-zinc-800 rounded-xl p-2.5 space-y-2">
-                            <div className="text-[11px] font-semibold text-zinc-200 flex items-center gap-1.5">
-                              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                              <span>Review & Modify Plan:</span>
-                            </div>
-                            <p className="text-[10px] text-zinc-400 leading-relaxed">
-                              You can refine this plan before implementation. Type your changes below or click a quick suggestion:
-                            </p>
-                            <div className="flex flex-wrap gap-1.5 pt-0.5">
-                              {[
-                                "Add Framer Motion animation library",
-                                "Include Jest unit test verification",
-                                "Add Error Boundary & fallback UI",
-                                "Break into smaller sequential tasks",
-                              ].map((suggestion) => (
-                                <button
-                                  key={suggestion}
-                                  type="button"
-                                  onClick={() => handleSend(`modify plan: ${suggestion}`)}
-                                  disabled={isSubmitting}
-                                  className="text-[10px] px-2 py-1 rounded-lg bg-zinc-900/90 hover:bg-purple-950/80 text-zinc-300 hover:text-purple-200 border border-zinc-700/60 hover:border-purple-500/40 transition-all font-mono text-left cursor-pointer shadow-sm"
-                                >
-                                  + {suggestion}
-                                </button>
-                              ))}
-                            </div>
+                            {/* Plan Metrics Badge Strip */}
+                            {(() => {
+                              const tasks = msg.planData?.tasks || [];
+                              const taskCount = tasks.length || 1;
+                              const uniqueFiles = new Set<string>();
+                              tasks.forEach((t: any) => (t.affected_files || []).forEach((f: string) => uniqueFiles.add(f)));
+                              const fileCount = uniqueFiles.size || (msg.planData?.affected_areas?.length || 0) || 1;
+                              const riskCount = msg.planData?.risks?.length || 0;
+                              const riskLevel = riskCount > 1 ? "Medium" : riskCount === 1 ? "Moderate" : "Low";
+                              const riskColor = riskCount > 1 ? "text-amber-400" : "text-emerald-400";
+
+                              return (
+                                <div className="flex items-center gap-2 text-[11px] text-zinc-300 font-mono bg-[#0D1117] px-3 py-2 rounded-lg border border-zinc-800/90 justify-between">
+                                  <span>{taskCount} {taskCount === 1 ? "task" : "tasks"}</span>
+                                  <span className="text-zinc-600">·</span>
+                                  <span>{fileCount} {fileCount === 1 ? "file" : "files"}</span>
+                                  <span className="text-zinc-600">·</span>
+                                  <span className={riskColor}>{riskLevel} risk</span>
+                                </div>
+                              );
+                            })()}
+
+                            {/* Single Action: Preview full plan in main editor */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onOpenPlanInEditor) {
+                                  onOpenPlanInEditor(msg.planData || snapshot?.plan);
+                                } else if (onNavigateToPlan) {
+                                  onNavigateToPlan();
+                                }
+                              }}
+                              className="w-full py-2 px-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold font-mono flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer hover:shadow-purple-900/30"
+                            >
+                              <span>Preview full plan</span>
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       ) : (

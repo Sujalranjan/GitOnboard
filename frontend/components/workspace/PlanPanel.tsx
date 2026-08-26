@@ -1,297 +1,159 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import {
   AlertCircle,
-  AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  FileCode,
+  Clock,
+  ExternalLink,
+  History,
   Layers,
-  PauseCircle,
-  Play,
-  ShieldCheck,
   Sparkles,
-  XCircle,
 } from "lucide-react";
-import { ImplementationPlanData, PlanTaskItem, WorkspaceSnapshot } from "@/types/workspace";
+import { ImplementationPlanData, WorkspaceSnapshot } from "@/types/workspace";
+
+interface PlanHistoryItem extends ImplementationPlanData {
+  created_at_formatted?: string;
+}
 
 interface PlanPanelProps {
   snapshot: WorkspaceSnapshot | null;
-  onApprovePlan: () => void;
-  onRejectPlan: (reason?: string) => void;
-  onSelectFile?: (file: string) => void;
+  planHistory?: ImplementationPlanData[];
+  onOpenPlanInEditor?: (plan: ImplementationPlanData) => void;
+  selectedPlanId?: string | null;
   isLoading?: boolean;
 }
 
 export function PlanPanel({
   snapshot,
-  onApprovePlan,
-  onRejectPlan,
-  onSelectFile,
+  planHistory = [],
+  onOpenPlanInEditor,
+  selectedPlanId,
   isLoading = false,
 }: PlanPanelProps) {
-  const [rejectReason, setRejectReason] = useState("");
-  const [showRejectInput, setShowRejectInput] = useState(false);
-  const [expandedTask, setExpandedTask] = useState<string | null>(null);
-
-  const plan = snapshot?.plan;
-  const tasks = snapshot?.tasks || [];
-  const runState = snapshot?.run?.current_state;
-  const isAwaitingApproval =
-    runState === "AWAITING_APPROVAL" ||
-    plan?.status === "READY_FOR_APPROVAL";
-
-  const handleReject = () => {
-    if (!rejectReason.trim()) {
-      setShowRejectInput(true);
-      return;
+  // Combine authoritative active plan from snapshot with session history
+  const activePlan = snapshot?.plan;
+  
+  // Deduplicate history items and ensure active plan is included
+  const plansMap = new Map<string, ImplementationPlanData>();
+  
+  if (activePlan) {
+    plansMap.set(activePlan.plan_id || `v${activePlan.version}`, activePlan);
+  }
+  
+  planHistory.forEach((p) => {
+    const key = p.plan_id || `v${p.version}`;
+    if (!plansMap.has(key)) {
+      plansMap.set(key, p);
     }
-    onRejectPlan(rejectReason.trim());
-    setRejectReason("");
-    setShowRejectInput(false);
-  };
+  });
 
-  const handleOpenInEditor = () => {
-    const lines = [
-      `# Implementation Plan v${plan?.version || 1}: ${snapshot?.run?.user_requirement || "Requirement Spec"}`,
-      "",
-      `**Status**: ${plan?.status || "DRAFT"}`,
-      `**Target Repository**: \`${snapshot?.run?.repository_id || "default"}\``,
-      "",
-      "## Planned DAG Tasks",
-      "",
-      ...tasks.map((t, idx) => [
-        `### Task ${idx + 1}: ${t.title} [${t.component_type}]`,
-        `- **Files**: ${(t.affected_files || []).join(", ") || "None"}`,
-        `- **Dependencies**: ${(t.dependencies || []).join(", ") || "None"}`,
-        `- **Verification**: \`${t.verification_strategy}\``,
-        `- **Acceptance Criteria**:`,
-        ...(t.acceptance_criteria || []).map((ac) => `  - ${ac}`),
-        "",
-      ].join("\n")),
-    ];
-    const md = lines.join("\n");
-    try {
-      sessionStorage.setItem("gitonboard_active_plan_markdown", md);
-      localStorage.setItem("gitonboard_active_plan_markdown", md);
-    } catch {}
-    onSelectFile?.("implementation_plan.md");
-  };
+  const allPlans = Array.from(plansMap.values()).sort((a, b) => (b.version || 0) - (a.version || 0));
 
-  if (!plan && tasks.length === 0) {
+  if (allPlans.length === 0) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-6 text-center select-none font-mono">
-        <Layers className="w-10 h-10 mb-3 text-zinc-600 animate-pulse" />
-        <p className="text-xs font-semibold text-zinc-400">No Implementation Plan Yet</p>
-        <p className="text-[11px] text-zinc-500 max-w-sm mt-1">
-          The agent will synthesize and validate an explicit multi-task DAG plan during the planning stage.
+      <div className="h-full flex flex-col items-center justify-center p-6 text-center select-none font-mono bg-[#0D1117] text-zinc-500">
+        <History className="w-10 h-10 mb-3 text-zinc-600 animate-pulse" />
+        <p className="text-xs font-semibold text-zinc-400">No Implementation Plans Yet</p>
+        <p className="text-[11px] text-zinc-500 max-w-xs mt-1 leading-relaxed">
+          Plans generated from implementation requests will appear here. Click any plan to inspect it in the main editor.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#0D1117] text-zinc-200 overflow-y-auto p-4 space-y-4 font-mono">
-      {/* Plan Header Card with Open in Editor button */}
-      <div className="bg-[#161B22] p-4 rounded-lg border border-[#30363D] space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-purple-400" />
-            <span className="text-xs font-semibold text-white">
-              Implementation Plan v{plan?.version || 1}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {onSelectFile && (
-              <button
-                type="button"
-                onClick={handleOpenInEditor}
-                className="text-[10px] px-2 py-0.5 rounded bg-[#21262D] hover:bg-[#30363D] text-purple-400 hover:text-purple-300 border border-[#30363D] flex items-center gap-1 transition-colors cursor-pointer"
-                title="Open Markdown spec in Monaco Editor as in-memory temporary scratch"
-              >
-                <FileCode className="w-3 h-3" />
-                <span>Open in Editor (Temp)</span>
-              </button>
-            )}
-            <span
-              className={`text-[10px] px-2 py-0.5 rounded font-mono font-medium border ${
-                plan?.status === "APPROVED"
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                  : plan?.status === "READY_FOR_APPROVAL"
-                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                  : "bg-zinc-800 text-zinc-400 border-zinc-700"
-              }`}
-            >
-              {plan?.status || "DRAFT"}
-            </span>
-          </div>
+    <div className="flex flex-col h-full bg-[#0D1117] text-zinc-200 overflow-y-auto p-3.5 space-y-3 font-mono select-none">
+      {/* Header */}
+      <div className="flex items-center justify-between px-1 pb-1 border-b border-[#21262D]">
+        <div className="flex items-center gap-2">
+          <History className="w-4 h-4 text-purple-400" />
+          <span className="text-xs font-bold text-white tracking-wider uppercase">
+            Plan History
+          </span>
         </div>
-        <p className="text-xs text-zinc-300">
-          {snapshot?.run?.user_requirement || "Plan for target requirements"}
-        </p>
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#161B22] text-purple-300 border border-[#30363D] font-bold">
+          {allPlans.length} {allPlans.length === 1 ? "Version" : "Versions"}
+        </span>
       </div>
 
-      {/* Phase 9 Plan Approval Banner */}
-      {isAwaitingApproval && (
-        <div className="bg-amber-950/30 border border-amber-500/40 p-4 rounded-lg space-y-3 shadow-lg shadow-amber-950/20">
-          <div className="flex items-center gap-2 text-amber-400">
-            <PauseCircle className="w-5 h-5 animate-pulse" />
-            <span className="text-xs font-bold uppercase tracking-wider">
-              Explicit Plan Approval Required (Phase 9)
-            </span>
-          </div>
-          <p className="text-xs text-zinc-300">
-            Review the {tasks.length} tasks and acceptance criteria below. Invariant: Zero execution occurs until explicitly approved.
-          </p>
+      <p className="text-[10px] text-zinc-400 px-1">
+        Click any plan version to open and inspect in the main editor workspace.
+      </p>
 
-          {showRejectInput && (
-            <div className="space-y-1.5 pt-1">
-              <label className="text-[11px] text-zinc-400">Revision feedback for agent:</label>
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="e.g. Please add unit test task for payment edge cases..."
-                className="w-full h-16 bg-[#0D1117] border border-amber-500/40 rounded p-2 text-xs font-mono text-zinc-200 focus:outline-none focus:border-amber-400"
-              />
-            </div>
-          )}
-
-          <div className="flex items-center gap-3 pt-1">
-            <button
-              onClick={() => (showRejectInput ? handleReject() : setShowRejectInput(true))}
-              disabled={isLoading}
-              className="px-3 py-1.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-medium transition-all"
-            >
-              {showRejectInput ? "Submit Rejection" : "Reject Plan"}
-            </button>
-            <button
-              onClick={onApprovePlan}
-              disabled={isLoading}
-              className="flex-1 px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow-md transition-all flex items-center justify-center gap-2"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Approve Plan & Start Execution</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Task List */}
+      {/* Plan History Items List */}
       <div className="space-y-2">
-        <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
-          Plan Tasks DAG ({tasks.length})
-        </span>
-
-        {tasks.map((task: PlanTaskItem) => {
-          const isExpanded = expandedTask === task.task_id;
-          const status = task.status || "PENDING";
+        {allPlans.map((planItem) => {
+          const isCurrentActive = activePlan && (activePlan.plan_id === planItem.plan_id || activePlan.version === planItem.version);
+          const isSelected = selectedPlanId === planItem.plan_id || (selectedPlanId === `v${planItem.version}`);
+          const tasks = planItem.tasks || [];
+          const taskCount = tasks.length || 1;
+          const uniqueFiles = new Set<string>();
+          tasks.forEach((t) => (t.affected_files || []).forEach((f) => uniqueFiles.add(f)));
+          const fileCount = uniqueFiles.size || (planItem.architecture_context?.routes_count || 1);
+          const riskCount = planItem.risks?.length || 0;
+          const riskLevel = riskCount > 1 ? "Moderate" : "Low";
+          const riskColor = riskCount > 1 ? "text-amber-400" : "text-emerald-400";
 
           return (
             <div
-              key={task.task_id}
-              className="bg-[#161B22] border border-[#30363D] rounded-lg overflow-hidden transition-all"
+              key={planItem.plan_id || planItem.version}
+              onClick={() => onOpenPlanInEditor?.(planItem)}
+              className={`p-3 rounded-xl border transition-all cursor-pointer space-y-2 group ${
+                isSelected
+                  ? "bg-[#1C182A] border-purple-500/80 shadow-md shadow-purple-950/40"
+                  : isCurrentActive
+                  ? "bg-[#161B22] border-emerald-500/40 hover:border-emerald-500/80"
+                  : "bg-[#14181E] border-[#30363D] hover:border-zinc-500/50 hover:bg-[#1A1F28]"
+              }`}
             >
-              <div
-                onClick={() => setExpandedTask(isExpanded ? null : task.task_id)}
-                className="p-3 flex items-center justify-between cursor-pointer hover:bg-[#1C2128]"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-[11px] font-bold">
-                    {task.step_number}
-                  </div>
-                  <span className="text-xs font-medium text-zinc-200">{task.title}</span>
-                </div>
-
+              {/* Top Row: Version Badge + Status */}
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded font-mono font-medium ${
-                      status === "PASSED"
-                        ? "bg-emerald-500/10 text-emerald-400"
-                        : status === "RUNNING"
-                        ? "bg-blue-500/10 text-blue-400 animate-pulse"
-                        : status === "BLOCKED"
-                        ? "bg-rose-500/10 text-rose-400"
-                        : "bg-zinc-800 text-zinc-400"
+                    className={`w-2 h-2 rounded-full ${
+                      isCurrentActive ? "bg-emerald-400 ring-2 ring-emerald-400/30 animate-pulse" : "bg-zinc-600"
                     }`}
-                  >
-                    {status}
+                  />
+                  <span className="text-xs font-bold font-mono text-white">
+                    v{planItem.version || 1}
                   </span>
-                  {isExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-zinc-500" />
+                  {isCurrentActive ? (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      CURRENT
+                    </span>
                   ) : (
-                    <ChevronRight className="w-4 h-4 text-zinc-500" />
+                    <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-zinc-800 text-zinc-400 border border-zinc-700">
+                      SUPERSEDED
+                    </span>
                   )}
+                </div>
+
+                <div className="flex items-center gap-1 text-purple-400 group-hover:translate-x-0.5 transition-transform text-[11px]">
+                  <span className="text-[10px]">Open in Editor</span>
+                  <ArrowRight className="w-3 h-3" />
                 </div>
               </div>
 
-              {isExpanded && (
-                <div className="p-3 border-t border-[#21262D] bg-[#0D1117] space-y-2.5 text-xs">
-                  {task.description && (
-                    <div>
-                      <span className="text-[10px] text-zinc-500 uppercase">Description</span>
-                      <p className="text-zinc-300 mt-0.5">{task.description}</p>
-                    </div>
-                  )}
+              {/* Requirement / Title */}
+              <div className="text-xs text-zinc-200 font-sans font-medium line-clamp-2 leading-relaxed">
+                {planItem.requirement || "Implementation Plan Specification"}
+              </div>
 
-                  {task.dependencies?.length > 0 && (
-                    <div>
-                      <span className="text-[10px] text-zinc-500 uppercase">Dependencies</span>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {task.dependencies.map((dep) => (
-                          <span
-                            key={dep}
-                            className="px-2 py-0.5 rounded bg-[#161B22] border border-[#30363D] text-[11px] text-zinc-300"
-                          >
-                            {dep}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {task.affected_files?.length > 0 && (
-                    <div>
-                      <span className="text-[10px] text-zinc-500 uppercase">Affected Files</span>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {task.affected_files.map((file) => (
-                          <span
-                            key={file}
-                            className="px-2 py-0.5 rounded bg-blue-950/30 border border-blue-500/30 text-[11px] text-blue-300 flex items-center gap-1"
-                          >
-                            <FileCode className="w-3 h-3" />
-                            <span>{file}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {task.acceptance_criteria?.length > 0 && (
-                    <div>
-                      <span className="text-[10px] text-zinc-500 uppercase">Acceptance Criteria</span>
-                      <ul className="list-disc list-inside space-y-1 mt-1 text-zinc-300">
-                        {task.acceptance_criteria.map((c, cIdx) => (
-                          <li key={cIdx} className="text-[11px]">
-                            {c}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {task.verification_strategy && (
-                    <div>
-                      <span className="text-[10px] text-zinc-500 uppercase">Verification Strategy</span>
-                      <p className="text-cyan-400 font-mono text-[11px] mt-0.5">
-                        {task.verification_strategy}
-                      </p>
-                    </div>
-                  )}
+              {/* Metrics Strip */}
+              <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-800/80 font-mono">
+                <div className="flex items-center gap-2">
+                  <span>{taskCount} {taskCount === 1 ? "task" : "tasks"}</span>
+                  <span className="text-zinc-600">·</span>
+                  <span>{fileCount} {fileCount === 1 ? "file" : "files"}</span>
+                  <span className="text-zinc-600">·</span>
+                  <span className={riskColor}>{riskLevel} risk</span>
                 </div>
-              )}
+                <span className="text-zinc-500 text-[9px] uppercase">
+                  {planItem.status || "READY"}
+                </span>
+              </div>
             </div>
           );
         })}
