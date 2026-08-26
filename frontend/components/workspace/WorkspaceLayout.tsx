@@ -156,6 +156,23 @@ export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayout
     repositoryId: runState?.repoId || initialRepoName,
   });
 
+  const handleRevisePlan = useCallback(
+    async (feedback?: string) => {
+      if (!feedback) return;
+      try {
+        const revised = await agentWorkspace.revisePlan(feedback);
+        if (revised) {
+          setSelectedPlanForEditor(revised);
+          agentWorkspace.addPlanToHistory(revised);
+          handleSelectFile("virtual://plan");
+        }
+      } catch (err) {
+        console.error("Failed to revise plan:", err);
+      }
+    },
+    [agentWorkspace, handleSelectFile]
+  );
+
   const handleOpenPlanInEditor = useCallback(
     (plan: ImplementationPlanData) => {
       if (!plan) return;
@@ -324,7 +341,7 @@ export function WorkspaceLayout({ initialRepoName = "default" }: WorkspaceLayout
             activePlan={agentWorkspace.snapshot?.plan}
             selectedPlan={selectedPlanForEditor || agentWorkspace.snapshot?.plan}
             onApprovePlan={agentWorkspace.approvePlan}
-            onRejectPlan={agentWorkspace.rejectPlan}
+            onRejectPlan={handleRevisePlan}
             onSelectPlan={(plan) => {
               setSelectedPlanForEditor(plan);
               handleSelectFile("virtual://plan");

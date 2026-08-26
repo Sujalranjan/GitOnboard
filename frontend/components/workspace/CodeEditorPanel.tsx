@@ -316,6 +316,7 @@ export function CodeEditorPanel({
             onRejectPlan={onRejectPlan}
             onSelectFile={onSelectFile}
             onSelectPlan={onSelectPlan}
+            onSendMessage={onRejectPlan}
           />
         ) : loadingFile ? (
           <div className="absolute inset-0 flex items-center justify-center bg-[#0A0D10] text-[#8B949E] text-xs font-mono">
