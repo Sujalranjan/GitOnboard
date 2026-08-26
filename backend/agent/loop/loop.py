@@ -44,9 +44,10 @@ class EngineeringAgentLoop:
         model_adapter: Optional[ModelAdapter] = None,
         event_coordinator: Optional[AgentEventCoordinator] = None,
         config: Optional[AgentLoopConfig] = None,
+        llm_service: Optional[Any] = None,
     ):
         self.tool_registry = tool_registry or create_default_tool_registry()
-        self.model_adapter = model_adapter or ModelAdapter()
+        self.model_adapter = model_adapter or ModelAdapter(llm_service=llm_service)
         self.events = event_coordinator or AgentEventCoordinator()
         self.default_config = config or AgentLoopConfig()
 

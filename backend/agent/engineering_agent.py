@@ -108,7 +108,7 @@ class EngineeringAgent:
 
             # If LLM service is available, use the real executor
             if llm_service is not None:
-                executor = EngineeringAgentTaskExecutor(loop=None, agent_loop=None)
+                executor = EngineeringAgentTaskExecutor(loop=None, agent_loop=None, llm_service=llm_service)
 
             task_orchestrator = TaskOrchestrator(executor=executor)
 
