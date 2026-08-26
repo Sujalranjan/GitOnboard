@@ -995,6 +995,7 @@ class EngineeringAgent:
         flag_modified(run, "metadata_json")
         db.add(run)
         db.commit()
+        db.refresh(run)  # Refresh to ensure plan is properly loaded
 
         # Update plan history record to mark as APPROVED
         try:

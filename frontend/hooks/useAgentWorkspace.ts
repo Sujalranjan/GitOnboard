@@ -172,15 +172,26 @@ export function useAgentWorkspace({
           };
         });
 
-        // Trigger snapshot refresh on key milestones
-        // Note: These event types are defined in backend/agent/events.py SNAPSHOT_REFRESH_TRIGGERS
+        // Trigger snapshot refresh on key milestones and execution activity
         const SNAPSHOT_REFRESH_EVENTS = [
           "PLAN_READY_FOR_APPROVAL",
           "PLAN_APPROVED",
+          "TASK_STARTED",
+          "NEXT_TASK_SELECTED",
+          "TASK_EXECUTION_COMPLETED",
+          "TASK_EXECUTION_FAILED",
+          "TASK_VERIFYING",
+          "TASK_PASSED",
           "TASK_COMPLETED",
           "TASK_FAILED",
+          "TASK_BLOCKED",
+          "FILE_WRITTEN",
+          "TOOL_CALL_STARTED",
+          "TOOL_CALL_COMPLETED",
           "VERIFICATION_COMPLETED",
           "REPAIR_REVERIFY_COMPLETED",
+          "RUN_COMPLETED",
+          "RUN_FAILED",
         ];
         if (SNAPSHOT_REFRESH_EVENTS.includes(payload.event_type)) {
           fetchSnapshot(targetRunId);
@@ -262,18 +273,18 @@ export function useAgentWorkspace({
   const approvePlan = async () => {
     if (!runId) return;
     try {
-      // 1. Approve the plan
+      // Approve the plan and start execution (both done by the endpoint)
       const approveRes = await fetch(`/api/v1/agent/runs/${runId}/plan/approve`, { method: "POST" });
-      if (!approveRes.ok) throw new Error("Failed to approve plan");
+      if (!approveRes.ok) {
+        const errorText = await approveRes.text();
+        throw new Error(`Approval failed (${approveRes.status}): ${errorText}`);
+      }
 
-      // 2. Start execution immediately after approval
-      const executeRes = await fetch(`/api/v1/agent/runs/${runId}/execute`, { method: "POST" });
-      if (!executeRes.ok) throw new Error("Failed to start execution");
-
-      // 3. Refresh snapshot to show updated state
+      // Refresh snapshot to show updated state
       await fetchSnapshot(runId);
     } catch (err: any) {
       setError(err.message || "Plan approval failed");
+      console.error("Approval error:", err);
     }
   };
 
