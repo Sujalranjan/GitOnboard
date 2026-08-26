@@ -56,6 +56,42 @@ class ApprovalController:
     def __init__(self, event_coordinator: Optional[AgentEventCoordinator] = None):
         self.event_coordinator = event_coordinator or AgentEventCoordinator()
 
+    def request_approval(
+        self,
+        db: Session,
+        agent_run_id: str,
+        action_type: ApprovalActionType,
+        description: str = "",
+        risk_level: RiskLevel = RiskLevel.HIGH,
+        action_description: Optional[str] = None,
+        task_id: Optional[str] = None,
+        tool_call_id: Optional[str] = None,
+        requested_operation: Optional[Dict[str, Any]] = None,
+        affected_files: Optional[List[str]] = None,
+        command: Optional[str] = None,
+        reason: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        run_model: Optional[AgentRun] = None,
+    ) -> ApprovalRequest:
+        """
+        Alias for create_approval_request with flexible keyword arguments.
+        """
+        return self.create_approval_request(
+            db=db,
+            agent_run_id=agent_run_id,
+            action_type=action_type,
+            action_description=action_description or description or f"Approval required for {action_type.value}",
+            risk_level=risk_level,
+            task_id=task_id,
+            tool_call_id=tool_call_id,
+            requested_operation=requested_operation,
+            affected_files=affected_files,
+            command=command,
+            reason=reason,
+            metadata=metadata,
+            run_model=run_model,
+        )
+
     def create_approval_request(
         self,
         db: Session,

@@ -45,10 +45,11 @@ class AgentEventCoordinator:
     def emit_event(
         cls,
         db: Session,
-        agent_run: AgentRun,
-        event_type: AgentEventType | str,
-        message: str,
+        agent_run: Optional[AgentRun | str] = None,
+        event_type: AgentEventType | str = AgentEventType.STATE_TRANSITION,
+        message: str = "",
         payload: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
     ) -> AgentEvent:
         """
         Persists an AgentEvent and broadcasts it over SSE channels:
@@ -58,8 +59,24 @@ class AgentEventCoordinator:
         ev_type = event_type if isinstance(event_type, AgentEventType) else AgentEventType(str(event_type))
         safe_payload = payload or {}
 
+        actual_run_id: str
+        run_obj: Optional[AgentRun] = None
+        if isinstance(agent_run, AgentRun):
+            run_obj = agent_run
+            actual_run_id = agent_run.id
+        elif run_id:
+            actual_run_id = run_id
+            run_obj = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        elif isinstance(agent_run, str):
+            actual_run_id = agent_run
+            run_obj = db.query(AgentRun).filter(AgentRun.id == agent_run).first()
+        else:
+            raise ValueError("Either agent_run or run_id must be provided to emit_event")
+
+        task_id = run_obj.task_id if run_obj else None
+
         event = AgentEvent(
-            agent_run_id=agent_run.id,
+            agent_run_id=actual_run_id,
             event_type=ev_type,
             message=message,
             payload=safe_payload,
@@ -76,8 +93,8 @@ class AgentEventCoordinator:
 
         event_payload_json = json.dumps(
             {
-                "agent_run_id": agent_run.id,
-                "task_id": agent_run.task_id,
+                "agent_run_id": actual_run_id,
+                "task_id": task_id,
                 "event_type": ev_type.value,
                 "message": message,
                 "payload": safe_payload,
@@ -86,16 +103,17 @@ class AgentEventCoordinator:
         )
 
         # Broadcast on primary agent_run_id channel to run owner and default
-        target_uids = [agent_run.user_id] if agent_run.user_id is not None else [0]
+        run_user_id = run_obj.user_id if run_obj is not None else None
+        target_uids = [run_user_id] if run_user_id is not None else [0]
         if 0 not in target_uids:
             target_uids.append(0)
 
         for uid in target_uids:
-            cls._safe_notify(uid, _channel_for_run(agent_run.id), ev_type.value, event_payload_json)
-            if agent_run.task_id and agent_run.task_id != agent_run.id:
-                cls._safe_notify(uid, _channel_for_run(agent_run.task_id), ev_type.value, event_payload_json)
+            cls._safe_notify(uid, _channel_for_run(actual_run_id), ev_type.value, event_payload_json)
+            if task_id and task_id != actual_run_id:
+                cls._safe_notify(uid, _channel_for_run(task_id), ev_type.value, event_payload_json)
 
-        logger.debug(f"AgentEvent emitted: run_id={agent_run.id} type={ev_type.value} msg='{message}'")
+        logger.debug(f"AgentEvent emitted: run_id={actual_run_id} type={ev_type.value} msg='{message}'")
         return event
 
     @staticmethod

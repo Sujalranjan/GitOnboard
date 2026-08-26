@@ -115,6 +115,14 @@ async function handleProxy(request: NextRequest, { path }: { path: string[] }) {
       });
     }
 
+    // Clear stale or invalid auth cookies immediately when auth endpoint returns 401
+    if (response.status === 401 && (targetPath.startsWith("auth") || targetPath.includes("me"))) {
+      responseHeaders.append(
+        "set-cookie",
+        "access_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; HttpOnly; SameSite=Lax"
+      );
+    }
+
     const contentType = response.headers.get("content-type") || "";
 
     // For SSE streams or terminal streams, return the body stream immediately

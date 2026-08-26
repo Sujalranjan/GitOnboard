@@ -52,13 +52,18 @@ def upgrade() -> None:
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["agent_run_id"], ["agent_runs.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["superseded_by_plan_id"],
-            ["agent_run_plan_history.plan_id"],
-            ondelete="SET NULL",
-        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("plan_id", name="uq_agent_run_plan_history_plan_id"),
+    )
+
+    # Add self-referential FK after table creation and unique constraint exists
+    op.create_foreign_key(
+        "fk_agent_run_plan_history_superseded",
+        "agent_run_plan_history",
+        "agent_run_plan_history",
+        ["superseded_by_plan_id"],
+        ["plan_id"],
+        ondelete="SET NULL",
     )
     op.create_index(
         op.f("ix_agent_run_plan_history_agent_run_id"),
@@ -94,6 +99,13 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema to remove agent_run_plan_history table."""
+    # Drop self-referential FK first
+    op.drop_constraint(
+        "fk_agent_run_plan_history_superseded",
+        "agent_run_plan_history",
+        type_="foreignkey",
+    )
+
     op.drop_index(
         op.f("ix_agent_run_plan_history_created_at"),
         table_name="agent_run_plan_history",

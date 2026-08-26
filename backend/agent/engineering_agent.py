@@ -98,7 +98,21 @@ class EngineeringAgent:
         self.state_machine = AgentStateMachine()
         self.tools = tool_registry or create_default_tool_registry()
         self.llm_service = llm_service
-        self.task_orchestrator = task_orchestrator or TaskOrchestrator()
+
+        # Initialize TaskOrchestrator with appropriate executor
+        if task_orchestrator is None:
+            # Use EngineeringAgentTaskExecutor for real execution (requires LLM)
+            # Fall back to DefaultTaskExecutor for testing/stub mode
+            from backend.agent.tasks.executor import EngineeringAgentTaskExecutor, DefaultTaskExecutor
+            executor: Any = DefaultTaskExecutor()  # Default stub for testing
+
+            # If LLM service is available, use the real executor
+            if llm_service is not None:
+                executor = EngineeringAgentTaskExecutor(loop=None, agent_loop=None)
+
+            task_orchestrator = TaskOrchestrator(executor=executor)
+
+        self.task_orchestrator = task_orchestrator
         self.approval_controller = approval_controller or ApprovalController(event_coordinator=self.events)
         self.cancellation_controller = cancellation_controller or CancellationController(event_coordinator=self.events)
 
@@ -669,6 +683,7 @@ class EngineeringAgent:
                         "unknown_count": len(plan.unknowns),
                     },
                 )
+
                 self.events.emit_event(
                     db,
                     run,
@@ -689,7 +704,19 @@ class EngineeringAgent:
                 try:
                     from backend.models.implementation import AgentRunPlanHistory, AgentRunPlanHistoryStatus
 
-                    # Mark previous plan versions as SUPERSEDED
+                    # Create new history record for this plan FIRST (before updating previous plans)
+                    # This avoids FK constraint violations on the self-referential FK
+                    plan_history = AgentRunPlanHistory(
+                        agent_run_id=run.id,
+                        plan_id=plan.plan_id,
+                        version=plan.version,
+                        status=AgentRunPlanHistoryStatus.READY_FOR_APPROVAL,
+                        plan_json=plan.model_dump(mode="json"),
+                    )
+                    db.add(plan_history)
+                    db.commit()
+
+                    # Now mark previous plan versions as SUPERSEDED (after new plan exists)
                     prev_plans = db.query(AgentRunPlanHistory).filter(
                         AgentRunPlanHistory.agent_run_id == run.id,
                         AgentRunPlanHistory.version < plan.version,
@@ -700,16 +727,6 @@ class EngineeringAgent:
                             prev_plan.superseded_at = plan.updated_at
                             prev_plan.superseded_by_plan_id = plan.plan_id
                             db.add(prev_plan)
-
-                    # Create new history record for this plan
-                    plan_history = AgentRunPlanHistory(
-                        agent_run_id=run.id,
-                        plan_id=plan.plan_id,
-                        version=plan.version,
-                        status=AgentRunPlanHistoryStatus.READY_FOR_APPROVAL,
-                        plan_json=plan.model_dump(mode="json"),
-                    )
-                    db.add(plan_history)
                     db.commit()
                 except Exception as err:
                     logger.warning(f"Failed to persist plan to history table for run '{run_id}': {err}")
@@ -725,6 +742,21 @@ class EngineeringAgent:
                     pa.status = ApprovalStatus.EXPIRED
                     db.add(pa)
                 db.commit()
+
+                # CRITICAL STATE INVARIANT FIX:
+                # Transition run to AWAITING_APPROVAL AFTER all plan prerequisites are persisted.
+                # This ensures the invariant: Plan.status == READY_FOR_APPROVAL AND Run.state == AWAITING_APPROVAL
+                # The approval endpoint (/plan/approve) requires this state to proceed.
+                db.refresh(run)
+                if run.current_state == AgentState.PLANNING:
+                    self.transition_state(
+                        db,
+                        run.id,
+                        to_state=AgentState.AWAITING_APPROVAL,
+                        reason=f"Plan v{plan.version} created and validated with {len(plan.tasks)} tasks; awaiting user review",
+                    )
+                elif run.current_state != AgentState.AWAITING_APPROVAL:
+                    logger.warning(f"Run '{run_id}' in unexpected state {run.current_state.value} during plan validation; expected PLANNING or AWAITING_APPROVAL")
 
                 # Create plan-specific ApprovalRequest bound to exact plan_id, version, and repository revision
                 aff_files = [
@@ -749,18 +781,6 @@ class EngineeringAgent:
                     metadata={"plan_id": plan.plan_id, "version": plan.version, "repository_revision": plan.repository_revision},
                     run_model=run,
                 )
-
-                # Transition to AWAITING_APPROVAL only if still in PLANNING state
-                db.refresh(run)
-                if run.current_state == AgentState.PLANNING:
-                    self.transition_state(
-                        db,
-                        run.id,
-                        to_state=AgentState.AWAITING_APPROVAL,
-                        reason=f"Plan v{plan.version} created and validated with {len(plan.tasks)} tasks; awaiting user review",
-                    )
-                elif run.current_state == AgentState.AWAITING_APPROVAL:
-                    logger.info(f"Run '{run_id}' already transitioned to AWAITING_APPROVAL by concurrent operation")
             else:
                 from sqlalchemy.orm.attributes import flag_modified
                 err_msg = "; ".join(plan.validation.errors) if plan.validation else "Validation failed"
@@ -1358,6 +1378,46 @@ class EngineeringAgent:
             logger.info(f"All {len(plan.tasks)} tasks in plan '{plan.plan_id}' passed! Ready for Phase 7 final verification.")
 
         return self.task_orchestrator._find_task(plan, task_id), exec_result
+
+    def complete_run(
+        self,
+        db: Session,
+        run_id: str,
+        success: bool = True,
+        failure_reason: Optional[str] = None,
+    ) -> AgentRun:
+        """
+        Marks a run as COMPLETED or FAILED after all tasks have been executed and verified.
+        """
+        run = self.get_run(db, run_id)
+
+        if run.current_state not in (AgentState.EXECUTING, AgentState.VERIFYING):
+            logger.warning(f"Run '{run_id}' is in state {run.current_state.value}, expected EXECUTING or VERIFYING")
+            return run
+
+        target_state = AgentState.COMPLETED if success else AgentState.FAILED
+        reason = failure_reason or "All tasks completed" if success else "Task execution or verification failed"
+
+        self.transition_state(db, run_id, target_state, reason)
+
+        if not success:
+            self.events.emit_event(
+                db,
+                run,
+                AgentEventType.RUN_FAILED,
+                f"Run failed: {failure_reason or 'One or more tasks failed'}",
+                {"failure_reason": failure_reason},
+            )
+        else:
+            self.events.emit_event(
+                db,
+                run,
+                AgentEventType.RUN_COMPLETED,
+                f"Run completed successfully with all tasks passed",
+                {},
+            )
+
+        return run
 
     def recover_in_flight_runs(self, db: Session) -> List[str]:
         """
