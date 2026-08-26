@@ -462,6 +462,128 @@ class PlanningOrchestrator:
         slug_words = [w for w in safe_name.split("_") if w not in {"what", "would", "it", "take", "to", "add", "implement", "a", "an", "the", "feature", "system", "for", "in", "of", "and", "integration", "support", "server", "side", "layer", "client", "provider", "module", "across"}]
         slug = "_".join(slug_words[:2]) if slug_words else "feature"
 
+        # ──────────────────────────────────────────────────────────────────
+        # LLM-Powered Dynamic Step Synthesis (Phase 4/5)
+        # ──────────────────────────────────────────────────────────────────
+        if self.llm_service:
+            try:
+                from backend.ai.schemas import LLMRequest
+                llm_prompt = f"""You are an expert AI software architect designing an implementation plan for a codebase.
+
+USER REQUIREMENT & REVISION FEEDBACK:
+{raw_req}
+
+REPOSITORY CONTEXT:
+Relevant Files: {', '.join(candidate_files[:8])}
+Archetype: {'Python' if is_py_repo else ('TypeScript/JavaScript' if is_ts_repo else 'Code')}
+
+Generate 2 to 4 concrete sequential plan steps that directly implement the requirement and incorporate any user review comments.
+Return a JSON array of step objects matching this exact structure:
+[
+  {{
+    "step_number": 1,
+    "title": "Exact actionable title",
+    "description": "Detailed description of the file modifications",
+    "target_files": ["path/to/file"],
+    "component_type": "EXISTING"
+  }}
+]
+Only return the valid JSON array."""
+
+                from backend.ai.schemas import Message, MessageRole
+                req_obj = LLMRequest(
+                    messages=[
+                        Message(role=MessageRole.SYSTEM, content="You are an AI code architect. Output strictly a JSON array of implementation plan steps."),
+                        Message(role=MessageRole.USER, content=llm_prompt),
+                    ],
+                    temperature=0.2,
+                    max_tokens=1200,
+                )
+
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        resp = pool.submit(asyncio.run, self.llm_service.generate(req_obj)).result()
+                else:
+                    resp = asyncio.run(self.llm_service.generate(req_obj))
+
+                if resp and resp.content:
+                    import json
+                    text_resp = resp.content.strip()
+                    if text_resp.startswith("```"):
+                        text_resp = re.sub(r"^```[a-zA-Z]*\n", "", text_resp)
+                        text_resp = re.sub(r"\n```$", "", text_resp)
+                    parsed_steps = json.loads(text_resp)
+                    if isinstance(parsed_steps, list) and len(parsed_steps) > 0:
+                        llm_steps: List[PlanStep] = []
+                        for idx, s_data in enumerate(parsed_steps):
+                            st_num = idx + 1
+                            t_files = s_data.get("target_files") or candidate_files[:2] or [f"{src_dir}/{slug}.py" if is_py_repo else f"{src_dir}/{slug}.ts"]
+                            p_step = PlanStep(
+                                step_number=st_num,
+                                title=s_data.get("title") or f"Step {st_num}: {action_title}",
+                                description=s_data.get("description") or f"Implement changes in {', '.join(t_files)}",
+                                target_files=t_files,
+                                component_type=s_data.get("component_type", "EXISTING"),
+                                acceptance_criteria=["AC-01"],
+                                dependencies=[st_num - 1] if st_num > 1 else [],
+                            )
+                            setattr(p_step, "rationale", f"Directly implements requirement: {s_data.get('title')}")
+                            llm_steps.append(p_step)
+                        if llm_steps:
+                            logger.info(f"PlanningOrchestrator: LLM successfully synthesized {len(llm_steps)} dynamic plan steps.")
+                            return llm_steps
+            except Exception as err:
+                logger.warning(f"PlanningOrchestrator LLM step generation error: {err}")
+
+        # ──────────────────────────────────────────────────────────────────
+        # Dynamic Review-Feedback Clause Decomposition Fallback
+        # ──────────────────────────────────────────────────────────────────
+        if "[Review Feedback / Revision]:" in raw_req:
+            feedback_part = raw_req.split("[Review Feedback / Revision]:")[-1].strip()
+            # Split feedback into distinct actions
+            feedback_actions = [a.strip(" .;") for a in re.split(r"\b(?:and also|and|also|specifically|plus|furthermore)\b|\n", feedback_part, flags=re.IGNORECASE) if a.strip(" .;")]
+            if feedback_actions:
+                steps: List[PlanStep] = []
+                for idx, act in enumerate(feedback_actions):
+                    st_num = idx + 1
+                    t_files = candidate_files[:2] if candidate_files else [f"{src_dir}/{slug}.py" if is_py_repo else f"{src_dir}/{slug}.ts"]
+                    act_title = act[0].upper() + act[1:] if len(act) > 1 else act.upper()
+                    if not any(act_title.lower().startswith(p) for p in ["add", "remove", "update", "modify", "configure", "use", "implement", "integrate", "replace"]):
+                        act_title = f"Apply review modification: {act_title}"
+                    p_step = PlanStep(
+                        step_number=st_num,
+                        title=act_title,
+                        description=f"Modify {', '.join(t_files)} according to review feedback: {act}",
+                        target_files=t_files,
+                        component_type="EXISTING",
+                        acceptance_criteria=["AC-01"],
+                        dependencies=[st_num - 1] if st_num > 1 else [],
+                    )
+                    setattr(p_step, "rationale", f"Incorporates review feedback: {act}")
+                    steps.append(p_step)
+
+                # Append verification step
+                v_step_num = len(steps) + 1
+                test_candidates = [f for f in candidate_files if "test" in f.lower() or "spec" in f.lower()]
+                test_files = test_candidates[:2] if test_candidates else ([f"{test_dir}/{slug}.test.ts"] if is_ts_repo else [f"{test_dir}/test_{slug}.py"])
+                v_step = PlanStep(
+                    step_number=v_step_num,
+                    title=f"Verify Review Changes with Automated Tests",
+                    description=f"Execute test suite covering review modifications.",
+                    target_files=test_files,
+                    component_type="EXISTING" if test_candidates else "NEW",
+                    acceptance_criteria=["AC-01"],
+                    dependencies=[v_step_num - 1],
+                )
+                setattr(v_step, "rationale", "Validates revised implementation against test criteria.")
+                steps.append(v_step)
+                return steps
+
         steps: List[PlanStep] = []
 
         # 2. If PARTIAL or existing relevant files exist: Generate EXTENSION tasks

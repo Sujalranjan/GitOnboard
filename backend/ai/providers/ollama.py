@@ -22,7 +22,7 @@ class OllamaProvider:
 
     provider_name = "ollama"
 
-    def __init__(self, base_url: str = "http://127.0.0.1:11434", model: str = DEFAULT_MODEL, timeout: float = 300.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:11434", model: str = DEFAULT_MODEL, timeout: float = 15.0):
         self.base_url = base_url.rstrip("/")
         self.default_model = model
         self.timeout = timeout
@@ -45,7 +45,7 @@ class OllamaProvider:
         model_name = request.model or self.default_model
         logger.info(f"OllamaProvider: Sending request to {self.base_url}/api/chat (model: {model_name})...")
         t0 = time.time()
-        timeout_config = httpx.Timeout(timeout=self.timeout, connect=5.0, read=self.timeout)
+        timeout_config = httpx.Timeout(timeout=self.timeout, connect=2.0, read=self.timeout)
         
         async with httpx.AsyncClient(timeout=timeout_config) as client:
             try:
