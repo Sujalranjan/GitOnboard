@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column, String, Text, Integer, Boolean, DateTime, Enum as SAEnum, ForeignKey, JSON
+    Column, String, Text, Integer, Boolean, DateTime, Enum as SAEnum, ForeignKey, JSON, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -570,7 +570,7 @@ class AgentRunPlanHistory(Base):
     agent_run_id = Column(
         String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    plan_id = Column(String, nullable=False, unique=True, index=True)
+    plan_id = Column(String, nullable=False, index=True)
     version = Column(Integer, nullable=False, index=True)
 
     # Plan lifecycle
@@ -594,6 +594,10 @@ class AgentRunPlanHistory(Base):
     plan_json = Column(JSONType, nullable=False)
 
     created_at = Column(DateTime(timezone=True), default=_now, nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", name="uq_agent_run_plan_history_plan_id"),
+    )
 
     agent_run = relationship("AgentRun")
 
