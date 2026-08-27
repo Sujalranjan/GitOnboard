@@ -108,7 +108,7 @@ class AnalysisWorker(WorkerInterface):
                     file_entities_by_path = {}
                     for e in list(model.entities.values()):
                         if e.type == EntityType.FILE:
-                            p = (e.location.repository_path or "").replace("\\", "/").lstrip("./")
+                            p = (e.location.repository_path or "").replace("\\", "/").removeprefix("./").lstrip("/")
                             if p:
                                 file_entities_by_path[p] = e
 
@@ -120,7 +120,7 @@ class AnalysisWorker(WorkerInterface):
                             full_p = Path(root) / f
                             if not full_p.is_file():
                                 continue
-                            rel_p = str(full_p.relative_to(target_dir)).replace("\\", "/").lstrip("./")
+                            rel_p = str(full_p.relative_to(target_dir)).replace("\\", "/").removeprefix("./").lstrip("/")
                             try:
                                 blob_key = build_blob_key(repo_id, snapshot_id, rel_p)
                                 content_type, _ = mimetypes.guess_type(str(full_p))

@@ -379,6 +379,56 @@ class EngineeringAgentLoop:
                     )
                 )
 
+    def _build_activity_payload(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        tool_result: Optional[ToolResult] = None,
+    ) -> Dict[str, Any]:
+        safe_args = {k: v for k, v in (arguments or {}).items() if k not in ("content", "patch_text")}
+        payload: Dict[str, Any] = {
+            "tool_name": tool_name,
+            "tool": tool_name,
+            "arguments": safe_args,
+        }
+
+        if tool_name == "read_file":
+            payload["activity_type"] = "reading"
+            payload["path"] = safe_args.get("path") or safe_args.get("file_path")
+            if "start_line" in safe_args:
+                payload["start_line"] = safe_args["start_line"]
+            if "end_line" in safe_args:
+                payload["end_line"] = safe_args["end_line"]
+        elif tool_name in ("search_code", "search_symbols"):
+            payload["activity_type"] = "searching"
+            payload["query"] = safe_args.get("query") or safe_args.get("pattern") or ""
+            if "path_pattern" in safe_args:
+                payload["path_pattern"] = safe_args["path_pattern"]
+        elif tool_name in ("get_symbol", "get_callers", "get_callees", "trace_feature"):
+            payload["activity_type"] = "inspecting"
+            payload["symbol"] = safe_args.get("name") or safe_args.get("symbol_name") or safe_args.get("seed_id") or ""
+            if "path" in safe_args:
+                payload["path"] = safe_args["path"]
+        elif tool_name in ("create_file", "modify_file", "write_file"):
+            payload["activity_type"] = "writing"
+            payload["path"] = safe_args.get("path") or safe_args.get("file_path")
+        elif tool_name == "apply_patch":
+            payload["activity_type"] = "writing"
+            payload["path"] = safe_args.get("path")
+        elif tool_name == "delete_file":
+            payload["activity_type"] = "deleting"
+            payload["path"] = safe_args.get("path")
+        elif tool_name in ("verify_dynamic", "run_tests"):
+            payload["activity_type"] = "testing"
+            payload["task"] = safe_args.get("test_command") or safe_args.get("task") or "Run test suite"
+        elif tool_name in ("verify_static", "verify_contract", "judge_verification"):
+            payload["activity_type"] = "verifying"
+            payload["task"] = tool_name.replace("verify_", "").replace("_", " ").title()
+        else:
+            payload["activity_type"] = "tool"
+
+        return payload
+
     def _execute_tool(
         self,
         task_context: TaskExecutionContext,
@@ -399,12 +449,16 @@ class EngineeringAgentLoop:
             db=db,
         )
 
+        started_payload = self._build_activity_payload(tool_call.tool_name, tool_call.arguments)
+        started_payload["task_id"] = task_context.task_id
+        started_payload["status"] = "running"
+
         self._emit_event(
             db,
             run_model,
             AgentEventType.TOOL_CALL_STARTED,
             f"Executing tool '{tool_call.tool_name}'...",
-            {"task_id": task_context.task_id, "tool_name": tool_call.tool_name},
+            started_payload,
         )
 
         tool_result: ToolResult = self.tool_registry.invoke(
@@ -414,22 +468,53 @@ class EngineeringAgentLoop:
         )
 
         if tool_result.success:
+            completed_payload = self._build_activity_payload(tool_call.tool_name, tool_call.arguments, tool_result)
+            completed_payload["task_id"] = task_context.task_id
+            completed_payload["status"] = "completed"
+            completed_payload["duration_ms"] = tool_result.metadata.get("duration_ms", 0.0)
+            if tool_result.data and isinstance(tool_result.data, dict):
+                if "path" in tool_result.data:
+                    completed_payload["path"] = tool_result.data["path"]
+                if "modified_files" in tool_result.data:
+                    completed_payload["modified_files"] = tool_result.data["modified_files"]
+
             self._emit_event(
                 db,
                 run_model,
                 AgentEventType.TOOL_CALL_COMPLETED,
                 f"Tool '{tool_call.tool_name}' completed successfully in {tool_result.metadata.get('duration_ms', 0.0):.1f}ms",
-                {"task_id": task_context.task_id, "tool_name": tool_call.tool_name, "duration_ms": tool_result.metadata.get("duration_ms", 0.0)},
+                completed_payload,
             )
+
+            # If write tool, also emit FILE_WRITTEN for immediate visibility
+            if completed_payload.get("activity_type") == "writing" and completed_payload.get("path"):
+                self._emit_event(
+                    db,
+                    run_model,
+                    AgentEventType.FILE_WRITTEN,
+                    f"Wrote {completed_payload['path']}",
+                    {
+                        "activity_type": "writing",
+                        "path": completed_payload["path"],
+                        "status": "completed",
+                        "task_id": task_context.task_id,
+                    },
+                )
         else:
             err_code = tool_result.error.code if tool_result.error else "UNKNOWN_ERROR"
             err_msg = tool_result.error.message if tool_result.error else "Execution failed"
+            failed_payload = self._build_activity_payload(tool_call.tool_name, tool_call.arguments, tool_result)
+            failed_payload["task_id"] = task_context.task_id
+            failed_payload["status"] = "failed"
+            failed_payload["error_code"] = err_code
+            failed_payload["error_message"] = err_msg
+
             self._emit_event(
                 db,
                 run_model,
                 AgentEventType.TOOL_CALL_FAILED,
                 f"Tool '{tool_call.tool_name}' failed ({err_code}): {err_msg}",
-                {"task_id": task_context.task_id, "tool_name": tool_call.tool_name, "error_code": err_code, "error_message": err_msg},
+                failed_payload,
             )
 
         return tool_result
