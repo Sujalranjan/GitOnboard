@@ -277,20 +277,13 @@ class ImpactAnalyzer:
         lines.append("</untrusted_repo_context>")
         return "\n".join(lines)
 
-    async def analyze(
+    def analyze_sync(
         self,
         keywords: List[str],
         proposed_symbols: Optional[List[str]] = None,
     ) -> ImpactResult:
         """
-        Run hybrid retrieval and return an ImpactResult with evidence items.
-
-        Args:
-            keywords: Keywords extracted from the requirement (e.g. ["oauth", "google", "login"]).
-            proposed_symbols: Optional list of symbol names to validate (EXISTING vs NEW).
-
-        Returns:
-            ImpactResult with evidence items, candidate files/symbols, and planning status.
+        Synchronous hybrid retrieval implementation returning an ImpactResult with evidence items.
         """
         logger.info(f"ImpactAnalyzer: Retrieving context for keywords={keywords}")
 
@@ -338,3 +331,13 @@ class ImpactAnalyzer:
             new_symbols=new_syms,
             context_summary=context_block,
         )
+
+    async def analyze(
+        self,
+        keywords: List[str],
+        proposed_symbols: Optional[List[str]] = None,
+    ) -> ImpactResult:
+        """
+        Async adapter for backwards-compatibility.
+        """
+        return self.analyze_sync(keywords=keywords, proposed_symbols=proposed_symbols)

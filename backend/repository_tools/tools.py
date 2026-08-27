@@ -80,7 +80,7 @@ class RepositoryToolLayer:
           1. Active temporary worktree (if repo_root is provided and exists)
           2. Azure Blob Storage (via FactFile.blob_name)
         """
-        clean_path = path.replace("\\", "/").lstrip("./").lstrip("/")
+        clean_path = path.replace("\\", "/").removeprefix("./").lstrip("/")
 
         # 1. Active Worktree (if present)
         if self.repo_root and self.repo_root.exists():
