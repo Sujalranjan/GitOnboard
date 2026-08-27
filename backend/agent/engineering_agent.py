@@ -144,6 +144,20 @@ class EngineeringAgent:
         run_id = custom_run_id or f"run_{uuid.uuid4().hex[:12]}"
         task_id = run_id
 
+        if not worktree_path and repository_id:
+            from pathlib import Path
+            from backend.config import settings
+            clean_name = repository_id.split("/")[-1].replace(".git", "")
+            candidates = [
+                Path(settings.worktrees_dir) / clean_name,
+                Path("data/worktrees") / clean_name,
+                Path("/home/dheeraj/repository_intelligence_platform/data/worktrees") / clean_name,
+            ]
+            for c in candidates:
+                if c.exists() and c.is_dir():
+                    worktree_path = str(c.resolve())
+                    break
+
         run = AgentRun(
             id=run_id,
             task_id=task_id,

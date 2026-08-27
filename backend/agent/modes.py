@@ -34,36 +34,42 @@ def resolve_target_repository_and_analysis(
     """
     Strictly resolves target Repository and latest Analysis with zero cross-user leakage
     and zero implicit fallback.
-    
-    ISOLATION INVARIANTS:
-      1. When repository_id is None, empty, or 'default', return (None, None, 'default') with analysis_id=None.
-         NEVER select a latest or default repository implicitly.
-      2. When user_id is provided, lookups are strictly scoped to Repository.user_id == user_id.
-         NEVER fall back to global repositories or other users' repositories.
-      3. Identity resolution order:
-         a. Integer repository.id match (Repository.id == int(repository_id))
-         b. Direct integer analysis.id match (Analysis.id == int(repository_id)), checking Analysis.repository.user_id == user_id
-         c. Exact repository URL match (Repository.url == repository_id or Repository.url == f"https://github.com/{repository_id}")
-         d. Repository slug match (Repository.url.endswith(f"/{repository_id}") or Repository.url.endswith(f"/{repository_id}.git"))
-      4. Ambiguity Guard:
-         If matching by slug yields multiple repositories for the user (e.g. org-a/common-name and org-b/common-name),
-         DO NOT arbitrarily pick one. Return (None, None, repository_id) to reject ambiguous resolution.
     """
-    from backend.models.repository import Repository, Analysis
-
     if not repository_id or not str(repository_id).strip() or str(repository_id).strip().lower() == "default":
         return None, None, "default"
 
     clean_repo_id = str(repository_id).strip()
 
-    # 1. Direct Integer repository.id match (Authoritative)
-    if clean_repo_id.isdigit():
-        repo_int_id = int(clean_repo_id)
-        query = db.query(Repository).filter(Repository.id == repo_int_id)
+    try:
+        from backend.models.repository import Repository, Analysis
+
+        # 1. Direct Integer repository.id match
+        if clean_repo_id.isdigit():
+            repo_int_id = int(clean_repo_id)
+            query = db.query(Repository).filter(Repository.id == repo_int_id)
+            if user_id is not None:
+                query = query.filter(Repository.user_id == user_id)
+            repo = query.first()
+            if repo:
+                repo_name = repo.url.split("/")[-1].replace(".git", "") if repo.url else clean_repo_id
+                latest_analysis = db.query(Analysis).filter(
+                    Analysis.repository_id == repo.id,
+                    Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
+                ).order_by(Analysis.id.desc()).first()
+                return repo, latest_analysis.id if latest_analysis else None, repo_name
+
+        # 2. Exact URL / slug match
+        query = db.query(Repository)
         if user_id is not None:
             query = query.filter(Repository.user_id == user_id)
-        repo = query.first()
-        if repo:
+
+        exact_matches = query.filter(
+            (Repository.url == clean_repo_id) |
+            (Repository.url == f"https://github.com/{clean_repo_id}") |
+            (Repository.url == f"https://github.com/{clean_repo_id}.git")
+        ).all()
+        if len(exact_matches) == 1:
+            repo = exact_matches[0]
             repo_name = repo.url.split("/")[-1].replace(".git", "") if repo.url else clean_repo_id
             latest_analysis = db.query(Analysis).filter(
                 Analysis.repository_id == repo.id,
@@ -71,71 +77,47 @@ def resolve_target_repository_and_analysis(
             ).order_by(Analysis.id.desc()).first()
             return repo, latest_analysis.id if latest_analysis else None, repo_name
 
-        # 2. Direct Integer analysis.id match
-        query_analysis = db.query(Analysis).filter(Analysis.id == repo_int_id)
-        analysis_match = query_analysis.first()
-        if analysis_match and analysis_match.repository:
-            if user_id is None or analysis_match.repository.user_id == user_id:
-                r_name = analysis_match.repository.url.split("/")[-1].replace(".git", "") if analysis_match.repository.url else clean_repo_id
-                return analysis_match.repository, analysis_match.id, r_name
-
-    # 3. User-scoped repository query
-    query = db.query(Repository)
-    if user_id is not None:
-        query = query.filter(Repository.user_id == user_id)
-
-    # 3a. Primary numeric repository ID match
-    if clean_repo_id.isdigit():
-        repo_by_id = query.filter(Repository.id == int(clean_repo_id)).first()
-        if repo_by_id:
-            repo_name = repo_by_id.url.split("/")[-1].replace(".git", "") if repo_by_id.url else clean_repo_id
+        # 3. Slug match
+        slug_matches = query.filter(
+            (Repository.url.endswith(f"/{clean_repo_id}")) |
+            (Repository.url.endswith(f"/{clean_repo_id}.git"))
+        ).all()
+        if len(slug_matches) == 1:
+            repo = slug_matches[0]
+            repo_name = repo.url.split("/")[-1].replace(".git", "") if repo.url else clean_repo_id
             latest_analysis = db.query(Analysis).filter(
-                Analysis.repository_id == repo_by_id.id,
+                Analysis.repository_id == repo.id,
                 Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
             ).order_by(Analysis.id.desc()).first()
-            return repo_by_id, latest_analysis.id if latest_analysis else None, repo_name
+            return repo, latest_analysis.id if latest_analysis else None, repo_name
 
-    # 3b. Exact URL match
-    exact_matches = query.filter(
-        (Repository.url == clean_repo_id) |
-        (Repository.url == f"https://github.com/{clean_repo_id}") |
-        (Repository.url == f"https://github.com/{clean_repo_id}.git")
-    ).all()
-    if len(exact_matches) == 1:
-        repo = exact_matches[0]
-        repo_name = repo.url.split("/")[-1].replace(".git", "") if repo.url else clean_repo_id
-        latest_analysis = db.query(Analysis).filter(
-            Analysis.repository_id == repo.id,
-            Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
-        ).order_by(Analysis.id.desc()).first()
-        return repo, latest_analysis.id if latest_analysis else None, repo_name
-    elif len(exact_matches) > 1:
-        logger.warning(f"Ambiguous exact matches for repository identifier '{clean_repo_id}' for user_id={user_id}")
-        return None, None, clean_repo_id
+    except Exception as err:
+        logger.debug(f"Database lookup in resolve_target_repository_and_analysis bypassed: {err}")
 
-    # 3b. Slug suffix match (/slug or /slug.git)
-    slug_matches = query.filter(
-        Repository.url.ilike(f"%/{clean_repo_id}") |
-        Repository.url.ilike(f"%/{clean_repo_id}.git")
-    ).all()
-    if len(slug_matches) == 1:
-        repo = slug_matches[0]
-        repo_name = repo.url.split("/")[-1].replace(".git", "") if repo.url else clean_repo_id
-        latest_analysis = db.query(Analysis).filter(
-            Analysis.repository_id == repo.id,
-            Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
-        ).order_by(Analysis.id.desc()).first()
-        return repo, latest_analysis.id if latest_analysis else None, repo_name
-    elif len(slug_matches) > 1:
-        logger.warning(f"Ambiguous slug matches for repository identifier '{clean_repo_id}' for user_id={user_id}. Found {len(slug_matches)} repositories.")
-        return None, None, clean_repo_id
-
-    # If no match found under user_id, DO NOT fall back to global lookup or another user's repo.
     return None, None, clean_repo_id
 
+def resolve_worktree_path(repo_name: str, repo: Optional[Any] = None) -> Optional[str]:
+    from pathlib import Path
+    from backend.config import settings
+    
+    if repo and hasattr(repo, "local_path") and repo.local_path and Path(repo.local_path).exists():
+        return str(Path(repo.local_path).resolve())
+    
+    if repo_name and repo_name != "default":
+        candidates = [
+            Path(settings.worktrees_dir) / repo_name,
+            Path("data/worktrees") / repo_name,
+            Path("/home/dheeraj/repository_intelligence_platform/data/worktrees") / repo_name,
+        ]
+        for c in candidates:
+            if c.exists() and c.is_dir():
+                return str(c.resolve())
+    return None
 
 def execute_chat(
     user_requirement: str,
+    repository_id: Optional[str] = None,
+    user_id: Optional[int] = None,
     llm_service: Optional[LLMService] = None,
 ) -> Dict[str, Any]:
     """
@@ -484,9 +466,12 @@ def execute_explain(
 ) -> Dict[str, Any]:
     """
     Executes repository-grounded natural-language explanation.
-    Assembles evidence using ContextAssembler and prompts the LLM with evidence-only bounds.
+    Reads actual source files from the active worktree and prompts the LLM with real code.
     Strictly isolated to the authenticated user's target repository.
     """
+    from backend.intelligence.retrieval.source_reader import RepositorySourceReader
+    import re
+
     service = llm_service or build_default_service()
     close_db = False
     if db is None:
@@ -494,67 +479,74 @@ def execute_explain(
         close_db = True
 
     try:
-        # Find matching repository analysis strictly scoped to target repository
-        _, analysis_id, repo_name_resolved = resolve_target_repository_and_analysis(db, repository_id, user_id)
+        repo_obj, analysis_id, repo_name_resolved = resolve_target_repository_and_analysis(db, repository_id, user_id)
+        worktree_path = resolve_worktree_path(repo_name_resolved, repo_obj)
+        source_reader = RepositorySourceReader(base_path=worktree_path)
 
-        if repository_id and not analysis_id:
+        # 1. Identify target file(s) mentioned in prompt or from index
+        target_files: List[str] = []
+        file_matches = re.findall(r'[a-zA-Z0-9_\-\.\/\\]+\.[a-zA-Z0-9]+', user_requirement)
+        for fm in file_matches:
+            resolved_p = source_reader.resolve_file_path(fm)
+            if resolved_p and source_reader.base_path:
+                try:
+                    rel_path = str(resolved_p.relative_to(source_reader.base_path)).replace(chr(92), "/")
+                except ValueError:
+                    rel_path = fm
+                if rel_path not in target_files:
+                    target_files.append(rel_path)
+
+        # If no explicit file mentioned, query ContextAssembler to locate candidate files
+        if not target_files:
+            assembler = ContextAssembler(llm_service=None, worktree_path=worktree_path)
+            req = ContextAssemblyRequest(
+                repository_id=repo_name_resolved,
+                analysis_id=analysis_id,
+                requirement=user_requirement,
+                worktree_path=worktree_path,
+                context_budget=ContextBudget(max_files=2, max_symbols=8, max_call_paths=2),
+            )
+            ctx = assembler.assemble(req, db=db)
+            for f in ctx.relevant_files:
+                # Filter out massive data files like quotes.json from explanation context
+                if not f.endswith(".json") and f not in target_files and len(target_files) < 2:
+                    target_files.append(f)
+
+        # 2. Read actual source code for target files (focused lines for local inference)
+        source_code_blocks = []
+        for tf in target_files:
+            code = source_reader.read_file_content(tf, max_lines=120)
+            if code:
+                source_code_blocks.append(f"File: `{tf}`\n```python\n{code}\n```")
+
+        if not source_code_blocks and not analysis_id:
             return {
-                "response": f"Target repository '{repository_id}' has not been analyzed yet. Please run an analysis to inspect its architecture.",
+                "response": f"Target repository '{repository_id}' is not analyzed or available on disk.",
                 "intent": "explain",
                 "model": settings.model_terminal_explain,
                 "evidence": [],
                 "completeness": "INCOMPLETE",
             }
 
-        # Assemble bounded repository context (deterministic FactStore/AST retrieval)
-        assembler = ContextAssembler(llm_service=None)
-        req = ContextAssemblyRequest(
-            repository_id=repo_name_resolved,
-            analysis_id=analysis_id,
-            requirement=user_requirement,
-            context_budget=ContextBudget(max_files=8, max_symbols=15, max_call_paths=5),
-        )
-        ctx = assembler.assemble(req, db=db)
-
-        # Build evidence text
-        evidence_snippets = []
-        if ctx.relevant_files:
-            evidence_snippets.append("Relevant Files:\n" + "\n".join(f"- {f}" for f in ctx.relevant_files[:8]))
-        if ctx.relevant_symbols:
-            evidence_snippets.append("Relevant Symbols:\n" + "\n".join(
-                f"- {s.get('name')} ({s.get('symbol_type') or s.get('kind') or 'symbol'}) at {s.get('file_path', '')}:{s.get('line_start', '')}"
-                for s in ctx.relevant_symbols[:12]
-            ))
-        if ctx.relevant_routes:
-            evidence_snippets.append("Relevant Routes:\n" + "\n".join(
-                f"- {r.get('method')} {r.get('path')} -> {r.get('handler_name', '')}"
-                for r in ctx.relevant_routes[:6]
-            ))
-        if ctx.relevant_call_paths:
-            evidence_snippets.append("Call Graphs / Dependencies:\n" + "\n".join(
-                f"- {c.get('source_symbol', '')} -> {c.get('target_symbol', '')}"
-                for c in ctx.relevant_call_paths[:6]
-            ))
-
-        evidence_text = "\n\n".join(evidence_snippets) if evidence_snippets else "No specific symbols found in index."
+        # 3. Build grounded prompt for LLM with real code
+        code_context = "\n\n".join(source_code_blocks) if source_code_blocks else "No source code content available."
 
         system_prompt = (
             f"You are the GitOnboard Repository Architecture Explainer for target repository '{repo_name_resolved}'.\n"
-            "Explain the user's question using ONLY the provided repository evidence below.\n\n"
+            "Explain the user's question clearly, accurately, and thoroughly based on the actual source code provided below.\n\n"
             "GROUNDING RULES:\n"
-            "1. Base your explanation directly on the listed files, symbols, routes, and call graphs of this target repository.\n"
-            "2. Cite exact file paths and symbols in markdown format: `[Symbol](file_path)`.\n"
-            "3. If evidence is missing or insufficient in this repository, explicitly state that repository evidence is absent rather than inventing facts.\n"
-            "4. Do NOT discuss GitOnboard application internals or other unrelated repositories.\n"
-            "5. Keep the explanation structured, clear, and educational."
+            "1. Base your explanation directly on the actual provided source code, classes, and functions.\n"
+            "2. Cite key components and CLI commands.\n"
+            "3. Provide a clear overview of the purpose, core components, and logic flow.\n"
+            "4. Keep the explanation structured, clean, and educational."
         )
 
         user_content = (
             f"Target Repository: {repo_name_resolved}\n"
             f"User Question: {user_requirement}\n\n"
-            f"--- REPOSITORY EVIDENCE ---\n"
-            f"{evidence_text}\n"
-            f"----------------------------"
+            f"--- REPOSITORY SOURCE CODE ---\n"
+            f"{code_context}\n"
+            f"------------------------------"
         )
 
         llm_req = LLMRequest(
@@ -564,36 +556,26 @@ def execute_explain(
                 Message(role=MessageRole.USER, content=user_content),
             ],
             temperature=0.2,
-            max_tokens=512,
+            max_tokens=450,
         )
 
         try:
             resp = asyncio.run(service.generate(llm_req))
             response_text = resp.content.strip()
         except Exception as err:
-            logger.warning(f"LLM explanation failed ({err}); using assembled evidence summary.")
-            response_text = (
-                f"Explanation for '{user_requirement}' in `{repo_name_resolved}`:\n\n"
-                f"Based on repository index:\n{evidence_text}"
-            )
-
-        evidence_items = [
-            {"source_type": e.source_type, "source_id": e.source_id, "summary": e.summary}
-            for e in ctx.evidence[:10]
-        ]
+            logger.error(f"[EXPLAIN_FAILURE] LLM explanation generation failed: {err}", exc_info=True)
+            response_text = f"Unable to generate the explanation because the coding model ({settings.model_terminal_explain}) did not respond: {err}."
 
         return {
             "response": response_text,
             "intent": "explain",
             "model": settings.model_terminal_explain,
-            "evidence": evidence_items,
-            "completeness": ctx.contract.completeness.value,
+            "evidence": [{"source_type": "source_code", "source_id": f, "summary": f"Read source of {f}"} for f in target_files],
+            "completeness": "COMPLETE" if source_code_blocks else "PARTIAL",
         }
-
     finally:
         if close_db:
             db.close()
-
 
 def execute_plan(
     user_requirement: str,
@@ -696,7 +678,7 @@ def execute_plan(
             except Exception:
                 pass
 
-        orchestrator = PlanningOrchestrator(llm_service=None)
+        orchestrator = PlanningOrchestrator(llm_service=service)
         if analysis_id:
             ctx.analysis_id = analysis_id
             if ctx.metadata is None:

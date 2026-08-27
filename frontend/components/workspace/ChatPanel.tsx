@@ -160,12 +160,13 @@ export function ChatPanel({
       const data = await res.json();
       const planText = data.response || "I investigated the repository and created an implementation plan.";
 
-      if (data.intent === "implement" && onStartRun) {
-        onStartRun(trimmed);
-      }
-
-      if (data.plan && onOpenPlanInEditor) {
-        onOpenPlanInEditor(data.plan);
+      if (data.intent === "implement") {
+        if (onStartRun) {
+          onStartRun(trimmed);
+        }
+        if (data.plan && onOpenPlanInEditor) {
+          onOpenPlanInEditor(data.plan);
+        }
       }
 
       const finalAssistantMsg: ChatMessage = {

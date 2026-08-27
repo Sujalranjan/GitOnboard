@@ -65,7 +65,7 @@ class LoopGuardrails:
     ) -> Tuple[Optional[StopReason], bool]:
         """
         Records a tool invocation, validates execution caps, and inspects for repetition loops.
-        
+
         Returns:
             Tuple[Optional[StopReason], bool]:
               - StopReason if a hard cap or repetition limit was violated (or None)
@@ -93,6 +93,8 @@ class LoopGuardrails:
         sig = f"{tool_name}:{sorted_args}"
         self.recent_signatures.append(sig)
 
+        logger.debug(f"LoopGuardrails: Tool call #{self.tool_call_count}: {tool_name} (recent signatures: {len(self.recent_signatures)})")
+
         # Check consecutive identical calls at the tail
         consecutive_count = 0
         for prior_sig in reversed(self.recent_signatures):
@@ -102,10 +104,12 @@ class LoopGuardrails:
                 break
 
         if consecutive_count >= self.config.max_repeated_tool_calls:
-            logger.warning(f"LoopGuardrails: Repeated tool call loop detected ({consecutive_count} consecutive identical calls for '{tool_name}')")
+            logger.warning(f"LoopGuardrails: Repeated tool call loop detected ({consecutive_count} consecutive identical calls for '{tool_name}'). Last 5 signatures: {self.recent_signatures[-5:]}")
             return StopReason.REPEATED_TOOL_CALL_LIMIT, False
 
         should_warn = (consecutive_count == self.config.max_repeated_tool_calls - 1)
+        if should_warn:
+            logger.warning(f"LoopGuardrails: Warning - approaching repeated call limit ({consecutive_count} consecutive for '{tool_name}')")
         return None, should_warn
 
     def sanitize_observation(self, data: Any) -> Any:

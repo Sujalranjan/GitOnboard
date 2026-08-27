@@ -291,6 +291,8 @@ class EngineeringAgentLoop:
             if parsed.tool_call:
                 tool_call: ToolCall = parsed.tool_call
 
+                logger.info(f"EngineeringAgentLoop: Model proposed tool '{tool_call.tool_name}' with args: {tool_call.arguments}")
+
                 self._emit_event(
                     db,
                     run_model,
@@ -305,7 +307,7 @@ class EngineeringAgentLoop:
                 )
                 if limit_stop_reason:
                     err_msg = f"Loop terminated by guardrails: {limit_stop_reason.value}"
-                    logger.warning(f"EngineeringAgentLoop: {err_msg}")
+                    logger.error(f"EngineeringAgentLoop: {err_msg} - Tool: {tool_call.tool_name}, Args: {tool_call.arguments}")
                     self._emit_event(
                         db,
                         run_model,
