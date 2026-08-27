@@ -1,11 +1,7 @@
 "use client";
 
-import React from "react";
-import {
-  History,
-  Plus,
-  X,
-} from "lucide-react";
+import React, { useState } from "react";
+import { History, Plus, X } from "lucide-react";
 import { RunState } from "@/types/workspace";
 import { useAgentWorkspace } from "@/hooks/useAgentWorkspace";
 import { ChatPanel } from "./ChatPanel";
@@ -35,6 +31,7 @@ export function AIAgentPanel({
   agentWorkspace: externalAgentWorkspace,
   width = 380,
 }: AIAgentPanelProps) {
+  const [newChatKey, setNewChatKey] = useState(0);
   const repoId = runState?.repoId || "default";
   const initialRunId = runState?.runId || null;
 
@@ -69,23 +66,23 @@ export function AIAgentPanel({
 
         <div className="flex items-center gap-1 shrink-0 text-zinc-400">
           <button
-            onClick={() => refreshSnapshot()}
+            onClick={() => setNewChatKey((k) => k + 1)}
             title="New Chat Session"
-            className="p-1 rounded hover:bg-[#21262D] hover:text-zinc-200 transition-colors"
+            className="p-1 rounded hover:bg-[#21262D] hover:text-zinc-200 transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => refreshSnapshot()}
             title="Session History"
-            className="p-1 rounded hover:bg-[#21262D] hover:text-zinc-200 transition-colors"
+            className="p-1 rounded hover:bg-[#21262D] hover:text-zinc-200 transition-colors cursor-pointer"
           >
             <History className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={onClose}
             title="Close panel"
-            className="p-1 rounded hover:bg-[#21262D] hover:text-zinc-200 transition-colors"
+            className="p-1 rounded hover:bg-[#21262D] hover:text-zinc-200 transition-colors cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -97,6 +94,7 @@ export function AIAgentPanel({
         <ChatPanel
           snapshot={snapshot}
           repoId={repoId}
+          newChatTrigger={newChatKey}
           onStartRun={(prompt) => {
             startRun(prompt);
           }}
