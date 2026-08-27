@@ -448,13 +448,13 @@ export function ChatPanel({
 
               const confirmedActivities: ActivityItem[] = [];
               if (data.evidence && Array.isArray(data.evidence)) {
-                data.evidence.forEach((ev: any) => {
+                data.evidence.forEach((ev: any, idx: number) => {
                   const path = ev.path || ev.source_id;
                   if (path) {
                     const sLine = ev.start_line ?? ev.startLine ?? 1;
                     const eLine = ev.end_line ?? ev.endLine ?? 120;
                     confirmedActivities.push({
-                      id: `ev-read-${path}`,
+                      id: `ev-read-${path}-${sLine}-${eLine}-${idx}`,
                       type: "read",
                       title: `Read ${path}`,
                       status: "completed",
@@ -563,11 +563,11 @@ export function ChatPanel({
         };
 
         if (data.evidence && Array.isArray(data.evidence)) {
-          data.evidence.forEach((ev: any) => {
+          data.evidence.forEach((ev: any, idx: number) => {
             const path = ev.path || ev.source_id;
             if (path && (ev.source_type === "source_code" || ev.source_type === "file" || path.includes("."))) {
               addActivity({
-                id: `ev-read-${path}`,
+                id: `ev-read-${path}-${ev.start_line || 1}-${ev.end_line || 120}-${idx}`,
                 type: "read",
                 title: `Read ${path}`,
                 status: "completed",
@@ -731,9 +731,9 @@ export function ChatPanel({
                         {/* Activity Item List */}
                         {isMsgExpanded && (
                           <div className="space-y-1.5 pt-1">
-                            {msg.activityItems!.map((item) => (
+                            {msg.activityItems!.map((item, itemIdx) => (
                               <div
-                                key={item.id}
+                                key={item.id ? `${item.id}-${itemIdx}` : `act-${itemIdx}`}
                                 className={`flex items-start justify-between gap-2 text-zinc-300 py-0.5 rounded transition-colors ${
                                   item.status === "running" ? "bg-purple-950/20 px-1" : ""
                                 }`}
