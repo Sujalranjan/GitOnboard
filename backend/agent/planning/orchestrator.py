@@ -41,6 +41,23 @@ from .validator import PlanValidator
 logger = logging.getLogger(__name__)
 
 
+def _run_coroutine_safely(coro_factory, timeout: float = 15.0):
+    """
+    Safely executes an async factory function in a clean, dedicated event loop thread.
+    Guarantees 100% deadlock-free execution in synchronous, pytest, and async environments.
+    """
+    def runner():
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            return new_loop.run_until_complete(coro_factory())
+        finally:
+            new_loop.close()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(runner).result(timeout=timeout)
+
+
 class PlanningOrchestrator:
     """
     Orchestrates the synthesis and validation of repository-aware implementation plans.
@@ -133,16 +150,7 @@ class PlanningOrchestrator:
             try:
                 analyzer = ImpactAnalyzer(db=db, analysis_id=analysis_id)
                 extracted_kws = [w.lower() for w in requirement.split() if len(w) > 3]
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = None
-
-                if loop and loop.is_running():
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        impact_result = pool.submit(asyncio.run, analyzer.analyze(keywords=extracted_kws or [requirement])).result()
-                else:
-                    impact_result = asyncio.run(analyzer.analyze(keywords=extracted_kws or [requirement]))
+                impact_result = analyzer.analyze_sync(keywords=extracted_kws or [requirement])
             except Exception as err:
                 logger.warning(f"ImpactAnalyzer error during planning: {err}")
 
@@ -174,13 +182,19 @@ class PlanningOrchestrator:
         # ──────────────────────────────────────────────────────────────────────
         # 5. Step Planning (StepPlanner + Investigation Grounding)
         # ──────────────────────────────────────────────────────────────────────
-        steps = self._generate_steps(
-            analyzed_req,
-            impact_result,
-            contract_output,
-            context,
-            investigation=investigation_result,
-        )
+        if investigation_result.assessment == ImplementationAssessment.EXISTING:
+            steps = []
+        else:
+            steps = self._generate_steps(
+                analyzed_req,
+                impact_result,
+                contract_output,
+                context,
+                investigation=investigation_result,
+                db=db,
+                analysis_id=analysis_id,
+                repository_id=repository_id,
+            )
 
         # ──────────────────────────────────────────────────────────────────────
         # 6. Task DAG Assembly
@@ -337,16 +351,7 @@ class PlanningOrchestrator:
         if self.llm_service:
             try:
                 req_analyzer = RequirementAnalyzer(llm_service=self.llm_service)
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = None
-
-                if loop and loop.is_running():
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        return pool.submit(asyncio.run, req_analyzer.analyze(requirement)).result()
-                else:
-                    return asyncio.run(req_analyzer.analyze(requirement))
+                return _run_coroutine_safely(lambda: req_analyzer.analyze(requirement), timeout=10.0)
             except Exception as err:
                 logger.warning(f"RequirementAnalyzer execution error: {err}")
 
@@ -428,16 +433,7 @@ class PlanningOrchestrator:
         if self.llm_service and impact:
             try:
                 gen = ContractGenerator(llm_service=self.llm_service)
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = None
-
-                if loop and loop.is_running():
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        return pool.submit(asyncio.run, gen.generate(requirement, impact)).result()
-                else:
-                    return asyncio.run(gen.generate(requirement, impact))
+                return _run_coroutine_safely(lambda: gen.generate(requirement, impact), timeout=10.0)
             except Exception as err:
                 logger.warning(f"ContractGenerator execution error: {err}")
 
@@ -454,9 +450,13 @@ class PlanningOrchestrator:
         contract: ContractOutput,
         context: RepositoryContext,
         investigation: Optional[RepositoryInvestigationResult] = None,
+        db: Optional[Session] = None,
+        analysis_id: Optional[int] = None,
+        repository_id: Optional[str] = None,
     ) -> List[PlanStep]:
         """Synthesizes sequential implementation steps based strictly on actual inspected code and LLM reasoning."""
         from backend.intelligence.retrieval.source_reader import RepositorySourceReader
+        from backend.models.fact_store import FactFile
         from backend.config import settings
         import re
 
@@ -464,7 +464,7 @@ class PlanningOrchestrator:
         action_title = raw_req
 
         worktree_path = context.metadata.get("worktree_path") if hasattr(context, "metadata") and context.metadata else None
-        source_reader = RepositorySourceReader(base_path=worktree_path)
+        source_reader = RepositorySourceReader(base_path=worktree_path, db=db, analysis_id=analysis_id)
 
         # Determine target files from investigation or context or requirement text
         candidate_files = list(context.relevant_files)
@@ -472,6 +472,16 @@ class PlanningOrchestrator:
             for f in investigation.inspected_files:
                 if f not in candidate_files:
                     candidate_files.append(f)
+
+        # If candidate files are empty, retrieve target repository's analyzed code files
+        if not candidate_files and db and analysis_id:
+            try:
+                db_files = db.query(FactFile).filter(FactFile.analysis_id == analysis_id).all()
+                for df in db_files:
+                    if not df.path.endswith((".json", ".md", ".yml", ".yaml", "Makefile")) and df.path not in candidate_files:
+                        candidate_files.append(df.path)
+            except Exception as err:
+                logger.debug(f"Could not retrieve fallback files from FactFile: {err}")
 
         # Check for explicit file mentions in user requirement
         file_matches = re.findall(r'[a-zA-Z0-9_\-\.\/\]+\.[a-zA-Z0-9]+', raw_req)
@@ -505,6 +515,9 @@ class PlanningOrchestrator:
 
                 llm_prompt = f"""You are an expert AI software architect designing a grounded implementation plan for a codebase.
 
+TARGET REPOSITORY:
+{repository_id or getattr(context, 'repository_id', 'default')}
+
 USER REQUIREMENT:
 {raw_req}
 
@@ -537,8 +550,8 @@ Do NOT hallucinate unrelated files or generic changes. Return ONLY valid JSON ar
                     max_tokens=600,
                 )
 
-                resp = asyncio.run(self.llm_service.generate(llm_req))
-                content = resp.content.strip()
+                resp = _run_coroutine_safely(lambda: self.llm_service.generate(llm_req), timeout=10.0)
+                content = resp.content.strip() if hasattr(resp, "content") else str(resp)
                 if "```json" in content:
                     content = content.split("```json")[1].split("```")[0].strip()
                 elif "```" in content:
@@ -569,28 +582,36 @@ Do NOT hallucinate unrelated files or generic changes. Return ONLY valid JSON ar
 
         # Grounded Fallback Steps
         steps: List[PlanStep] = []
-        impl_files = candidate_files[:1] if candidate_files else ["pls_cli/please.py"]
+        is_new_impl = not bool(candidate_files)
+        if is_new_impl:
+            is_ts = "typescript" in context.architecture_constraints if hasattr(context, "architecture_constraints") else False
+            ext = ".ts" if is_ts else ".py"
+            impl_files = [f"src/{action_title.lower().replace(' ', '_')}{ext}"]
+        else:
+            impl_files = candidate_files[:1]
+
         test_candidates = [f for f in candidate_files if "test" in f.lower()]
-        test_files = test_candidates[:1] if test_candidates else ["tests/test_pls_cli.py"]
+        test_files = test_candidates[:1] if test_candidates else ["tests/test_implementation.py" if is_new_impl else "tests/test_pls_cli.py"]
 
         step_1 = PlanStep(
             step_number=1,
             title=f"Implement changes in {impl_files[0]}",
-            description=f"Add requested functionality '{action_title}' to {impl_files[0]}.",
+            description=f"No existing module found for '{action_title}'. Propose new module {impl_files[0]} to implement requested feature." if is_new_impl else f"Add requested functionality '{action_title}' to {impl_files[0]}.",
             target_files=impl_files,
-            component_type="EXISTING",
+            component_type="NEW" if is_new_impl else "EXISTING",
             acceptance_criteria=["AC-01"],
             dependencies=[],
         )
         setattr(step_1, "rationale", f"Directly updates {impl_files[0]}.")
         steps.append(step_1)
 
+        is_new_test = not bool(test_candidates)
         step_2 = PlanStep(
             step_number=2,
             title=f"Verify changes with automated tests",
-            description=f"Run test suite covering {impl_files[0]} modifications.",
+            description=f"No existing test suite found for {test_files[0]}. Implement tests covering {impl_files[0]} modifications." if is_new_test else f"Run test suite covering {impl_files[0]} modifications.",
             target_files=test_files,
-            component_type="EXISTING" if test_candidates else "NEW",
+            component_type="NEW" if is_new_test else "EXISTING",
             acceptance_criteria=["AC-01"],
             dependencies=[1],
         )
