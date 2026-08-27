@@ -256,4 +256,19 @@ export type AgentWorkspaceView = 'chat' | 'plan' | 'tasks' | 'changes' | 'verify
 
 export type ConnectionStatus = 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED';
 
+export interface ActivityItem {
+  id: string;
+  type: 'read' | 'search' | 'inspect' | 'write' | 'delete' | 'test' | 'verify' | 'info';
+  title: string;
+  status: 'running' | 'completed' | 'failed';
+  file?: string;
+  startLine?: number;
+  endLine?: number;
+  symbol?: string;
+  query?: string;
+  task?: string;
+  error?: string;
+  timestamp?: string;
+}
+
 
