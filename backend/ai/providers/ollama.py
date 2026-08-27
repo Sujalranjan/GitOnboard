@@ -22,14 +22,14 @@ class OllamaProvider:
 
     provider_name = "ollama"
 
-    def __init__(self, base_url: str = "http://127.0.0.1:11434", model: str = DEFAULT_MODEL, timeout: float = 120.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:11434", model: str = DEFAULT_MODEL, timeout: float = 600.0):
         self.base_url = base_url.rstrip("/")
         self.default_model = model
         self.timeout = timeout
 
     def _build_body(self, request: LLMRequest, force_json: bool = False) -> Dict[str, Any]:
         body = {
-            "model": request.model or self.default_model,
+            "model": self.default_model,  # Always use this provider's assigned model
             "messages": [{"role": m.role.value, "content": m.content} for m in request.messages],
             "stream": False,
             "options": {
@@ -42,7 +42,7 @@ class OllamaProvider:
         return body
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
-        model_name = request.model or self.default_model
+        model_name = self.default_model  # Always use this provider's assigned model
         logger.info(f"[LLM_LIFECYCLE] OllamaProvider: Sending request to {self.base_url}/api/chat (model: {model_name}, timeout={self.timeout}s)...")
         t0 = time.time()
         timeout_config = httpx.Timeout(timeout=self.timeout, connect=10.0, read=self.timeout, write=10.0)
@@ -53,10 +53,10 @@ class OllamaProvider:
                     f"{self.base_url}/api/chat",
                     json=self._build_body(request),
                 )
-            except (httpx.TimeoutException, httpx.ConnectError) as e:
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError) as e:
                 elapsed = time.time() - t0
-                logger.warning(f"[LLM_LIFECYCLE] OllamaProvider: Network/timeout error after {elapsed:.2f}s: {e}")
-                raise RetriableError(f"Ollama connection/timeout failed: {e}")
+                logger.warning(f"[LLM_LIFECYCLE] OllamaProvider: Network/timeout/OOM error after {elapsed:.2f}s: {e}")
+                raise RetriableError(f"Ollama connection/timeout/OOM failed: {e}")
 
         elapsed = time.time() - t0
         logger.info(f"[LLM_LIFECYCLE] OllamaProvider: HTTP response received (status={resp.status_code}, elapsed={elapsed:.2f}s)")
