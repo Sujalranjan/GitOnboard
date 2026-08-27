@@ -64,7 +64,7 @@ services:
       - DATABASE_URL=postgresql+psycopg://myuser:mypassword@postgres:5432/repository_intelligence
       - LOCAL_DATABASE_URL=postgresql+psycopg://myuser:mypassword@postgres:5432/repository_intelligence
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - OLLAMA_TIMEOUT=120.0
+      - OLLAMA_TIMEOUT=600.0
       - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
       - AZURE_STORAGE_ENDPOINT=http://azurite:10000/devstoreaccount1
       - AZURE_STORAGE_CONTAINER=gitonboard-repos

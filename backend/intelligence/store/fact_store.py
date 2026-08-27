@@ -109,7 +109,7 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                 file_records.append(file_rec)
                 if entity.location.repository_path:
                     file_id_map[entity.location.repository_path] = db_id
-                    file_id_map[entity.location.repository_path.replace("\\", "/").lstrip("./")] = db_id
+                    file_id_map[entity.location.repository_path.replace("\\", "/").removeprefix("./").lstrip("/")] = db_id
                 if entity.name:
                     file_id_map[entity.name] = db_id
                 file_id_map[entity.id] = db_id
@@ -133,8 +133,8 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                     f_db_id = file_id_map[f_id]
                 elif f_path and f_path in file_id_map:
                     f_db_id = file_id_map[f_path]
-                elif f_path and f_path.replace("\\", "/").lstrip("./") in file_id_map:
-                    f_db_id = file_id_map[f_path.replace("\\", "/").lstrip("./")]
+                elif f_path and f_path.replace("\\", "/").removeprefix("./").lstrip("/") in file_id_map:
+                    f_db_id = file_id_map[f_path.replace("\\", "/").removeprefix("./").lstrip("/")]
 
                 db_id = f"{analysis_id}:{entity.id}"
                 symbol_rec = FactSymbol(
