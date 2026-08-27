@@ -11,7 +11,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
+import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 
 from backend.agent.context.assembler import ContextAssembler
@@ -107,7 +112,13 @@ def resolve_worktree_path(repo_name: str, repo: Optional[Any] = None) -> Optiona
         candidates = [
             Path(settings.worktrees_dir) / repo_name,
             Path("data/worktrees") / repo_name,
+            Path("data/repos") / repo_name,
+            Path(settings.storage_path) / "worktrees" / repo_name,
+            Path(settings.storage_path) / "repos" / repo_name,
+            Path("/app/data/worktrees") / repo_name,
+            Path("/app/data/repos") / repo_name,
             Path("/home/dheeraj/repository_intelligence_platform/data/worktrees") / repo_name,
+            Path("/home/dheeraj/repository_intelligence_platform/data/repos") / repo_name,
         ]
         for c in candidates:
             if c.exists() and c.is_dir():
@@ -162,6 +173,7 @@ def execute_explore(
     repository_id: Optional[str] = None,
     user_id: Optional[int] = None,
     db: Optional[Session] = None,
+    on_event: Optional[Any] = None,
     llm_service: Optional[LLMService] = None,
 ) -> Dict[str, Any]:
     """
@@ -208,6 +220,7 @@ def execute_explore(
                     "intent": "explore",
                     "model": settings.model_terminal_explore,
                     "entities": [{"type": "file", "path": f.path} for f in query_files],
+                    "evidence": [{"source_type": "file", "source_id": f.path, "summary": f"Cataloged {f.path}", "path": f.path} for f in query_files],
                 }
 
         # 2. Semantic Query Interpretation & Graph Traversal
@@ -287,6 +300,17 @@ def execute_explore(
                             lines.append(f"- **`{e.name}`** (`{e.entity_type}`){loc_str}")
 
                     response_text = f"### Exploration Results for '{semantic_intent.target_raw_name}' in `{repo_name_resolved}`:\n\n" + "\n".join(lines)
+                    evidence_items = []
+                    for e in traversal_res.related_entities:
+                        evidence_items.append({
+                            "source_type": "symbol" if e.entity_type != "file" else "file",
+                            "source_id": e.location or e.name,
+                            "summary": f"Inspected {e.name} ({e.entity_type})" if e.name else f"Inspected {e.location}",
+                            "path": e.location or "",
+                            "line": e.line_number or 1,
+                            "symbol": e.name,
+                        })
+
                     return {
                         "response": response_text,
                         "intent": "explore",
@@ -309,6 +333,7 @@ def execute_explore(
                                 "role": "target_entity",
                             }
                         ] if semantic_intent.query_class == SemanticQueryClass.CONTAINMENT else []),
+                        "evidence": evidence_items,
                     }
                 else:
                     # Honest missing relationship notification
@@ -321,6 +346,7 @@ def execute_explore(
                         "intent": "explore",
                         "model": settings.model_terminal_explore,
                         "entities": [],
+                        "evidence": [],
                     }
 
         # 3. Fallback: Generic Symbol & File Keyword Search (Only for unformatted generic search)
@@ -439,6 +465,25 @@ def execute_explore(
                     }
                     for f in matching_files
                 ],
+                "evidence": [
+                    {
+                        "source_type": "file",
+                        "source_id": f.path,
+                        "summary": f"Inspected file {f.path}",
+                        "path": f.path,
+                    }
+                    for f in matching_files
+                ] + [
+                    {
+                        "source_type": "symbol",
+                        "source_id": s.name,
+                        "summary": f"Found symbol {s.name} in {s.file.path if s.file else ''}",
+                        "path": s.file.path if s.file else "",
+                        "line": s.line_start or 1,
+                        "symbol": s.name,
+                    }
+                    for s in matching_symbols
+                ],
             }
 
         response_text = (
@@ -450,6 +495,7 @@ def execute_explore(
             "intent": "explore",
             "model": settings.model_terminal_explore,
             "entities": [],
+            "evidence": [],
         }
 
     finally:
@@ -463,6 +509,7 @@ def execute_explain(
     user_id: Optional[int] = None,
     db: Optional[Session] = None,
     llm_service: Optional[LLMService] = None,
+    on_event: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Executes repository-grounded natural-language explanation.
@@ -471,6 +518,7 @@ def execute_explain(
     """
     from backend.intelligence.retrieval.source_reader import RepositorySourceReader
     import re
+    import time
 
     service = llm_service or build_default_service()
     close_db = False
@@ -479,9 +527,20 @@ def execute_explain(
         close_db = True
 
     try:
+        if on_event:
+            on_event({
+                "type": "activity",
+                "item": {
+                    "id": f"search-{time.time()}",
+                    "type": "search",
+                    "title": f"Search repository context for '{user_requirement}'",
+                    "status": "completed",
+                }
+            })
+
         repo_obj, analysis_id, repo_name_resolved = resolve_target_repository_and_analysis(db, repository_id, user_id)
         worktree_path = resolve_worktree_path(repo_name_resolved, repo_obj)
-        source_reader = RepositorySourceReader(base_path=worktree_path)
+        source_reader = RepositorySourceReader(base_path=worktree_path, db=db, analysis_id=analysis_id)
 
         # 1. Identify target file(s) mentioned in prompt or from index
         target_files: List[str] = []
@@ -495,8 +554,77 @@ def execute_explain(
                     rel_path = fm
                 if rel_path not in target_files:
                     target_files.append(rel_path)
+            elif analysis_id:
+                clean_fm = fm.strip("/\\")
+                base_fm = Path(clean_fm).name.lower()
+                db_file = db.query(FactFile).filter(
+                    FactFile.analysis_id == analysis_id,
+                    or_(
+                        FactFile.path == clean_fm,
+                        FactFile.path == f".{clean_fm}",
+                        FactFile.path.ilike(f"%{clean_fm}"),
+                        FactFile.path.ilike(f"%/{base_fm}"),
+                        FactFile.path.ilike(base_fm),
+                    )
+                ).first()
+                if db_file and db_file.path not in target_files:
+                    target_files.append(db_file.path)
 
-        # If no explicit file mentioned, query ContextAssembler to locate candidate files
+        # Explicit GitHub Actions / CI Workflow discovery
+        req_lower = user_requirement.lower()
+        is_workflow_query = any(w in req_lower for w in ["github action", "github actions", "workflow", "workflows", "ci/cd", "ci pipeline", "action"])
+        if is_workflow_query:
+            workflow_files = []
+            if source_reader.base_path:
+                for wf_dir_name in [".github/workflows", "github/workflows"]:
+                    wf_dir = source_reader.base_path / wf_dir_name
+                    if wf_dir.exists() and wf_dir.is_dir():
+                        for p in sorted(wf_dir.glob("*.y*ml")):
+                            try:
+                                rel = str(p.relative_to(source_reader.base_path)).replace(chr(92), "/")
+                                if rel not in workflow_files:
+                                    workflow_files.append(rel)
+                            except Exception:
+                                pass
+
+            if not workflow_files and analysis_id:
+                db_wf_files = db.query(FactFile).filter(
+                    FactFile.analysis_id == analysis_id,
+                    or_(
+                        FactFile.path.ilike("%workflows/%.yml"),
+                        FactFile.path.ilike("%workflows/%.yaml"),
+                        FactFile.path.ilike("%.github/workflows/%"),
+                    )
+                ).all()
+                for wf in db_wf_files:
+                    if wf.path not in workflow_files:
+                        workflow_files.append(wf.path)
+
+            if workflow_files:
+                target_files = workflow_files[:5]
+
+        # Check if prompt mentions a directory/module (e.g., 'pls_cli', 'tests', 'utils', 'docs')
+        if not target_files and analysis_id:
+            words = [w.strip("'\":,./\\") for w in user_requirement.split() if len(w) > 2]
+            for w in words:
+                if w.lower() in {"explain", "folder", "directory", "package", "module", "code", "repo", "repository", "this", "that", "what", "does", "the"}:
+                    continue
+                dir_files = db.query(FactFile).filter(
+                    FactFile.analysis_id == analysis_id,
+                    or_(
+                        FactFile.path.ilike(f"{w}/%"),
+                        FactFile.path.ilike(f"%/{w}/%"),
+                        FactFile.path.ilike(f"{w.replace('-', '_')}/%"),
+                        FactFile.path.ilike(f"%/{w.replace('-', '_')}/%"),
+                    )
+                ).limit(5).all()
+                for df in dir_files:
+                    if df.path not in target_files:
+                        target_files.append(df.path)
+                if target_files:
+                    break
+
+        # If no explicit file mentioned or found, query ContextAssembler to locate candidate files
         if not target_files:
             assembler = ContextAssembler(llm_service=None, worktree_path=worktree_path)
             req = ContextAssemblyRequest(
@@ -504,24 +632,77 @@ def execute_explain(
                 analysis_id=analysis_id,
                 requirement=user_requirement,
                 worktree_path=worktree_path,
-                context_budget=ContextBudget(max_files=2, max_symbols=8, max_call_paths=2),
+                context_budget=ContextBudget(max_files=5, max_symbols=8, max_call_paths=2),
             )
             ctx = assembler.assemble(req, db=db)
-            for f in ctx.relevant_files:
-                # Filter out massive data files like quotes.json from explanation context
-                if not f.endswith(".json") and f not in target_files and len(target_files) < 2:
+            sorted_files = sorted(
+                ctx.relevant_files,
+                key=lambda p: 0 if p.endswith((".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".java")) else (1 if p.endswith((".yml", ".yaml")) else (3 if any(p.lower().endswith(m) for m in ["code_of_conduct.md", "license", "funding.yml", "dependabot.yml"]) else 2))
+            )
+            for f in sorted_files:
+                if not f.endswith(".json") and not any(f.lower().endswith(m) for m in ["code_of_conduct.md", "license", "funding.yml", "dependabot.yml"]) and f not in target_files and len(target_files) < 3:
                     target_files.append(f)
 
         # 2. Read actual source code for target files (focused lines for local inference)
         source_code_blocks = []
+        actual_read_evidence = []
         for tf in target_files:
-            code = source_reader.read_file_content(tf, max_lines=120)
+            if on_event:
+                on_event({
+                    "type": "activity",
+                    "item": {
+                        "id": f"read-{tf}",
+                        "type": "read",
+                        "title": f"Read {tf}",
+                        "file": tf,
+                        "startLine": 1,
+                        "status": "running",
+                    }
+                })
+            code = source_reader.read_file_content(tf, max_lines=400)
             if code:
-                source_code_blocks.append(f"File: `{tf}`\n```python\n{code}\n```")
+                line_count = max(1, len(code.splitlines()))
+                source_code_blocks.append(f"File: `{tf}` (lines 1–{line_count})\n```yaml\n{code}\n```" if tf.endswith((".yml", ".yaml")) else f"File: `{tf}` (lines 1–{line_count})\n```python\n{code}\n```")
+                actual_read_evidence.append({
+                    "source_type": "source_code",
+                    "source_id": tf,
+                    "summary": f"Read source of {tf} (lines 1–{line_count})",
+                    "path": tf,
+                    "start_line": 1,
+                    "end_line": line_count,
+                })
+                if on_event:
+                    on_event({
+                        "type": "activity",
+                        "item": {
+                            "id": f"read-{tf}",
+                            "type": "read",
+                            "title": f"Read {tf}",
+                            "file": tf,
+                            "startLine": 1,
+                            "endLine": line_count,
+                            "start_line": 1,
+                            "end_line": line_count,
+                            "status": "completed",
+                        }
+                    })
+            else:
+                if on_event:
+                    on_event({
+                        "type": "activity",
+                        "item": {
+                            "id": f"read-{tf}",
+                            "type": "read",
+                            "title": f"Read {tf}",
+                            "file": tf,
+                            "status": "failed",
+                            "error": "File not found on disk",
+                        }
+                    })
 
         if not source_code_blocks and not analysis_id:
             return {
-                "response": f"Target repository '{repository_id}' is not analyzed or available on disk.",
+                "response": f"Target repository '{repository_id}' has not been analyzed or is unavailable on disk.",
                 "intent": "explain",
                 "model": settings.model_terminal_explain,
                 "evidence": [],
@@ -530,13 +711,27 @@ def execute_explain(
 
         # 3. Build grounded prompt for LLM with real code
         code_context = "\n\n".join(source_code_blocks) if source_code_blocks else "No source code content available."
+        total_code_chars = sum(len(b) for b in source_code_blocks)
+
+        logger.info(
+            f"\n==================== EXPLAIN CONTEXT DEBUG ====================\n"
+            f"Requirement: {user_requirement}\n"
+            f"Target Repository: {repo_name_resolved}\n"
+            f"Selected Files ({len(target_files)}): {target_files}\n"
+            f"Loaded Source Blocks: {len(source_code_blocks)}\n"
+            f"Total Source Characters: {total_code_chars}\n"
+            f"Estimated Context Tokens: {total_code_chars // 4}\n"
+            f"LLM Provider: ollama (model: {settings.model_terminal_explain})\n"
+            f"Source Context Present: {bool(source_code_blocks)}\n"
+            f"==============================================================="
+        )
 
         system_prompt = (
             f"You are the GitOnboard Repository Architecture Explainer for target repository '{repo_name_resolved}'.\n"
             "Explain the user's question clearly, accurately, and thoroughly based on the actual source code provided below.\n\n"
             "GROUNDING RULES:\n"
-            "1. Base your explanation directly on the actual provided source code, classes, and functions.\n"
-            "2. Cite key components and CLI commands.\n"
+            "1. Base your explanation directly on the actual provided source code, workflows, classes, and functions.\n"
+            "2. Cite key workflow names, triggers (on: push, pull_request), jobs, steps, and commands.\n"
             "3. Provide a clear overview of the purpose, core components, and logic flow.\n"
             "4. Keep the explanation structured, clean, and educational."
         )
@@ -544,9 +739,9 @@ def execute_explain(
         user_content = (
             f"Target Repository: {repo_name_resolved}\n"
             f"User Question: {user_requirement}\n\n"
-            f"--- REPOSITORY SOURCE CODE ---\n"
+            f"--- REPOSITORY SOURCE CODE & WORKFLOWS ---\n"
             f"{code_context}\n"
-            f"------------------------------"
+            f"-----------------------------------------"
         )
 
         llm_req = LLMRequest(
@@ -556,8 +751,19 @@ def execute_explain(
                 Message(role=MessageRole.USER, content=user_content),
             ],
             temperature=0.2,
-            max_tokens=450,
+            max_tokens=650,
         )
+
+        if on_event:
+            on_event({
+                "type": "activity",
+                "item": {
+                    "id": "llm-synth",
+                    "type": "info",
+                    "title": f"Analyze with {settings.model_terminal_explain}",
+                    "status": "completed",
+                }
+            })
 
         try:
             resp = asyncio.run(service.generate(llm_req))
@@ -570,7 +776,7 @@ def execute_explain(
             "response": response_text,
             "intent": "explain",
             "model": settings.model_terminal_explain,
-            "evidence": [{"source_type": "source_code", "source_id": f, "summary": f"Read source of {f}"} for f in target_files],
+            "evidence": actual_read_evidence,
             "completeness": "COMPLETE" if source_code_blocks else "PARTIAL",
         }
     finally:
@@ -585,6 +791,7 @@ def execute_plan(
     analysis_id: Optional[int] = None,
     db: Optional[Session] = None,
     llm_service: Optional[LLMService] = None,
+    on_event: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Executes repository-aware implementation planning (Phase 4).
@@ -597,6 +804,7 @@ def execute_plan(
     """
     from backend.agent.planning.orchestrator import PlanningOrchestrator
     from backend.models.fact_store import FactRelationship
+    import time
 
     service = llm_service or build_default_service()
     close_db = False
@@ -605,6 +813,17 @@ def execute_plan(
         close_db = True
 
     try:
+        if on_event:
+            on_event({
+                "type": "activity",
+                "item": {
+                    "id": f"plan-start-{time.time()}",
+                    "type": "search",
+                    "title": f"Analyzing repository for '{user_requirement}'",
+                    "status": "running",
+                }
+            })
+
         # 1. Resolve repository and analysis_id strictly scoped to user and target
         if not analysis_id:
             _, analysis_id, repo_name_resolved = resolve_target_repository_and_analysis(db, repository_id, user_id)
@@ -621,62 +840,39 @@ def execute_plan(
             context_budget=ContextBudget(max_files=8, max_symbols=15, max_call_paths=5),
         )
         ctx = assembler.assemble(req, db=db)
-        if ctx.metadata is None:
-            ctx.metadata = {}
-        if analysis_id:
-            ctx.metadata["analysis_id"] = analysis_id
 
-        # Iteration 2: 1-Hop Graph Expansion if anchor symbols exist
-        expanded_symbols = list(ctx.relevant_symbols)
-        seen_sym_names = {s.get("name") for s in expanded_symbols if s.get("name")}
-        if analysis_id and expanded_symbols and len(expanded_symbols) < 15:
-            top_sym_names = [s.get("name") for s in expanded_symbols[:5] if s.get("name")]
-            rel_query = db.query(FactRelationship).filter(
-                FactRelationship.analysis_id == analysis_id,
-                FactRelationship.rel_type.in_(["CALLS", "IMPORTS", "DEFINED_IN"])
-            )
-            # Find related symbols
-            related_edges = rel_query.limit(20).all()
-            for edge in related_edges:
-                target_name = edge.to_symbol_id.split(":")[-1] if edge.to_symbol_id else ""
-                if target_name and target_name not in seen_sym_names and len(expanded_symbols) < 15:
-                    seen_sym_names.add(target_name)
-                    expanded_symbols.append({
-                        "name": target_name,
-                        "kind": "related_symbol",
-                        "relation": edge.rel_type,
-                        "file_path": "",
-                    })
+        # Iteration 2: Refine context with graph-derived dependencies if gaps exist
+        if len(ctx.relevant_files) < 2 and analysis_id:
+            related_symbols = db.query(FactRelationship).filter(
+                FactRelationship.analysis_id == analysis_id
+            ).limit(10).all()
+            for rel in related_symbols:
+                if rel.target_file_id and rel.target_file_id not in ctx.relevant_files:
+                    ctx.relevant_files.append(rel.target_file_id)
 
-        ctx.relevant_symbols = expanded_symbols
+        # 3. Determine Repository Revision
+        repo_revision = "main"
+        if repo_name_resolved:
+            from backend.models.repository import Repository
+            repo_record = db.query(Repository).filter(
+                (Repository.url.ilike(f"%/{repo_name_resolved}%")) | 
+                (Repository.url == repo_name_resolved) |
+                (Repository.id == (int(repo_name_resolved) if repo_name_resolved.isdigit() else -1))
+            ).first()
+            if repo_record and getattr(repo_record, "default_branch", None):
+                repo_revision = repo_record.default_branch
 
-        # 3. Assemble Evidence Text
-        evidence_snippets = []
-        if ctx.relevant_files:
-            evidence_snippets.append("Relevant Files:\n" + "\n".join(f"- `{f}`" for f in ctx.relevant_files[:8]))
-        if ctx.relevant_symbols:
-            evidence_snippets.append("Relevant Symbols:\n" + "\n".join(
-                f"- `{s.get('name')}` ({s.get('kind', 'symbol')}) at `{s.get('file_path', '')}`"
-                for s in ctx.relevant_symbols[:12]
-            ))
-        if ctx.relevant_routes:
-            evidence_snippets.append("Relevant Routes:\n" + "\n".join(
-                f"- `{r.get('method')} {r.get('path')}` -> `{r.get('handler_name', '')}`"
-                for r in ctx.relevant_routes[:6]
-            ))
-
-        evidence_text = "\n\n".join(evidence_snippets) if evidence_snippets else "No matching files or symbols found in repository index."
-
-        # 4. Synthesize DAG Plan via PlanningOrchestrator (<10ms)
-        import subprocess
-        repo_revision = f"rev:{repo_name_resolved}"
-        if req.worktree_path and Path(req.worktree_path).exists():
-            try:
-                res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=req.worktree_path, capture_output=True, text=True, timeout=5)
-                if res.returncode == 0 and res.stdout.strip():
-                    repo_revision = res.stdout.strip()
-            except Exception:
-                pass
+        # 4. Invoke LLM-backed Planning Orchestrator
+        if on_event:
+            on_event({
+                "type": "activity",
+                "item": {
+                    "id": f"plan-synth-{time.time()}",
+                    "type": "info",
+                    "title": "Synthesizing implementation plan...",
+                    "status": "running",
+                }
+            })
 
         orchestrator = PlanningOrchestrator(llm_service=service)
         if analysis_id:
@@ -729,6 +925,7 @@ def execute_implement(
     agent_run_id: Optional[str] = None,
     user_id: Optional[int] = None,
     db: Optional[Session] = None,
+    on_event: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Safe Intent.IMPLEMENT handler (Phase 5).
@@ -745,6 +942,7 @@ def execute_implement(
         user_id=user_id,
         agent_run_id=agent_run_id,
         db=db,
+        on_event=on_event,
     )
     task_count = len(res.get("plan", {}).get("tasks", []))
     res["intent"] = "implement"
