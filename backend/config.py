@@ -66,13 +66,17 @@ class Settings(BaseSettings):
     azure_storage_endpoint: str = "http://azurite:10000/devstoreaccount1"
 
     # Terminal Model Routing Configuration
+    # Intent + chat use the lightweight instruct model (fast, low memory)
     model_intent_router: str = "qwen3:4b-instruct"
     model_terminal_chat: str = "qwen3:4b-instruct"
     model_terminal_clarify: str = "qwen3:4b-instruct"
-    model_terminal_explore: str = "qwen2.5-coder:7b"
-    model_terminal_explain: str = "qwen2.5-coder:7b"
-    model_terminal_plan: str = "qwen2.5-coder:7b"
-    model_terminal_implement: str = "qwen2.5-coder:7b"
+    # Coding tasks: currently using qwen3:4b-instruct as primary (fast & fits in memory).
+    # To switch back to the coder model, set these to "qwen2.5-coder:7b"
+    # (or override per-model via .env: MODEL_TERMINAL_EXPLAIN=qwen2.5-coder:7b etc.)
+    model_terminal_explore: str = "qwen3:4b-instruct"
+    model_terminal_explain: str = "qwen3:4b-instruct"
+    model_terminal_plan: str = "qwen3:4b-instruct"
+    model_terminal_implement: str = "qwen3:4b-instruct"
 
     class Config:
         env_file = ".env"
