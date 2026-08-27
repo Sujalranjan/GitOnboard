@@ -14,7 +14,12 @@
       "Bash(python3 *)",
       "Bash(python -m pytest backend/tests/agent/ -xvs -k \"test_\" --tb=short)",
       "Bash(python -m pytest backend/tests/unit/test_planning_pipeline.py -xvs)",
-      "Bash(python -m pytest -xvs)"
+      "Bash(python -m pytest -xvs)",
+      "Bash(docker-compose ps *)",
+      "Bash(docker-compose restart *)",
+      "Bash(docker-compose logs *)",
+      "Bash(docker-compose exec *)",
+      "Bash(curl *)"
     ]
   }
 }

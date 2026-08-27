@@ -22,7 +22,7 @@ class OllamaProvider:
 
     provider_name = "ollama"
 
-    def __init__(self, base_url: str = "http://127.0.0.1:11434", model: str = DEFAULT_MODEL, timeout: float = 15.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:11434", model: str = DEFAULT_MODEL, timeout: float = 120.0):
         self.base_url = base_url.rstrip("/")
         self.default_model = model
         self.timeout = timeout
@@ -43,9 +43,9 @@ class OllamaProvider:
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         model_name = request.model or self.default_model
-        logger.info(f"OllamaProvider: Sending request to {self.base_url}/api/chat (model: {model_name})...")
+        logger.info(f"[LLM_LIFECYCLE] OllamaProvider: Sending request to {self.base_url}/api/chat (model: {model_name}, timeout={self.timeout}s)...")
         t0 = time.time()
-        timeout_config = httpx.Timeout(timeout=self.timeout, connect=2.0, read=self.timeout)
+        timeout_config = httpx.Timeout(timeout=self.timeout, connect=10.0, read=self.timeout, write=10.0)
         
         async with httpx.AsyncClient(timeout=timeout_config) as client:
             try:
@@ -54,8 +54,12 @@ class OllamaProvider:
                     json=self._build_body(request),
                 )
             except (httpx.TimeoutException, httpx.ConnectError) as e:
-                logger.warning(f"OllamaProvider: Network error after {time.time() - t0:.2f}s: {e}")
+                elapsed = time.time() - t0
+                logger.warning(f"[LLM_LIFECYCLE] OllamaProvider: Network/timeout error after {elapsed:.2f}s: {e}")
                 raise RetriableError(f"Ollama connection/timeout failed: {e}")
+
+        elapsed = time.time() - t0
+        logger.info(f"[LLM_LIFECYCLE] OllamaProvider: HTTP response received (status={resp.status_code}, elapsed={elapsed:.2f}s)")
 
         if resp.status_code == 400:
             raise NonRetriableError(f"Ollama bad request: {resp.text}", resp.status_code)
@@ -66,17 +70,20 @@ class OllamaProvider:
 
         data = resp.json()
         content = data.get("message", {}).get("content", "")
-        elapsed = time.time() - t0
-        logger.info(f"OllamaProvider: Response received successfully in {elapsed:.2f}s")
-        
+        prompt_tokens = data.get("prompt_eval_count", 0)
+        eval_tokens = data.get("eval_count", 0)
+        total_tokens = prompt_tokens + eval_tokens
+
+        logger.info(f"[LLM_LIFECYCLE] OllamaProvider: Successfully extracted text ({len(content)} chars, {total_tokens} tokens)")
+
         return LLMResponse(
             content=content,
             model=data.get("model", self.default_model),
             provider=self.provider_name,
             usage=TokenUsage(
-                prompt_tokens=data.get("prompt_eval_count", 0),
-                completion_tokens=data.get("eval_count", 0),
-                total_tokens=data.get("prompt_eval_count", 0) + data.get("eval_count", 0),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=eval_tokens,
+                total_tokens=total_tokens,
             ),
         )
 

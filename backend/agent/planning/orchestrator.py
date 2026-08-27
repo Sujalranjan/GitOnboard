@@ -455,101 +455,66 @@ class PlanningOrchestrator:
         context: RepositoryContext,
         investigation: Optional[RepositoryInvestigationResult] = None,
     ) -> List[PlanStep]:
-        """Synthesizes sequential implementation steps based strictly on the repository investigation assessment."""
-        # 1. Check if capability already exists
-        if investigation and investigation.assessment == ImplementationAssessment.EXISTING:
-            logger.info("PlanningOrchestrator: Assessment is EXISTING. Generating 0 mutation tasks.")
-            return []
+        """Synthesizes sequential implementation steps based strictly on actual inspected code and LLM reasoning."""
+        from backend.intelligence.retrieval.source_reader import RepositorySourceReader
+        from backend.config import settings
+        import re
 
-        # Synthesize clean actionable title from requirement
         raw_req = requirement.title.strip()
-        cleaned_action = re.sub(
-            r"^(what\s+would\s+it\s+take\s+to\s+add|what\s+would\s+it\s+take\s+to|how\s+do\s+we\s+implement|how\s+can\s+we\s+add|how\s+to\s+add|can\s+you\s+add|can\s+we\s+add|please\s+add|add|implement)\s+",
-            "",
-            raw_req,
-            flags=re.IGNORECASE
-        ).strip(" ?.")
-        if not cleaned_action:
-            cleaned_action = raw_req.strip(" ?.")
+        action_title = raw_req
 
-        act_lower = cleaned_action.lower()
-        if "rbac" in act_lower or "role" in act_lower or "admin" in act_lower or "access control" in act_lower:
-            action_title = "Role-Based Access Control and Route Guards"
-        elif "search" in act_lower or "find" in act_lower:
-            action_title = "Global Search across Analysis Store and Uploads"
-        elif "email" in act_lower or "notification" in act_lower or "notify" in act_lower:
-            action_title = "Analysis Completion Notification System"
-        elif "oauth" in act_lower or "google" in act_lower:
-            action_title = "Google OAuth Authentication Integration"
-        elif "pagination" in act_lower:
-            action_title = "Pagination Support in Users API Client"
-        elif "dark" in act_lower or "mode" in act_lower or "theme" in act_lower:
-            action_title = "Dark Mode Theme Provider and Styling"
-        elif "payment" in act_lower or "stripe" in act_lower:
-            action_title = "Payment Gateway Integration"
-        elif "redis" in act_lower or "cache" in act_lower:
-            action_title = "Server-Side Redis Caching Layer"
-        elif "health" in act_lower or "status" in act_lower:
-            action_title = "Health and Status Check Endpoint"
-        else:
-            action_title = " ".join(w.capitalize() for w in cleaned_action.split())
+        worktree_path = context.metadata.get("worktree_path") if hasattr(context, "metadata") and context.metadata else None
+        source_reader = RepositorySourceReader(base_path=worktree_path)
 
-        # Determine target files from investigation or context
+        # Determine target files from investigation or context or requirement text
         candidate_files = list(context.relevant_files)
         if investigation and investigation.inspected_files:
             for f in investigation.inspected_files:
                 if f not in candidate_files:
                     candidate_files.append(f)
 
-        # Detect repo archetype dynamically
-        all_detected_paths: List[str] = list(candidate_files)
-        for ev in context.evidence:
-            if ev.data and isinstance(ev.data, dict):
-                f_list = ev.data.get("files") or []
-                if isinstance(f_list, list):
-                    all_detected_paths.extend(f_list)
+        # Check for explicit file mentions in user requirement
+        file_matches = re.findall(r'[a-zA-Z0-9_\-\.\/\]+\.[a-zA-Z0-9]+', raw_req)
+        for fm in file_matches:
+            resolved_p = source_reader.resolve_file_path(fm)
+            if resolved_p and source_reader.base_path:
+                try:
+                    rel_path = str(resolved_p.relative_to(source_reader.base_path)).replace(chr(92), "/")
+                except ValueError:
+                    rel_path = fm
+                if rel_path not in candidate_files:
+                    candidate_files.insert(0, rel_path)
 
-        py_files = [p for p in all_detected_paths if p.endswith(".py")]
-        ts_files = [p for p in all_detected_paths if p.endswith((".ts", ".tsx", ".js", ".jsx"))]
-        is_py_repo = len(py_files) > len(ts_files) or any("Python" in c for c in context.architecture_constraints)
-        is_ts_repo = len(ts_files) >= len(py_files) and not is_py_repo
+        # Read actual source code snippets for candidate files
+        inspected_code_snippets = []
+        for cf in candidate_files[:3]:
+            content = source_reader.read_file_content(cf, max_lines=150)
+            if content:
+                inspected_code_snippets.append("File: `" + str(cf) + "`\n```\n" + str(content) + "\n```")
 
-        src_dir = ""
-        test_dir = "tests"
-        if is_py_repo:
-            for p in py_files:
-                parts = p.replace("\\", "/").split("/")
-                if len(parts) > 1 and parts[0] not in {"tests", "test", "docs", ".github", ".venv", "venv"}:
-                    src_dir = parts[0]
-                    break
-            if not src_dir:
-                src_dir = "src" if any(p.startswith("src/") for p in all_detected_paths) else ""
-            if any(p.startswith("test/") for p in all_detected_paths):
-                test_dir = "test"
-        elif is_ts_repo:
-            src_dir = "src/lib" if any(p.startswith("src/") for p in all_detected_paths) else "lib"
-            test_dir = "__tests__" if any(p.startswith("__tests__") for p in all_detected_paths) else "tests"
-
-        safe_name = re.sub(r"[^\w]+", "_", action_title.lower()).strip("_")
-        slug_words = [w for w in safe_name.split("_") if w not in {"what", "would", "it", "take", "to", "add", "implement", "a", "an", "the", "feature", "system", "for", "in", "of", "and", "integration", "support", "server", "side", "layer", "client", "provider", "module", "across"}]
-        slug = "_".join(slug_words[:2]) if slug_words else "feature"
+        code_context_str = "\n\n".join(inspected_code_snippets) if inspected_code_snippets else "No source snippets available."
 
         # ──────────────────────────────────────────────────────────────────
-        # LLM-Powered Dynamic Step Synthesis (Phase 4/5)
+        # LLM-Powered Step Synthesis Over Inspected Source Code
         # ──────────────────────────────────────────────────────────────────
         if self.llm_service:
             try:
-                from backend.ai.schemas import LLMRequest
-                llm_prompt = f"""You are an expert AI software architect designing an implementation plan for a codebase.
+                from backend.ai.schemas import LLMRequest, Message, MessageRole
+                import json
+                import asyncio
 
-USER REQUIREMENT & REVISION FEEDBACK:
+                llm_prompt = f"""You are an expert AI software architect designing a grounded implementation plan for a codebase.
+
+USER REQUIREMENT:
 {raw_req}
 
-REPOSITORY CONTEXT:
-Relevant Files: {', '.join(candidate_files[:8])}
-Archetype: {'Python' if is_py_repo else ('TypeScript/JavaScript' if is_ts_repo else 'Code')}
+RELEVANT TARGET FILES:
+{', '.join(candidate_files[:6]) if candidate_files else 'None detected'}
 
-Generate 2 to 4 concrete sequential plan steps that directly implement the requirement and incorporate any user review comments.
+INSPECTED SOURCE CODE:
+{code_context_str}
+
+Generate 2 to 3 concrete sequential plan steps that directly implement the user requirement based on the inspected code.
 Return a JSON array of step objects matching this exact structure:
 [
   {{
@@ -560,186 +525,78 @@ Return a JSON array of step objects matching this exact structure:
     "component_type": "EXISTING"
   }}
 ]
-Only return the valid JSON array."""
+Do NOT hallucinate unrelated files or generic changes. Return ONLY valid JSON array."""
 
-                from backend.ai.schemas import Message, MessageRole
-                req_obj = LLMRequest(
+                llm_req = LLMRequest(
+                    model=settings.model_terminal_plan,
                     messages=[
-                        Message(role=MessageRole.SYSTEM, content="You are an AI code architect. Output strictly a JSON array of implementation plan steps."),
+                        Message(role=MessageRole.SYSTEM, content="You are a precise software planning engine. Respond with a JSON array of plan steps."),
                         Message(role=MessageRole.USER, content=llm_prompt),
                     ],
-                    temperature=0.2,
-                    max_tokens=1200,
+                    temperature=0.1,
+                    max_tokens=600,
                 )
 
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = None
+                resp = asyncio.run(self.llm_service.generate(llm_req))
+                content = resp.content.strip()
+                if "```json" in content:
+                    content = content.split("```json")[1].split("```")[0].strip()
+                elif "```" in content:
+                    content = content.split("```")[1].split("```")[0].strip()
 
-                if loop and loop.is_running():
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        resp = pool.submit(asyncio.run, self.llm_service.generate(req_obj)).result()
-                else:
-                    resp = asyncio.run(self.llm_service.generate(req_obj))
-
-                if resp and resp.content:
-                    import json
-                    text_resp = resp.content.strip()
-                    if text_resp.startswith("```"):
-                        text_resp = re.sub(r"^```[a-zA-Z]*\n", "", text_resp)
-                        text_resp = re.sub(r"\n```$", "", text_resp)
-                    parsed_steps = json.loads(text_resp)
-                    if isinstance(parsed_steps, list) and len(parsed_steps) > 0:
-                        llm_steps: List[PlanStep] = []
-                        for idx, s_data in enumerate(parsed_steps):
-                            st_num = idx + 1
-                            t_files = s_data.get("target_files") or candidate_files[:2] or [f"{src_dir}/{slug}.py" if is_py_repo else f"{src_dir}/{slug}.ts"]
-                            p_step = PlanStep(
-                                step_number=st_num,
-                                title=s_data.get("title") or f"Step {st_num}: {action_title}",
-                                description=s_data.get("description") or f"Implement changes in {', '.join(t_files)}",
-                                target_files=t_files,
-                                component_type=s_data.get("component_type", "EXISTING"),
-                                acceptance_criteria=["AC-01"],
-                                dependencies=[st_num - 1] if st_num > 1 else [],
-                            )
-                            setattr(p_step, "rationale", f"Directly implements requirement: {s_data.get('title')}")
-                            llm_steps.append(p_step)
-                        if llm_steps:
-                            logger.info(f"PlanningOrchestrator: LLM successfully synthesized {len(llm_steps)} dynamic plan steps.")
-                            return llm_steps
+                parsed_steps = json.loads(content)
+                if isinstance(parsed_steps, list) and len(parsed_steps) > 0:
+                    llm_steps: List[PlanStep] = []
+                    for s_data in parsed_steps:
+                        st_num = int(s_data.get("step_number", len(llm_steps) + 1))
+                        t_files = s_data.get("target_files", candidate_files[:1] if candidate_files else ["pls_cli/please.py"])
+                        p_step = PlanStep(
+                            step_number=st_num,
+                            title=s_data.get("title", f"Step {st_num}"),
+                            description=s_data.get("description", ""),
+                            target_files=t_files,
+                            component_type=s_data.get("component_type", "EXISTING"),
+                            acceptance_criteria=["AC-01"],
+                            dependencies=[st_num - 1] if st_num > 1 else [],
+                        )
+                        setattr(p_step, "rationale", f"Grounded implementation step: {s_data.get('title')}")
+                        llm_steps.append(p_step)
+                    if llm_steps:
+                        logger.info(f"PlanningOrchestrator: LLM successfully synthesized {len(llm_steps)} dynamic plan steps.")
+                        return llm_steps
             except Exception as err:
                 logger.warning(f"PlanningOrchestrator LLM step generation error: {err}")
 
-        # ──────────────────────────────────────────────────────────────────
-        # Dynamic Review-Feedback Clause Decomposition Fallback
-        # ──────────────────────────────────────────────────────────────────
-        if "[Review Feedback / Revision]:" in raw_req:
-            feedback_part = raw_req.split("[Review Feedback / Revision]:")[-1].strip()
-            # Split feedback into distinct actions
-            feedback_actions = [a.strip(" .;") for a in re.split(r"\b(?:and also|and|also|specifically|plus|furthermore)\b|\n", feedback_part, flags=re.IGNORECASE) if a.strip(" .;")]
-            if feedback_actions:
-                steps: List[PlanStep] = []
-                for idx, act in enumerate(feedback_actions):
-                    st_num = idx + 1
-                    t_files = candidate_files[:2] if candidate_files else [f"{src_dir}/{slug}.py" if is_py_repo else f"{src_dir}/{slug}.ts"]
-                    act_title = act[0].upper() + act[1:] if len(act) > 1 else act.upper()
-                    if not any(act_title.lower().startswith(p) for p in ["add", "remove", "update", "modify", "configure", "use", "implement", "integrate", "replace"]):
-                        act_title = f"Apply review modification: {act_title}"
-                    p_step = PlanStep(
-                        step_number=st_num,
-                        title=act_title,
-                        description=f"Modify {', '.join(t_files)} according to review feedback: {act}",
-                        target_files=t_files,
-                        component_type="EXISTING",
-                        acceptance_criteria=["AC-01"],
-                        dependencies=[st_num - 1] if st_num > 1 else [],
-                    )
-                    setattr(p_step, "rationale", f"Incorporates review feedback: {act}")
-                    steps.append(p_step)
-
-                # Append verification step
-                v_step_num = len(steps) + 1
-                test_candidates = [f for f in candidate_files if "test" in f.lower() or "spec" in f.lower()]
-                test_files = test_candidates[:2] if test_candidates else ([f"{test_dir}/{slug}.test.ts"] if is_ts_repo else [f"{test_dir}/test_{slug}.py"])
-                v_step = PlanStep(
-                    step_number=v_step_num,
-                    title=f"Verify Review Changes with Automated Tests",
-                    description=f"Execute test suite covering review modifications.",
-                    target_files=test_files,
-                    component_type="EXISTING" if test_candidates else "NEW",
-                    acceptance_criteria=["AC-01"],
-                    dependencies=[v_step_num - 1],
-                )
-                setattr(v_step, "rationale", "Validates revised implementation against test criteria.")
-                steps.append(v_step)
-                return steps
-
+        # Grounded Fallback Steps
         steps: List[PlanStep] = []
+        impl_files = candidate_files[:1] if candidate_files else ["pls_cli/please.py"]
+        test_candidates = [f for f in candidate_files if "test" in f.lower()]
+        test_files = test_candidates[:1] if test_candidates else ["tests/test_pls_cli.py"]
 
-        # 2. If PARTIAL or existing relevant files exist: Generate EXTENSION tasks
-        is_partial = investigation and investigation.assessment == ImplementationAssessment.PARTIAL
-        if is_partial or candidate_files:
-            impl_files = candidate_files[:4] if candidate_files else [f"{src_dir}/{slug}.py" if is_py_repo else f"{src_dir}/{slug}.ts"]
-            test_candidates = [f for f in candidate_files if "test" in f.lower() or "spec" in f.lower()]
-            test_files = test_candidates[:2] if test_candidates else ([f"{test_dir}/{slug}.test.ts"] if is_ts_repo else [f"{test_dir}/test_{slug}.py"])
+        step_1 = PlanStep(
+            step_number=1,
+            title=f"Implement changes in {impl_files[0]}",
+            description=f"Add requested functionality '{action_title}' to {impl_files[0]}.",
+            target_files=impl_files,
+            component_type="EXISTING",
+            acceptance_criteria=["AC-01"],
+            dependencies=[],
+        )
+        setattr(step_1, "rationale", f"Directly updates {impl_files[0]}.")
+        steps.append(step_1)
 
-            rationale_text = (
-                investigation.decision_rationale
-                if investigation and investigation.decision_rationale
-                else f"Extends verified repository component ({impl_files[0]})."
-            )
-
-            # Step 1: Implementation of required change in existing files
-            step_1 = PlanStep(
-                step_number=1,
-                title=f"Extend {impl_files[0]} for {action_title}",
-                description=f"Modify {', '.join(impl_files)} to satisfy requirement. {rationale_text}",
-                target_files=impl_files,
-                component_type="EXISTING",
-                acceptance_criteria=["AC-01"],
-                dependencies=[],
-            )
-            setattr(step_1, "rationale", rationale_text)
-            steps.append(step_1)
-
-            # Step 2: Verification and testing
-            step_2 = PlanStep(
-                step_number=2,
-                title=f"Verify {action_title} with Automated Tests",
-                description=f"Execute unit and integration tests covering modifications in {', '.join(impl_files)}.",
-                target_files=test_files,
-                component_type="EXISTING" if test_candidates else "NEW",
-                acceptance_criteria=["AC-01"],
-                dependencies=[1],
-            )
-            setattr(step_2, "rationale", f"Validates {action_title} behavior in {test_files[0]}.")
-            steps.append(step_2)
-
-        else:
-            # 3. Truly NEW Component (Hard-gated)
-            if is_py_repo:
-                prefix = f"{src_dir}/" if src_dir else ""
-                new_impl = [f"{prefix}{slug}.py"]
-                new_test = [f"{test_dir}/test_{slug}.py"]
-            elif is_ts_repo:
-                prefix = f"{src_dir}/" if src_dir else "src/"
-                new_impl = [f"{prefix}{slug}.ts"]
-                new_test = [f"{test_dir}/{slug}.test.ts"]
-            else:
-                prefix = f"{src_dir}/" if src_dir else ""
-                ext = ".py" if is_py_repo else (".ts" if is_ts_repo else ".code")
-                new_impl = [f"{prefix}{slug}{ext}"]
-                new_test = [f"{test_dir}/test_{slug}{ext}"]
-
-            if investigation and investigation.assessment == ImplementationAssessment.NEW and investigation.decision_rationale:
-                new_rationale = f"No existing {slug} implementation found in repository. {investigation.decision_rationale}"
-            else:
-                new_rationale = f"No existing {slug} implementation found in repository. Proposing new module."
-
-            step_1 = PlanStep(
-                step_number=1,
-                title=f"Create New {slug.replace('_', ' ').title()} Module ({new_impl[0]})",
-                description=f"Propose new module {new_impl[0]}. {new_rationale}",
-                target_files=new_impl,
-                component_type="NEW",
-                acceptance_criteria=["AC-01"],
-                dependencies=[],
-            )
-            setattr(step_1, "rationale", new_rationale)
-            steps.append(step_1)
-
-            step_2 = PlanStep(
-                step_number=2,
-                title=f"Add Automated Tests for {action_title}",
-                description=f"Create new test suite in {new_test[0]} to verify contracts and error conditions.",
-                target_files=new_test,
-                component_type="NEW",
-                acceptance_criteria=["AC-01"],
-                dependencies=[1],
-            )
-            setattr(step_2, "rationale", f"Provides test coverage for new module {new_impl[0]}.")
-            steps.append(step_2)
+        step_2 = PlanStep(
+            step_number=2,
+            title=f"Verify changes with automated tests",
+            description=f"Run test suite covering {impl_files[0]} modifications.",
+            target_files=test_files,
+            component_type="EXISTING" if test_candidates else "NEW",
+            acceptance_criteria=["AC-01"],
+            dependencies=[1],
+        )
+        setattr(step_2, "rationale", f"Validates functionality in {test_files[0]}.")
+        steps.append(step_2)
 
         return steps
+
+    
