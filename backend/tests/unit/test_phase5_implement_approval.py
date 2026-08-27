@@ -485,7 +485,7 @@ def test_direct_execute_api_bypass_cases(db_session):
     from fastapi.testclient import TestClient
     from backend.main import app
     from backend.database import get_db
-    from backend.routers.auth import get_current_user
+    from backend.dependencies.auth import get_current_user
 
     service = EngineeringAgent()
     user1 = db_session.query(User).filter(User.id == 1).first()
@@ -495,55 +495,56 @@ def test_direct_execute_api_bypass_cases(db_session):
 
     client = TestClient(app)
 
-    try:
-        # --- Case A: No approval ---
-        run_a = service.create_run(db=db_session, repository_id="1", user_requirement="Feature A", user_id=user1.id)
-        service.create_plan(db=db_session, run_id=run_a.id)
+    with patch("backend.routers.agent._background_execute_approved_plan"):
+        try:
+            # --- Case A: No approval ---
+            run_a = service.create_run(db=db_session, repository_id="1", user_requirement="Feature A", user_id=user1.id)
+            service.create_plan(db=db_session, run_id=run_a.id)
 
-        resp_a = client.post(f"/api/v1/agent/runs/{run_a.id}/execute")
-        assert resp_a.status_code == 400
-        assert "Execution not authorized" in resp_a.text
+            resp_a = client.post(f"/api/v1/agent/runs/{run_a.id}/execute")
+            assert resp_a.status_code == 400
+            assert "Execution not authorized" in resp_a.text
 
-        # --- Case B: Rejected plan ---
-        run_b = service.create_run(db=db_session, repository_id="1", user_requirement="Feature B", user_id=user1.id)
-        service.create_plan(db=db_session, run_id=run_b.id)
-        service.reject_plan(db=db_session, run_id=run_b.id, reason="No", resolved_by="testuser", user_id=user1.id)
+            # --- Case B: Rejected plan ---
+            run_b = service.create_run(db=db_session, repository_id="1", user_requirement="Feature B", user_id=user1.id)
+            service.create_plan(db=db_session, run_id=run_b.id)
+            service.reject_plan(db=db_session, run_id=run_b.id, reason="No", resolved_by="testuser", user_id=user1.id)
 
-        resp_b = client.post(f"/api/v1/agent/runs/{run_b.id}/execute")
-        assert resp_b.status_code in (400, 409)
+            resp_b = client.post(f"/api/v1/agent/runs/{run_b.id}/execute")
+            assert resp_b.status_code in (400, 409)
 
-        # --- Case C: Stale approval (v1 approved, replanned to v2) ---
-        run_c = service.create_run(db=db_session, repository_id="1", user_requirement="Feature C", user_id=user1.id)
-        service.create_plan(db=db_session, run_id=run_c.id)
-        service.approve_plan(db=db_session, run_id=run_c.id, resolved_by="testuser", user_id=user1.id)
-        service.transition_state(db_session, run_c.id, to_state=AgentState.PLANNING, reason="Replan")
-        service.create_plan(db=db_session, run_id=run_c.id)  # v2
+            # --- Case C: Stale approval (v1 approved, replanned to v2) ---
+            run_c = service.create_run(db=db_session, repository_id="1", user_requirement="Feature C", user_id=user1.id)
+            service.create_plan(db=db_session, run_id=run_c.id)
+            service.approve_plan(db=db_session, run_id=run_c.id, resolved_by="testuser", user_id=user1.id)
+            service.transition_state(db_session, run_c.id, to_state=AgentState.PLANNING, reason="Replan")
+            service.create_plan(db=db_session, run_id=run_c.id)  # v2
 
-        resp_c = client.post(f"/api/v1/agent/runs/{run_c.id}/execute")
-        assert resp_c.status_code == 400
-        assert "Execution not authorized" in resp_c.text
+            resp_c = client.post(f"/api/v1/agent/runs/{run_c.id}/execute")
+            assert resp_c.status_code == 400
+            assert "Execution not authorized" in resp_c.text
 
-        # --- Case D: Valid approved plan ---
-        run_d = service.create_run(db=db_session, repository_id="1", user_requirement="Feature D", user_id=user1.id)
-        service.create_plan(db=db_session, run_id=run_d.id)
-        service.approve_plan(db=db_session, run_id=run_d.id, resolved_by="testuser", user_id=user1.id)
+            # --- Case D: Valid approved plan ---
+            run_d = service.create_run(db=db_session, repository_id="1", user_requirement="Feature D", user_id=user1.id)
+            service.create_plan(db=db_session, run_id=run_d.id)
+            service.approve_plan(db=db_session, run_id=run_d.id, resolved_by="testuser", user_id=user1.id)
 
-        resp_d = client.post(f"/api/v1/agent/runs/{run_d.id}/execute")
-        assert resp_d.status_code == 200
-        data_d = resp_d.json()
-        assert data_d["current_state"] == AgentState.EXECUTING.value
+            resp_d = client.post(f"/api/v1/agent/runs/{run_d.id}/execute")
+            assert resp_d.status_code == 200
+            data_d = resp_d.json()
+            assert data_d["current_state"] == AgentState.EXECUTING.value
 
-        # --- Case E: Unauthorized user (User 2 attempts to execute User 1's run) ---
-        user2 = User(id=2, github_id="gh999", email="other@example.com", username="otheruser")
-        db_session.add(user2)
-        db_session.commit()
+            # --- Case E: Unauthorized user (User 2 attempts to execute User 1's run) ---
+            user2 = User(id=2, github_id="gh999", email="other@example.com", username="otheruser")
+            db_session.add(user2)
+            db_session.commit()
 
-        app.dependency_overrides[get_current_user] = lambda: user2
-        resp_e = client.post(f"/api/v1/agent/runs/{run_d.id}/execute")
-        assert resp_e.status_code == 403
+            app.dependency_overrides[get_current_user] = lambda: user2
+            resp_e = client.post(f"/api/v1/agent/runs/{run_d.id}/execute")
+            assert resp_e.status_code == 403
 
-    finally:
-        app.dependency_overrides.clear()
+        finally:
+            app.dependency_overrides.clear()
 
 
 def test_duplicate_approval_request_deduplication(db_session):
