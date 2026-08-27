@@ -624,20 +624,9 @@ class ContextAssembler:
         # ──────────────────────────────────────────────────────────────────────
         if db and request.analysis_id:
             try:
-                import asyncio
-                import concurrent.futures
                 from backend.planning.impact_analysis import ImpactAnalyzer
                 analyzer = ImpactAnalyzer(db=db, analysis_id=request.analysis_id)
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = None
-
-                if loop and loop.is_running():
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        impact_res = pool.submit(asyncio.run, analyzer.analyze(keywords=keywords)).result()
-                else:
-                    impact_res = asyncio.run(analyzer.analyze(keywords=keywords))
+                impact_res = analyzer.analyze_sync(keywords=keywords)
 
                 if impact_res:
                     impact_context = {

@@ -67,16 +67,23 @@ def scan_repo(repo_name: str, db: Session = Depends(get_db), current_user: User 
     # utility — computing a parent with a platform Path() here would render
     # "\" on Windows even though dirs_by_path keys are POSIX, causing lookups
     # to miss and silently flattening the tree onto the root. Order doesn't
-    # matter — missing intermediary ancestors are reconstructed on demand
-    # rather than falling back to attaching orphaned nodes at root.
-    hierarchy, dirs_by_path = build_directory_hierarchy(
-        repo_name, [d.location.repository_path for d in dirs]
-    )
+    raw_dir_paths = []
+    for d in dirs:
+        dp = d.location.repository_path or ""
+        if dp == "github" or dp.startswith("github/"):
+            dp = "." + dp
+        raw_dir_paths.append(dp)
+
+    hierarchy, dirs_by_path = build_directory_hierarchy(repo_name, raw_dir_paths)
 
     # Add files — with their functions and classes as children
     files_metadata = []
     for f in files:
         f_path = to_posix(f.location.repository_path)
+        if f_path == "github" or f_path.startswith("github/"):
+            f_path = "." + f_path
+        elif f_path == "gitignore":
+            f_path = ".gitignore"
         parts = PPath(f_path).parts
         name = parts[-1]
         parent_path = posix_parent(f_path)

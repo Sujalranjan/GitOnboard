@@ -435,43 +435,94 @@ class EngineeringAgent:
 
         # 2. Emit TOOL_CALL_STARTED
         safe_args_meta = {k: v for k, v in args.items() if k not in ("content", "patch_text")}
+        started_payload: Dict[str, Any] = {
+            "tool_name": tool_name,
+            "tool": tool_name,
+            "arguments": safe_args_meta,
+            "status": "running",
+        }
+        if tool_name == "read_file":
+            started_payload["activity_type"] = "reading"
+            started_payload["path"] = safe_args_meta.get("path") or safe_args_meta.get("file_path")
+            if "start_line" in safe_args_meta:
+                started_payload["start_line"] = safe_args_meta["start_line"]
+            if "end_line" in safe_args_meta:
+                started_payload["end_line"] = safe_args_meta["end_line"]
+        elif tool_name in ("search_code", "search_symbols"):
+            started_payload["activity_type"] = "searching"
+            started_payload["query"] = safe_args_meta.get("query") or safe_args_meta.get("pattern") or ""
+        elif tool_name in ("get_symbol", "get_callers", "get_callees", "trace_feature"):
+            started_payload["activity_type"] = "inspecting"
+            started_payload["symbol"] = safe_args_meta.get("name") or safe_args_meta.get("symbol_name") or safe_args_meta.get("seed_id") or ""
+            if "path" in safe_args_meta:
+                started_payload["path"] = safe_args_meta["path"]
+        elif tool_name in ("create_file", "modify_file", "write_file", "apply_patch"):
+            started_payload["activity_type"] = "writing"
+            started_payload["path"] = safe_args_meta.get("path") or safe_args_meta.get("file_path")
+        elif tool_name == "delete_file":
+            started_payload["activity_type"] = "deleting"
+            started_payload["path"] = safe_args_meta.get("path")
+        elif tool_name in ("verify_dynamic", "run_tests"):
+            started_payload["activity_type"] = "testing"
+            started_payload["task"] = safe_args_meta.get("test_command") or "Run tests"
+        elif tool_name in ("verify_static", "verify_contract", "judge_verification"):
+            started_payload["activity_type"] = "verifying"
+            started_payload["task"] = tool_name.replace("verify_", "").replace("_", " ").title()
+        else:
+            started_payload["activity_type"] = "tool"
+
         self.events.emit_event(
             db,
             run,
             AgentEventType.TOOL_CALL_STARTED,
             f"Invoking tool '{tool_name}'",
-            {"tool_name": tool_name, "arguments": safe_args_meta},
+            started_payload,
         )
 
         # 3. Dispatch through central tool registry
         result = self.tools.invoke(tool_name, args, context)
 
         # 4. Map event type based on tool execution result
+        completed_payload: Dict[str, Any] = dict(started_payload)
         if result.error and result.error.code == ToolErrorCode.POLICY_BLOCKED.value:
             event_type = AgentEventType.TOOL_CALL_BLOCKED
             msg = f"Tool '{tool_name}' blocked: {result.error.message}"
+            completed_payload["status"] = "blocked"
+            completed_payload["error_code"] = result.error.code
         elif result.error and result.error.code == ToolErrorCode.APPROVAL_REQUIRED.value:
             event_type = AgentEventType.TOOL_CALL_APPROVAL_REQUIRED
             msg = f"Tool '{tool_name}' requires approval: {result.error.message}"
+            completed_payload["status"] = "approval_required"
         elif not result.success:
             event_type = AgentEventType.TOOL_CALL_FAILED
             msg = f"Tool '{tool_name}' failed: {result.error.message if result.error else 'Unknown error'}"
+            completed_payload["status"] = "failed"
+            completed_payload["error_code"] = result.error.code if result.error else None
+            completed_payload["error_message"] = result.error.message if result.error else "Unknown error"
         else:
             event_type = AgentEventType.TOOL_CALL_COMPLETED
             msg = f"Tool '{tool_name}' completed in {result.metadata.get('duration_ms', 0):.1f}ms"
+            completed_payload["status"] = "completed"
+            completed_payload["duration_ms"] = result.metadata.get("duration_ms", 0)
+            if result.data and isinstance(result.data, dict) and "path" in result.data:
+                completed_payload["path"] = result.data["path"]
 
         self.events.emit_event(
             db,
             run,
             event_type,
             msg,
-            {
-                "tool_name": tool_name,
-                "success": result.success,
-                "error_code": result.error.code if result.error else None,
-                "duration_ms": result.metadata.get("duration_ms", 0),
-            },
+            completed_payload,
         )
+
+        if result.success and completed_payload.get("activity_type") == "writing" and completed_payload.get("path"):
+            self.events.emit_event(
+                db,
+                run,
+                AgentEventType.FILE_WRITTEN,
+                f"Wrote {completed_payload['path']}",
+                {"activity_type": "writing", "path": completed_payload["path"], "status": "completed"},
+            )
 
         # 5. Record tool call in run metadata
         meta = run.metadata_json or {}

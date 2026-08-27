@@ -63,6 +63,7 @@ class ClassifyIntentResponse(BaseModel):
     response: str
     entities: List[Dict[str, Any]] = Field(default_factory=list)
     plan: Optional[Dict[str, Any]] = None
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class CreateAgentRunRequest(BaseModel):
@@ -325,24 +326,30 @@ def classify_intent_endpoint(
 
     entities_list = []
     plan_dict = None
+    evidence_list = []
     if result.intent == Intent.CHAT:
         mode_res = execute_chat(req.requirement)
         response_text = mode_res.get("response", "Hello! How can I help you today?")
+        evidence_list = mode_res.get("evidence", [])
     elif result.intent == Intent.EXPLORE:
         mode_res = execute_explore(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Exploration complete.")
         entities_list = mode_res.get("entities", [])
+        evidence_list = mode_res.get("evidence", [])
     elif result.intent == Intent.EXPLAIN:
         mode_res = execute_explain(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Explanation complete.")
+        evidence_list = mode_res.get("evidence", [])
     elif result.intent == Intent.PLAN:
         mode_res = execute_plan(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Plan generation complete.")
         plan_dict = mode_res.get("plan")
+        evidence_list = mode_res.get("evidence", [])
     elif result.intent == Intent.IMPLEMENT:
         mode_res = execute_implement(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Implementation plan synthesized. Ready for human approval.")
         plan_dict = mode_res.get("plan")
+        evidence_list = mode_res.get("evidence", [])
     else:  # CLARIFY
         response_text = f"Your request '{req.requirement}' is ambiguous or underspecified. Please specify which files, functions, or features you want to modify or inspect."
 
@@ -354,7 +361,136 @@ def classify_intent_endpoint(
         response=response_text,
         entities=entities_list,
         plan=plan_dict,
+        evidence=evidence_list,
     )
+
+
+@router.post("/classify/stream")
+async def stream_classify_intent_endpoint(
+    req: ClassifyIntentRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Streaming SSE endpoint for real-time repository activity and response generation.
+    Emits live activity items (file reads, symbol inspections, search queries) as they happen.
+    """
+    import time
+    from backend.agent.intent import IntentRouter, Intent
+    from backend.agent.modes import execute_chat, execute_explore, execute_explain, execute_plan, execute_implement
+
+    async def event_generator():
+        event_queue = asyncio.Queue()
+
+        def sync_on_event(evt: Dict[str, Any]):
+            event_queue.put_nowait(evt)
+
+        async def run_execution():
+            loop = asyncio.get_running_loop()
+            try:
+                router_inst = IntentRouter()
+                result = router_inst.classify(req.requirement)
+
+                entities_list = []
+                plan_dict = None
+                evidence_list = []
+
+                if result.intent == Intent.CHAT:
+                    mode_res = await loop.run_in_executor(None, lambda: execute_chat(req.requirement))
+                    response_text = mode_res.get("response", "Hello! How can I help you today?")
+                    evidence_list = mode_res.get("evidence", [])
+                elif result.intent == Intent.EXPLORE:
+                    mode_res = await loop.run_in_executor(
+                        None,
+                        lambda: execute_explore(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=None, on_event=sync_on_event)
+                    )
+                    response_text = mode_res.get("response", "Exploration complete.")
+                    entities_list = mode_res.get("entities", [])
+                    evidence_list = mode_res.get("evidence", [])
+                elif result.intent == Intent.EXPLAIN:
+                    mode_res = await loop.run_in_executor(
+                        None,
+                        lambda: execute_explain(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=None, on_event=sync_on_event)
+                    )
+                    response_text = mode_res.get("response", "Explanation complete.")
+                    evidence_list = mode_res.get("evidence", [])
+                elif result.intent == Intent.PLAN:
+                    mode_res = await loop.run_in_executor(
+                        None,
+                        lambda: execute_plan(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=None, on_event=sync_on_event)
+                    )
+                    response_text = mode_res.get("response", "Plan generation complete.")
+                    plan_dict = mode_res.get("plan")
+                    evidence_list = mode_res.get("evidence", [])
+                elif result.intent == Intent.IMPLEMENT:
+                    mode_res = await loop.run_in_executor(
+                        None,
+                        lambda: execute_implement(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=None, on_event=sync_on_event)
+                    )
+                    response_text = mode_res.get("response", "Implementation plan synthesized. Ready for human approval.")
+                    plan_dict = mode_res.get("plan")
+                    evidence_list = mode_res.get("evidence", [])
+                else:
+                    response_text = f"Your request '{req.requirement}' is ambiguous or underspecified. Please specify which files, functions, or features you want to modify or inspect."
+
+                # Put final result
+                sync_on_event({
+                    "type": "result",
+                    "data": {
+                        "intent": result.intent.value,
+                        "confidence": result.confidence,
+                        "reason": result.reason,
+                        "method": result.classification_method,
+                        "response": response_text,
+                        "entities": entities_list,
+                        "plan": plan_dict,
+                        "evidence": evidence_list,
+                    }
+                })
+            except Exception as err:
+                logger.error(f"Error during stream classification: {err}", exc_info=True)
+                sync_on_event({
+                    "type": "error",
+                    "data": {
+                        "message": str(err),
+                    }
+                })
+            finally:
+                sync_on_event({"type": "done"})
+
+        task = asyncio.create_task(run_execution())
+
+        try:
+            while True:
+                if await request.is_disconnected():
+                    task.cancel()
+                    break
+                try:
+                    evt = await asyncio.wait_for(event_queue.get(), timeout=1.0)
+                    if evt.get("type") == "done":
+                        break
+                    yield {
+                        "event": evt.get("type", "message"),
+                        "data": json.dumps(evt.get("item") or evt.get("data") or evt),
+                    }
+                except asyncio.TimeoutError:
+                    if task.done():
+                        while not event_queue.empty():
+                            evt = event_queue.get_nowait()
+                            if evt.get("type") == "done":
+                                break
+                            yield {
+                                "event": evt.get("type", "message"),
+                                "data": json.dumps(evt.get("item") or evt.get("data") or evt),
+                            }
+                        break
+                    yield {"comment": "keepalive"}
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return EventSourceResponse(event_generator())
 
 
 @router.post("/runs", response_model=AgentRunResponse, status_code=status.HTTP_201_CREATED)
