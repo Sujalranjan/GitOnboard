@@ -100,6 +100,21 @@ def test_execute_explain_grounded(db_session):
     assert "evidence" in res
 
 
+def test_execute_explain_workflow_discovery(db_session):
+    """Verify EXPLAIN discovers and reads github workflow files."""
+    analysis = Analysis(id=103, repository_id=1, status="COMPLETED")
+    db_session.add(analysis)
+    db_session.commit()
+
+    file1 = FactFile(id="103:f1", analysis_id=103, path=".github/workflows/ci.yml", size=150, language="yaml")
+    db_session.add(file1)
+    db_session.commit()
+
+    res = execute_explain(user_requirement="what are github workflow doing in this project", repository_id="repo1", db=db_session)
+    assert res["intent"] == "explain"
+    assert "response" in res
+
+
 def test_chat_terminal_graph_safety(db_session, monkeypatch):
     """Verify chat_terminal completes without mutation tools, approvals, or errors."""
     mock_service = MagicMock(spec=EngineeringAgent)
@@ -128,6 +143,7 @@ def test_chat_terminal_graph_safety(db_session, monkeypatch):
 
 def test_explore_terminal_graph_safety(db_session, monkeypatch):
     """Verify explore_terminal completes without mutation tools, approvals, or errors."""
+    from backend.agent.intent.contracts import IntentResult, Intent
     mock_service = MagicMock(spec=EngineeringAgent)
     mock_service.state_machine = MagicMock()
     mock_service.state_machine.is_terminal.return_value = False
@@ -143,6 +159,10 @@ def test_explore_terminal_graph_safety(db_session, monkeypatch):
     mock_service.get_run.return_value = run
 
     monkeypatch.setattr("backend.agent.graph.builder.SessionLocal", lambda: db_session)
+    monkeypatch.setattr(
+        "backend.agent.graph.builder.IntentRouter.classify",
+        lambda self, req: IntentResult(intent=Intent.EXPLORE, confidence=1.0, reason="test", classification_method="mock"),
+    )
 
     orchestrator = AgentGraphOrchestrator(agent_service=mock_service)
     final_state = orchestrator.run_graph(run_id="run-explore-1", db=db_session)
@@ -154,6 +174,7 @@ def test_explore_terminal_graph_safety(db_session, monkeypatch):
 
 def test_explain_terminal_graph_safety(db_session, monkeypatch):
     """Verify explain_terminal completes without mutation tools, approvals, or errors."""
+    from backend.agent.intent.contracts import IntentResult, Intent
     mock_service = MagicMock(spec=EngineeringAgent)
     mock_service.state_machine = MagicMock()
     mock_service.state_machine.is_terminal.return_value = False
@@ -169,6 +190,10 @@ def test_explain_terminal_graph_safety(db_session, monkeypatch):
     mock_service.get_run.return_value = run
 
     monkeypatch.setattr("backend.agent.graph.builder.SessionLocal", lambda: db_session)
+    monkeypatch.setattr(
+        "backend.agent.graph.builder.IntentRouter.classify",
+        lambda self, req: IntentResult(intent=Intent.EXPLAIN, confidence=1.0, reason="test", classification_method="mock"),
+    )
 
     orchestrator = AgentGraphOrchestrator(agent_service=mock_service)
     final_state = orchestrator.run_graph(run_id="run-explain-1", db=db_session)

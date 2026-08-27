@@ -73,9 +73,9 @@ def db_session():
 
 @pytest.fixture
 def mock_llm_service():
-    service = MagicMock()
-    service.generate = MagicMock()
-    return service
+    from backend.ai.service import LLMService
+    from backend.ai.providers.mock_test import DeterministicTestProvider
+    return LLMService(providers=[DeterministicTestProvider()])
 
 
 def test_execute_plan_structure_and_grounding(db_session, mock_llm_service):
