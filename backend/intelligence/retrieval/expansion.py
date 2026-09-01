@@ -144,6 +144,20 @@ class FactStoreExpander:
         ).count()
         logger.info(f"[RIM EXPAND] Total FactRelationship records for analysis_id={self.analysis_id}: {total_rels_in_analysis}")
 
+        # Debug: Show relationship type distribution
+        from sqlalchemy import func
+        rel_type_counts = self.db.query(
+            FactRelationship.rel_type,
+            func.count(FactRelationship.id).label('count')
+        ).filter(
+            FactRelationship.analysis_id == self.analysis_id
+        ).group_by(FactRelationship.rel_type).all()
+
+        if rel_type_counts:
+            logger.info(f"[RIM EXPAND] Relationship types in database:")
+            for rel_type, count in rel_type_counts:
+                logger.info(f"[RIM EXPAND]   {rel_type}: {count} relationships")
+
         for idx, cand in enumerate(expanded_results[:10]):  # Only expand top 10 seeds
             sym_id = cand.get("symbol_id")
             cand_name = cand.get("name")
