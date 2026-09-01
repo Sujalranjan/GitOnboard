@@ -40,7 +40,7 @@ class FactStoreExpander:
         expanded_results: List[Dict[str, Any]] = []
         seen_entity_ids: Set[str] = set()
 
-        logger.debug(f"[RIM EXPAND] Starting expansion of {len(candidates)} candidates")
+        logger.info(f"[RIM EXPAND] Starting expansion of {len(candidates)} candidates")
 
         # Step 1: Add seed candidates first with enriched Fact Store info
         for cand in candidates:
@@ -92,7 +92,7 @@ class FactStoreExpander:
 
             enriched_cand = dict(cand)
             if sym_rec:
-                logger.debug(f"[RIM EXPAND] Resolved {cand_name} via {resolution_method}: {sym_rec.id}")
+                logger.info(f"[RIM EXPAND] Seed[{len(expanded_results)}] {cand_name}: Resolved via {resolution_method} to {sym_rec.id}")
                 clean_sym_id = sym_rec.id.split(":", 1)[1] if ":" in sym_rec.id else sym_rec.id
                 enriched_cand["symbol_id"] = sym_rec.id
                 enriched_cand["id"] = clean_sym_id
@@ -121,7 +121,7 @@ class FactStoreExpander:
 
                 seen_entity_ids.add(sym_rec.id)
             else:
-                logger.debug(f"[RIM EXPAND] Failed to resolve candidate: name={cand_name}, file={cand_file}, type={cand_type}")
+                logger.info(f"[RIM EXPAND] Failed to resolve candidate: name={cand_name}, file={cand_file}, type={cand_type}")
 
             expanded_results.append(enriched_cand)
 
@@ -132,20 +132,26 @@ class FactStoreExpander:
         # Debug: sample some relationship IDs from database
         sample_rels = self.db.query(FactRelationship).filter(
             FactRelationship.analysis_id == self.analysis_id
-        ).limit(3).all()
+        ).limit(5).all()
         if sample_rels:
-            logger.debug(f"[RIM EXPAND] Sample FactRelationship from DB (analysis_id={self.analysis_id}):")
+            logger.info(f"[RIM EXPAND] Sample FactRelationship from DB (analysis_id={self.analysis_id}, total exist):")
             for rel in sample_rels:
-                logger.debug(f"[RIM EXPAND]   from_symbol_id={rel.from_symbol_id}, to_symbol_id={rel.to_symbol_id}, type={rel.rel_type}")
+                logger.info(f"[RIM EXPAND]   from={rel.from_symbol_id} to={rel.to_symbol_id} type={rel.rel_type}")
+
+        # Debug: Get total counts by analysis
+        total_rels_in_analysis = self.db.query(FactRelationship).filter(
+            FactRelationship.analysis_id == self.analysis_id
+        ).count()
+        logger.info(f"[RIM EXPAND] Total FactRelationship records for analysis_id={self.analysis_id}: {total_rels_in_analysis}")
 
         for idx, cand in enumerate(expanded_results[:10]):  # Only expand top 10 seeds
             sym_id = cand.get("symbol_id")
             cand_name = cand.get("name")
             if not sym_id:
-                logger.debug(f"[RIM EXPAND] Seed[{idx}] {cand_name} has no symbol_id, skipping expansion")
+                logger.info(f"[RIM EXPAND] Seed[{idx}] {cand_name} has no symbol_id, skipping expansion")
                 continue
 
-            logger.debug(f"[RIM EXPAND] Seed[{idx}] {cand_name}: trying to find relationships for sym_id={sym_id}")
+            logger.info(f"[RIM EXPAND] Seed[{idx}] {cand_name}: trying to find relationships for sym_id={sym_id}")
 
             # Query outgoing relationships (Callees / Dependencies)
             outgoing = self.db.query(FactRelationship).filter(
@@ -153,7 +159,7 @@ class FactStoreExpander:
                 FactRelationship.from_symbol_id == sym_id
             ).limit(self.max_expansions_per_seed).all()
 
-            logger.debug(f"[RIM EXPAND] Seed[{idx}] {cand_name} ({sym_id}): found {len(outgoing)} outgoing relationships")
+            logger.info(f"[RIM EXPAND] Seed[{idx}] {cand_name} ({sym_id}): found {len(outgoing)} outgoing relationships")
 
             for rel in outgoing:
                 if rel.to_symbol_id not in seen_entity_ids and len(expanded_results) + len(expansion_items) < self.max_total_context:
@@ -164,7 +170,7 @@ class FactStoreExpander:
                     if target_sym:
                         seen_entity_ids.add(target_sym.id)
                         total_relationships_found += 1
-                        logger.debug(f"[RIM EXPAND] Found callee via {rel.rel_type}: {target_sym.name}")
+                        logger.info(f"[RIM EXPAND] Found callee via {rel.rel_type}: {target_sym.name}")
                         expansion_items.append({
                             "id": target_sym.id.split(":", 1)[1] if ":" in target_sym.id else target_sym.id,
                             "symbol_id": target_sym.id,
@@ -184,7 +190,7 @@ class FactStoreExpander:
                 FactRelationship.to_symbol_id == sym_id
             ).limit(self.max_expansions_per_seed).all()
 
-            logger.debug(f"[RIM EXPAND] {cand_name} ({sym_id}): found {len(incoming)} incoming relationships")
+            logger.info(f"[RIM EXPAND] {cand_name} ({sym_id}): found {len(incoming)} incoming relationships")
 
             for rel in incoming:
                 if rel.from_symbol_id not in seen_entity_ids and len(expanded_results) + len(expansion_items) < self.max_total_context:
@@ -195,7 +201,7 @@ class FactStoreExpander:
                     if source_sym:
                         seen_entity_ids.add(source_sym.id)
                         total_relationships_found += 1
-                        logger.debug(f"[RIM EXPAND] Found caller via {rel.rel_type}: {source_sym.name}")
+                        logger.info(f"[RIM EXPAND] Found caller via {rel.rel_type}: {source_sym.name}")
                         expansion_items.append({
                             "id": source_sym.id.split(":", 1)[1] if ":" in source_sym.id else source_sym.id,
                             "symbol_id": source_sym.id,
