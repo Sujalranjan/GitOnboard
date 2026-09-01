@@ -49,8 +49,8 @@ class PythonCallGraphVisitor(ast.NodeVisitor):
                 base_id = resolve_reference(self.repository, self.file_path, base_name, None, self.index)
                 if base_id:
                     rel = Relationship(
-                        id=generate_relationship_id(RelationshipType.EXTENDS, class_id, base_id),
-                        type=RelationshipType.EXTENDS,
+                        id=generate_relationship_id(RelationshipType.INHERITS, class_id, base_id),
+                        type=RelationshipType.INHERITS,
                         source_id=class_id,
                         target_id=base_id,
                     )
@@ -159,8 +159,8 @@ class TypeScriptCallGraphVisitor:
             base_id = resolve_reference(self.repository, self.file_path, superclass_name, None, self.index)
             if base_id:
                 rel = Relationship(
-                    id=generate_relationship_id(RelationshipType.EXTENDS, class_id, base_id),
-                    type=RelationshipType.EXTENDS,
+                    id=generate_relationship_id(RelationshipType.INHERITS, class_id, base_id),
+                    type=RelationshipType.INHERITS,
                     source_id=class_id,
                     target_id=base_id,
                 )

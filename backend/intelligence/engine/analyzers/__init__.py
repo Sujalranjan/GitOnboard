@@ -4,6 +4,7 @@ from .symbol import SymbolAnalyzer
 from .imports import ImportAnalyzer
 from .type import TypeAnalyzer
 from .callgraph import CallGraphAnalyzer
+from .uses import UsesAnalyzer
 from .route import RouteAnalyzer
 from .database import DatabaseAnalyzer
 from .config import ConfigAnalyzer
@@ -18,6 +19,7 @@ def get_default_registry() -> AnalyzerRegistry:
     registry.register(ImportAnalyzer())
     registry.register(TypeAnalyzer())
     registry.register(CallGraphAnalyzer())
+    registry.register(UsesAnalyzer())
     registry.register(RouteAnalyzer())
     registry.register(DatabaseAnalyzer())
     registry.register(TestAnalyzer())
