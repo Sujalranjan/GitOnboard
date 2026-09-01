@@ -133,10 +133,16 @@ class RIMQALoop:
                     Message(role=MessageRole.SYSTEM, content=self.system_prompt_parts.full_text),
                 ]
                 for msg in messages:
-                    role_str = msg.get("role", "user").lower()
-                    role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
-                    llm_messages.append(Message(role=role, content=msg.get("content", "")))
+                    try:
+                        role_str = msg.get("role", "user").lower() if isinstance(msg, dict) else "user"
+                        role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
+                        content = msg.get("content", "") if isinstance(msg, dict) else str(msg)
+                        llm_messages.append(Message(role=role, content=content))
+                    except Exception as msg_err:
+                        logger.error(f"[RIMQALoop] Error processing message: {msg_err}, msg type: {type(msg)}")
+                        raise
 
+                logger.debug(f"[RIMQALoop] Turn {turn_index}: Built {len(llm_messages)} messages (system + {len(messages)} conversation)")
                 request = LLMRequest(
                     messages=llm_messages,
                     model=self.model,
@@ -144,6 +150,7 @@ class RIMQALoop:
                     max_tokens=4096,
                 )
                 llm_response = await self.llm_service.generate(request)
+                logger.debug(f"[RIMQALoop] Turn {turn_index}: LLM response ({len(llm_response.content)} chars)")
             except Exception as e:
                 logger.error(f"[RIMQALoop] LLM call failed: {e}", exc_info=True)
                 result.stop_reason = StopReason.MODEL_ERROR
@@ -315,9 +322,14 @@ class RIMQALoop:
                 Message(role=MessageRole.SYSTEM, content=self.system_prompt_parts.full_text),
             ]
             for msg in messages:
-                role_str = msg.get("role", "user").lower()
-                role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
-                llm_messages.append(Message(role=role, content=msg.get("content", "")))
+                try:
+                    role_str = msg.get("role", "user").lower() if isinstance(msg, dict) else "user"
+                    role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
+                    content = msg.get("content", "") if isinstance(msg, dict) else str(msg)
+                    llm_messages.append(Message(role=role, content=content))
+                except Exception as msg_err:
+                    logger.error(f"[RIMQALoop] Error processing message in final answer turn: {msg_err}")
+                    raise
 
             request = LLMRequest(
                 messages=llm_messages,
