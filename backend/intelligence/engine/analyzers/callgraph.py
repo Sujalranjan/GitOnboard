@@ -136,6 +136,8 @@ class TypeScriptCallGraphVisitor:
             self._handle_lexical_declaration(node)
         elif node.type == 'call_expression' and self.current_caller_id:
             self._handle_call_expression(node)
+        elif node.type in ('jsx_self_closing_element', 'jsx_opening_element') and self.current_caller_id:
+            self._handle_jsx_element(node)
 
         # Recurse
         for child in node.children:
@@ -256,6 +258,44 @@ class TypeScriptCallGraphVisitor:
                 source_id=self.current_caller_id,
                 target_id=callee_id,
                 metadata={"call_name": callee_name}
+            )
+            self.relationships.append(rel)
+
+    def _handle_jsx_element(self, node):
+        """Extract JSX component rendering: <ComponentName />."""
+        # For jsx_self_closing_element and jsx_opening_element,
+        # the first child is the tag name identifier
+        tag_node = None
+        for child in node.children:
+            if child.type in ('identifier', 'jsx_identifier', 'type_identifier'):
+                tag_node = child
+                break
+
+        if not tag_node:
+            return
+
+        component_name = self._get_text(tag_node).strip()
+
+        # Skip built-in HTML elements (lowercase)
+        if component_name[0].islower():
+            return
+
+        # Resolve component to its definition
+        component_id = resolve_reference(self.repository, self.file_path, component_name, self.current_caller_id, self.index)
+
+        if not component_id:
+            # Fallback: assume same module
+            module_path = self.file_path.rsplit(".", 1)[0].replace("/", ".")
+            component_qname = f"{module_path}.{component_name}"
+            component_id = generate_entity_id(EntityType.FUNCTION, self.file_path, component_qname)
+
+        if self.current_caller_id:
+            rel = Relationship(
+                id=generate_relationship_id(RelationshipType.RENDERS, self.current_caller_id, component_id),
+                type=RelationshipType.RENDERS,
+                source_id=self.current_caller_id,
+                target_id=component_id,
+                metadata={"component": component_name}
             )
             self.relationships.append(rel)
 

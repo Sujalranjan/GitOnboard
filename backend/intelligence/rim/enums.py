@@ -75,6 +75,7 @@ class RelationshipType(str, Enum):
     THROWS = "THROWS"
     IMPLEMENTS = "IMPLEMENTS"
     INHERITS = "INHERITS"
+    RENDERS = "RENDERS"
     BELONGS_TO = "BELONGS_TO"
     EXPOSES = "EXPOSES"
     HANDLED_BY = "HANDLED_BY"
