@@ -132,7 +132,7 @@ class TypeScriptCallGraphVisitor:
         logger = logging.getLogger(__name__)
 
         if depth == 0:
-            logger.debug(f"[TS Visitor] Starting traversal from {node.type}")
+            logger.info(f"[TS Visitor] Starting traversal from {node.type}")
 
         if node.type == 'class_declaration':
             self._handle_class_declaration(node)
@@ -319,10 +319,10 @@ class CallGraphAnalyzer(BaseAnalyzer):
 
         for file_path, parsed in asts.items():
             if parsed.language not in self.supported_languages or not parsed.ast:
-                logger.debug(f"[CallGraphAnalyzer] Skipping {file_path}: lang={parsed.language}, has_ast={bool(parsed.ast)}")
+                logger.info(f"[CallGraphAnalyzer] Skipping {file_path}: lang={parsed.language}, has_ast={bool(parsed.ast)}")
                 continue
 
-            logger.debug(f"[CallGraphAnalyzer] Processing {file_path}: ast_type={type(parsed.ast).__name__}")
+            logger.info(f"[CallGraphAnalyzer] Processing {file_path}: ast_type={type(parsed.ast).__name__}")
 
             try:
                 if parsed.language == "Python":
