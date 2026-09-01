@@ -126,8 +126,14 @@ class TypeScriptCallGraphVisitor:
             return ""
         return self.source_bytes[node.start_byte:node.end_byte].decode('utf-8', errors='replace')
 
-    def visit(self, node):
+    def visit(self, node, depth=0):
         """Traverse the AST and extract relationships."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        if depth == 0:
+            logger.debug(f"[TS Visitor] Starting traversal from {node.type}")
+
         if node.type == 'class_declaration':
             self._handle_class_declaration(node)
         elif node.type == 'function_declaration':
@@ -141,7 +147,7 @@ class TypeScriptCallGraphVisitor:
 
         # Recurse
         for child in node.children:
-            self.visit(child)
+            self.visit(child, depth + 1)
 
     def _handle_class_declaration(self, node):
         """Extract class and potential extends/implements."""
@@ -305,20 +311,34 @@ class CallGraphAnalyzer(BaseAnalyzer):
     supported_languages = ["Python", "TypeScript", "JavaScript"]
 
     def analyze(self, repository: RepositoryModel, asts: Dict[str, ParsedFile]) -> None:
+        import logging
+        logger = logging.getLogger(__name__)
+
+        logger.info(f"[CallGraphAnalyzer] Starting with {len(repository.relationships)} existing relationships")
         index = SymbolIndex(repository)
 
         for file_path, parsed in asts.items():
             if parsed.language not in self.supported_languages or not parsed.ast:
+                logger.debug(f"[CallGraphAnalyzer] Skipping {file_path}: lang={parsed.language}, has_ast={bool(parsed.ast)}")
                 continue
 
-            if parsed.language == "Python":
-                visitor = PythonCallGraphVisitor(file_path, repository, index)
-                visitor.visit(parsed.ast)
-                for rel in visitor.relationships:
-                    repository.relationships[rel.id] = rel
+            logger.debug(f"[CallGraphAnalyzer] Processing {file_path}: ast_type={type(parsed.ast).__name__}")
 
-            elif parsed.language in ("TypeScript", "JavaScript"):
-                visitor = TypeScriptCallGraphVisitor(file_path, parsed.source, repository, index)
-                visitor.visit(parsed.ast.root_node)
-                for rel in visitor.relationships:
-                    repository.relationships[rel.id] = rel
+            try:
+                if parsed.language == "Python":
+                    visitor = PythonCallGraphVisitor(file_path, repository, index)
+                    visitor.visit(parsed.ast)
+                    logger.info(f"[CallGraphAnalyzer] Python {file_path}: extracted {len(visitor.relationships)} relationships")
+                    for rel in visitor.relationships:
+                        repository.relationships[rel.id] = rel
+
+                elif parsed.language in ("TypeScript", "JavaScript"):
+                    visitor = TypeScriptCallGraphVisitor(file_path, parsed.source, repository, index)
+                    visitor.visit(parsed.ast.root_node)
+                    logger.info(f"[CallGraphAnalyzer] TS/JS {file_path}: extracted {len(visitor.relationships)} relationships")
+                    for rel in visitor.relationships:
+                        repository.relationships[rel.id] = rel
+            except Exception as e:
+                logger.error(f"[CallGraphAnalyzer] Error processing {file_path}: {e}", exc_info=True)
+
+        logger.info(f"[CallGraphAnalyzer] Complete with {len(repository.relationships)} total relationships")
