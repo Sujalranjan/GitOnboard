@@ -158,10 +158,15 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
         # 3. Save Relationships
         seen_rel_ids = set()
         rel_records = []
+        skipped_rels = 0
         for rel_id, rel in model.relationships.items():
             if rel.id not in seen_rel_ids:
                 seen_rel_ids.add(rel.id)
-                if (rel.source_id in seen_symbol_ids or rel.source_id in seen_file_ids):
+                # Validate BOTH source and target exist before creating relationship
+                source_exists = rel.source_id in seen_symbol_ids or rel.source_id in seen_file_ids
+                target_exists = rel.target_id in seen_symbol_ids or rel.target_id in seen_file_ids
+
+                if source_exists and target_exists:
                     rel_type_str = rel.type.value if hasattr(rel.type, "value") else str(rel.type)
                     db_id = f"{analysis_id}:{rel.id}"
                     rel_rec = FactRelationship(
@@ -175,7 +180,14 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                         status=rel.metadata.get("status", "CONFIRMED"),
                     )
                     rel_records.append(rel_rec)
+                else:
+                    skipped_rels += 1
+                    if not source_exists:
+                        logger.debug(f"Skipping relationship {rel.id}: source {rel.source_id} not found")
+                    if not target_exists:
+                        logger.debug(f"Skipping relationship {rel.id}: target {rel.target_id} not found")
 
+        logger.info(f"Saved {len(rel_records)} relationships (skipped {skipped_rels} due to missing entities)")
         if rel_records:
             db.add_all(rel_records)
             db.flush()

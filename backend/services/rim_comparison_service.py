@@ -136,6 +136,7 @@ class RIMComparisonService:
         # Late binding to avoid circular imports
         from backend.routers.repo.services.analysis import get_latest_analysis
         from backend.routers.repo.semantic import get_chroma_collection
+        from backend.models.fact_store import FactRelationship, FactSymbol
 
         # 1. Resolve repo, analysis, chroma collection
         try:
@@ -144,6 +145,14 @@ class RIMComparisonService:
         except Exception as e:
             logger.error(f"Failed to resolve repo/analysis for {self.repo_name}: {e}")
             raise
+
+        # Diagnostic: Check fact store contents
+        try:
+            total_symbols = self.db.query(FactSymbol).filter(FactSymbol.analysis_id == analysis_id).count()
+            total_relationships = self.db.query(FactRelationship).filter(FactRelationship.analysis_id == analysis_id).count()
+            logger.info(f"[RIM DEBUG] Analysis {analysis_id}: {total_symbols} symbols, {total_relationships} relationships in Fact Store")
+        except Exception as e:
+            logger.debug(f"Failed to get fact store diagnostics: {e}")
 
         chroma_collection = None
         try:
@@ -187,6 +196,7 @@ class RIMComparisonService:
 
         logger.info(f"[RIM DEBUG] WITHOUT RIM retrieval complete: {len(baseline_candidates)} candidates, {retrieval_ms_without_rim:.2f}ms")
         logger.info(f"[RIM DEBUG] Baseline candidate types: {[c.get('match_type') for c in baseline_candidates[:5]]}")
+        logger.info(f"[RIM DEBUG] Baseline candidate IDs (first 3): {[(c.get('name'), c.get('symbol_id')) for c in baseline_candidates[:3]]}")
         logger.info(f"[RIM DEBUG] Baseline files: {set(c.get('file_path') for c in baseline_candidates if c.get('file_path'))}")
 
         trace.baseline_candidates = baseline_candidates

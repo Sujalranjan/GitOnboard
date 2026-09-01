@@ -83,11 +83,12 @@ class HybridRetriever:
             meta = sym.metadata_json or {}
             docstring = meta.get("docstring", "")
             signature = meta.get("signature", "")
-            
+
             # Form rich searchable document
             search_text = f"{sym.name} {sym.qualified_name or ''} {sym.symbol_type} {fpath} {signature} {docstring}"
             docs.append({
                 "id": sym.id,
+                "symbol_id": sym.id,  # Include symbol_id for proper expansion resolution
                 "name": sym.name,
                 "qualified_name": sym.qualified_name or sym.name,
                 "type": sym.symbol_type,
@@ -279,7 +280,7 @@ class HybridRetriever:
         return results
 
     def _search_semantic(self, query: str, top_k: int = 30) -> List[Dict[str, Any]]:
-        """Queries ChromaDB vector collection."""
+        """Queries ChromaDB vector collection, resolving to actual FactSymbol IDs for expansion."""
         if not self.chroma_collection:
             return []
 
@@ -292,9 +293,32 @@ class HybridRetriever:
                     fp = meta.get("file_path", "")
                     name = meta.get("name", "")
                     typ = meta.get("type", "symbol")
-                    cid = f"{fp}:{name}:{typ}"
+
+                    # Try to resolve to actual FactSymbol ID for proper expansion
+                    symbol_id = None
+                    if typ not in ["file", "route", "database_table", "capability"]:
+                        # Query FactSymbol to get the real database ID
+                        sym = None
+                        if fp and name:
+                            sym = self.db.query(FactSymbol).join(FactFile).filter(
+                                FactSymbol.analysis_id == self.analysis_id,
+                                FactSymbol.name == name,
+                                FactFile.path == fp
+                            ).first()
+                        elif name:
+                            sym = self.db.query(FactSymbol).filter(
+                                FactSymbol.analysis_id == self.analysis_id,
+                                FactSymbol.name == name
+                            ).first()
+                        if sym:
+                            symbol_id = sym.id
+
+                    # Use either database ID or construct metadata for resolution
+                    candidate_id = symbol_id or f"{fp}:{name}:{typ}"
+
                     semantic_candidates.append({
-                        "id": cid,
+                        "id": candidate_id,
+                        "symbol_id": symbol_id,  # Include resolved symbol_id for expansion
                         "file_path": fp,
                         "match_type": typ,
                         "match_name": name,
