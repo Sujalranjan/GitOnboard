@@ -30,6 +30,7 @@ dependencies = [
     "docker>=7.1.0",
     "pywinpty>=2.0 ; sys_platform == 'win32'",
     "langgraph>=1.2.11",
+    "tokenizers>=0.23.0",
 ]
 
 [tool.ruff]
