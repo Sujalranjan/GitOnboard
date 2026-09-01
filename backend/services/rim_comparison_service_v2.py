@@ -304,12 +304,15 @@ class RIMComparisonService:
         source_texts = []
         for turn in loop_result.turns:
             if turn.tool_observation:
-                # Approximate observation text size
+                # Use formatted message (actual text sent to LLM) for source token estimation
                 obs = turn.tool_observation
                 if obs.get("error"):
                     source_texts.append(str(obs.get("error")))
                 else:
-                    source_texts.append(str(obs).get("message", ""))
+                    # Use the formatted message that was actually sent to the LLM
+                    formatted_msg = obs.get("formatted_message", "")
+                    if formatted_msg:
+                        source_texts.append(formatted_msg)
 
         estimated_source = await count_tokens("\n".join(source_texts), "ollama", "qwen") if source_texts else None
 
@@ -322,14 +325,15 @@ class RIMComparisonService:
                    (estimated_source.count if estimated_source else 0)
         reconciliation_diff = actual_prompt_tokens - est_total
 
-        # Build source context block (concatenation of actual tool observations)
+        # Build source context block (concatenation of actual tool observations sent to LLM)
         source_context_lines = []
         for turn in loop_result.turns:
             if turn.tool_call and turn.tool_observation:
                 tool_name = turn.tool_call.get("tool_name", "")
-                obs = turn.tool_observation.get("message", "")
+                # Use formatted message that was actually sent to the LLM
+                obs = turn.tool_observation.get("formatted_message", "")
                 if obs:
-                    source_context_lines.append(f"[{tool_name}] {obs[:500]}")
+                    source_context_lines.append(f"{obs[:500]}")
 
         source_context_block = "\n".join(source_context_lines[:100])  # Cap at 100 lines
 
@@ -339,7 +343,7 @@ class RIMComparisonService:
                 "turn": turn.turn_index,
                 "tool_name": turn.tool_call.get("tool_name", "") if turn.tool_call else None,
                 "arguments": turn.tool_call.get("arguments", {}) if turn.tool_call else {},
-                "observation_summary": turn.tool_observation.get("message", "") if turn.tool_observation else ""
+                "observation_summary": turn.tool_observation.get("formatted_message", "") if turn.tool_observation else ""
             }
             for turn in loop_result.turns
             if turn.tool_call
@@ -353,7 +357,7 @@ class RIMComparisonService:
                 symbols_retrieved=len(loop_result.symbols_read),
                 rim_entities_accessed_count=len(loop_result.rim_entities_accessed),
                 rim_relationship_types_used=loop_result.rim_relationship_types_used,
-                retrieval_latency_ms=sum(t.duration_ms for t in loop_result.turns)
+                retrieval_latency_ms=loop_result.latency_ms.get("tool_total", 0)  # Actual tool execution time only
             ),
             llm_efficiency_metrics=LLMEfficiencyMetrics(
                 provider=loop_result.turns[0].provider if loop_result.turns else "",

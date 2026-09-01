@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from backend.agent.loop.contracts import AgentLoopConfig, StopReason, ToolObservation
 from backend.agent.loop.guardrails import LoopGuardrails
 from backend.ai.service import LLMService
+from backend.ai.schemas import LLMRequest, Message, MessageRole
 
 logger = logging.getLogger(__name__)
 
@@ -127,13 +128,22 @@ class RIMQALoop:
             turn_start = time.perf_counter()
 
             try:
-                llm_response = await self.llm_service.generate(
-                    request=self.llm_service.build_request(
-                        system=self.system_prompt_parts.full_text,
-                        messages=messages,
-                        model=self.model,
-                    )
+                # Build LLMRequest with system prompt as first message
+                llm_messages = [
+                    Message(role=MessageRole.SYSTEM, content=self.system_prompt_parts.full_text),
+                ]
+                for msg in messages:
+                    role_str = msg.get("role", "user").lower()
+                    role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
+                    llm_messages.append(Message(role=role, content=msg.get("content", "")))
+
+                request = LLMRequest(
+                    messages=llm_messages,
+                    model=self.model,
+                    temperature=0.2,
+                    max_tokens=4096,
                 )
+                llm_response = await self.llm_service.generate(request)
             except Exception as e:
                 logger.error(f"[RIMQALoop] LLM call failed: {e}", exc_info=True)
                 result.stop_reason = StopReason.MODEL_ERROR
@@ -145,6 +155,10 @@ class RIMQALoop:
 
             # 3. Parse response: tool_call | final_answer | malformed
             parsed = self._parse_response(llm_response.content)
+            logger.debug(f"[RIMQALoop] Turn {turn_index} parsed response: action={parsed.get('action')}, error={parsed.get('error')}")
+            if parsed["action"] == "tool_call":
+                logger.debug(f"[RIMQALoop] Turn {turn_index} tool_call: {parsed.get('tool_name')} with args: {parsed.get('arguments')}")
+            logger.debug(f"[RIMQALoop] Turn {turn_index} raw model output: {llm_response.content[:200]}...")
 
             turn = QALoopTurn(
                 turn_index=turn_index,
@@ -245,12 +259,15 @@ class RIMQALoop:
                     "content": self._format_tool_observation(tool_name, tool_observation, sanitized_data),
                 })
 
-                # Record turn with tool info
+                # Record turn with tool info (include data and formatted message for later reconstruction)
+                formatted_message = self._format_tool_observation(tool_name, tool_observation, sanitized_data)
                 turn.tool_call = {"tool_name": tool_name, "arguments": arguments}
                 turn.tool_observation = {
                     "tool_name": tool_name,
                     "success": tool_observation.success,
                     "error": tool_observation.error,
+                    "data": sanitized_data,  # Include actual result data for metrics/reconstruction
+                    "formatted_message": formatted_message,  # Include formatted message for audit trail
                 }
                 result.turns.append(turn)
                 result.tool_call_count += 1
@@ -293,13 +310,22 @@ class RIMQALoop:
         turn_start = time.perf_counter()
 
         try:
-            llm_response = await self.llm_service.generate(
-                request=self.llm_service.build_request(
-                    system=self.system_prompt_parts.full_text,
-                    messages=messages,
-                    model=self.model,
-                )
+            # Build LLMRequest with system prompt as first message
+            llm_messages = [
+                Message(role=MessageRole.SYSTEM, content=self.system_prompt_parts.full_text),
+            ]
+            for msg in messages:
+                role_str = msg.get("role", "user").lower()
+                role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
+                llm_messages.append(Message(role=role, content=msg.get("content", "")))
+
+            request = LLMRequest(
+                messages=llm_messages,
+                model=self.model,
+                temperature=0.2,
+                max_tokens=4096,
             )
+            llm_response = await self.llm_service.generate(request)
         except Exception as e:
             logger.error(f"[RIMQALoop] Final answer LLM call failed: {e}", exc_info=True)
             return QALoopTurn(
@@ -331,16 +357,44 @@ class RIMQALoop:
         import json
         import re
 
-        # Try to extract JSON object from response
-        # Look for {...} pattern
-        json_match = re.search(r'\{[^{}]*\}', text)
-        if not json_match:
-            return {"action": "malformed", "error": "no JSON object found"}
+        # Try to extract JSON object from response.
+        # Search for '{' and attempt to parse from each position until successful.
+        # This handles nested JSON (e.g., arguments with nested dicts).
+        obj = None
+        for match in re.finditer(r'\{', text):
+            start_pos = match.start()
+            # Find the matching closing brace by counting braces
+            brace_count = 0
+            end_pos = start_pos
+            for i in range(start_pos, len(text)):
+                if text[i] == '{':
+                    brace_count += 1
+                elif text[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_pos = i + 1
+                        break
 
-        try:
-            obj = json.loads(json_match.group())
-        except json.JSONDecodeError as e:
-            return {"action": "malformed", "error": f"JSON parse error: {e}"}
+            if brace_count == 0:  # Found matching close brace
+                try:
+                    # Try to parse just this JSON object
+                    json_str = text[start_pos:end_pos]
+                    obj = json.loads(json_str)
+                    if isinstance(obj, dict):
+                        # Successfully parsed a JSON object
+                        # Verify it has the expected structure
+                        action = obj.get("action", "").lower()
+                        if action in ["tool_call", "final_answer"]:
+                            # This is a valid action object
+                            break
+                except json.JSONDecodeError:
+                    # This position didn't yield valid JSON, try next {
+                    obj = None
+                    continue
+
+        if obj is None:
+            # No valid JSON action object found
+            return {"action": "malformed", "error": "no valid JSON action object found"}
 
         action = obj.get("action", "").lower()
 
@@ -361,28 +415,63 @@ class RIMQALoop:
     def _format_tool_observation(
         self, tool_name: str, observation: ToolObservation, data: Any
     ) -> str:
-        """Format tool observation for appending to conversation."""
+        """Format tool observation for appending to conversation.
+
+        Includes both summary and actual data so LLM can reason over results.
+        """
         if not observation.success:
             error = observation.error or {}
             return f"[TOOL ERROR] {tool_name}: {error.get('message', 'unknown error')}"
 
-        # Format as brief summary (actual data too large to dump)
+        # Format with summary + actual data so LLM can use the results
         if tool_name == "read_file" and isinstance(data, dict):
-            return f"[read_file] {data.get('path', '')} lines {data.get('start_line', 1)}-{data.get('end_line', 0)}: {len(data.get('content', ''))} chars"
+            path = data.get('path', '')
+            start_line = data.get('start_line', 1)
+            end_line = data.get('end_line', 0)
+            content = data.get('content', '')
+            summary = f"[read_file] {path} lines {start_line}-{end_line}: {len(content)} chars\n"
+            # Include actual file content so LLM can reason over code
+            if content:
+                return summary + content
+            return summary
         elif tool_name == "query_rim" and isinstance(data, dict):
             if not data.get("found"):
                 return f"[query_rim] Entity not found: {data.get('message', '')}"
             related = data.get("related", [])
-            return f"[query_rim] Found {len(related)} related entities"
+            summary = f"[query_rim] Found {len(related)} related entities:\n"
+            # Include actual entity details so LLM understands relationships
+            for entity in related:
+                name = entity.get("name", "?")
+                entity_type = entity.get("entity_type", "?")
+                location = entity.get("location", "?")
+                line_num = entity.get("line_number", "?")
+                role = entity.get("relationship_role", "?")
+                summary += f"  - {name} ({entity_type}, {location}:{line_num}, role: {role})\n"
+            return summary
         elif tool_name == "search_repository" and isinstance(data, list):
-            return f"[search_repository] Found {len(data)} results"
+            summary = f"[search_repository] Found {len(data)} results:\n"
+            for result in data[:10]:  # Include first 10 results
+                path = result.get("path", "?") if isinstance(result, dict) else str(result)[:50]
+                summary += f"  - {path}\n"
+            if len(data) > 10:
+                summary += f"  ... and {len(data) - 10} more results\n"
+            return summary
         elif tool_name == "get_symbol" and isinstance(data, list):
-            return f"[get_symbol] Found {len(data)} symbols"
+            summary = f"[get_symbol] Found {len(data)} symbols:\n"
+            for symbol in data[:10]:  # Include first 10 symbols
+                name = symbol.get("name", "?") if isinstance(symbol, dict) else str(symbol)[:50]
+                summary += f"  - {name}\n"
+            if len(data) > 10:
+                summary += f"  ... and {len(data) - 10} more symbols\n"
+            return summary
         else:
-            # Generic summary
+            # Generic summary with actual data included
             import json
             try:
-                summary = json.dumps(data)[:200]
+                if isinstance(data, (dict, list)):
+                    data_str = json.dumps(data, default=str)[:500]
+                else:
+                    data_str = str(data)[:500]
             except:
-                summary = str(data)[:200]
-            return f"[{tool_name}] Result: {summary}"
+                data_str = str(data)[:500]
+            return f"[{tool_name}] Result: {data_str}"
