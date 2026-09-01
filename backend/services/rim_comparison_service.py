@@ -185,6 +185,10 @@ class RIMComparisonService:
         )
         retrieval_ms_without_rim = (time.time() - t0) * 1000
 
+        logger.info(f"[RIM DEBUG] WITHOUT RIM retrieval complete: {len(baseline_candidates)} candidates, {retrieval_ms_without_rim:.2f}ms")
+        logger.info(f"[RIM DEBUG] Baseline candidate types: {[c.get('match_type') for c in baseline_candidates[:5]]}")
+        logger.info(f"[RIM DEBUG] Baseline files: {set(c.get('file_path') for c in baseline_candidates if c.get('file_path'))}")
+
         trace.baseline_candidates = baseline_candidates
 
         # 4. Run retrieval with RIM
@@ -196,9 +200,17 @@ class RIMComparisonService:
         )
         retrieval_ms_with_rim = (time.time() - t0) * 1000
 
+        logger.info(f"[RIM DEBUG] WITH RIM retrieval complete: {len(expanded_candidates)} candidates, {retrieval_ms_with_rim:.2f}ms")
+        logger.info(f"[RIM DEBUG] Expanded candidate types: {[c.get('match_type') for c in expanded_candidates[:5]]}")
+        logger.info(f"[RIM DEBUG] Candidates with expansion_reason: {sum(1 for c in expanded_candidates if c.get('expansion_reason'))}")
+
         # Extract RIM contribution from expansion_reason markers
         rim_discovered = [c for c in expanded_candidates if c.get("expansion_reason")]
         rim_seed_entities = [c for c in expanded_candidates if not c.get("expansion_reason")][:10]
+
+        logger.info(f"[RIM DEBUG] RIM discovered entities: {len(rim_discovered)}, seed entities: {len(rim_seed_entities)}")
+        if rim_discovered:
+            logger.info(f"[RIM DEBUG] RIM relationships found: {[c.get('expansion_reason') for c in rim_discovered[:3]]}")
 
         trace.rim_seed_entities = rim_seed_entities
         trace.rim_discovered_entities = rim_discovered
@@ -215,6 +227,9 @@ class RIMComparisonService:
         # Compute file diff
         baseline_files = {c.get("file_path") for c in baseline_candidates if c.get("file_path")}
         expanded_files = {c.get("file_path") for c in expanded_candidates if c.get("file_path")}
+
+        logger.info(f"[RIM DEBUG] File diff: baseline={len(baseline_files)}, expanded={len(expanded_files)}, added_by_rim={len(expanded_files - baseline_files)}")
+        logger.info(f"[RIM DEBUG] Files added by RIM: {expanded_files - baseline_files}")
 
         trace.files_added_by_rim = sorted(list(expanded_files - baseline_files))
 
@@ -249,7 +264,7 @@ class RIMComparisonService:
                 answer=without_rim_result["answer"],
                 retrieval_metrics=RetrievalMetrics(
                     files_retrieved=len(baseline_files),
-                    symbols_retrieved=sum(1 for c in baseline_candidates if c.get("match_type") == "symbol"),
+                    symbols_retrieved=sum(1 for c in baseline_candidates if c.get("match_type") not in ["file", "route", "database_table"]),
                     retrieval_latency_ms=retrieval_ms_without_rim
                 ),
                 llm_efficiency_metrics=LLMEfficiencyMetrics(
@@ -263,17 +278,17 @@ class RIMComparisonService:
                 ),
                 answer_metrics=AnswerMetrics(),
                 retrieved_files=sorted(list(baseline_files)),
-                retrieved_symbols=[c.get("match_name") or c.get("name") for c in baseline_candidates if c.get("match_type") == "symbol"],
+                retrieved_symbols=[c.get("match_name") or c.get("name") for c in baseline_candidates if c.get("match_type") not in ["file", "route", "database_table"]],
                 context_block=without_rim_result.get("context", "")
             ),
             with_rim=ComparisonSide(
                 answer=with_rim_result["answer"],
                 retrieval_metrics=RetrievalMetrics(
                     files_retrieved=len(expanded_files),
-                    symbols_retrieved=sum(1 for c in expanded_candidates if c.get("match_type") == "symbol"),
+                    symbols_retrieved=sum(1 for c in expanded_candidates if c.get("match_type") not in ["file", "route", "database_table"]),
                     rim_relationships_count=len(trace.rim_relationships_traversed),
                     rim_discovered_files=len(trace.files_added_by_rim),
-                    rim_discovered_symbols=sum(1 for c in rim_discovered if c.get("match_type") == "symbol"),
+                    rim_discovered_symbols=sum(1 for c in rim_discovered if c.get("match_type") not in ["file", "route", "database_table"]),
                     retrieval_latency_ms=retrieval_ms_with_rim
                 ),
                 llm_efficiency_metrics=LLMEfficiencyMetrics(
@@ -287,7 +302,7 @@ class RIMComparisonService:
                 ),
                 answer_metrics=AnswerMetrics(),
                 retrieved_files=sorted(list(expanded_files)),
-                retrieved_symbols=[c.get("match_name") or c.get("name") for c in expanded_candidates if c.get("match_type") == "symbol"],
+                retrieved_symbols=[c.get("match_name") or c.get("name") for c in expanded_candidates if c.get("match_type") not in ["file", "route", "database_table"]],
                 context_block=with_rim_result.get("context", "")
             ),
             repository=self.repo_name,
