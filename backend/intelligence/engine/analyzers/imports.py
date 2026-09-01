@@ -66,16 +66,23 @@ class ImportAnalyzer(BaseAnalyzer):
                     self._ensure_target(repository, rel, parsed.language)
                     repository.relationships[rel.id] = rel
             else:
-                # Synthetic AST from TS/JS/Java providers
-                ast_data = parsed.ast
-                if not isinstance(ast_data, dict):
-                    continue
+                # TS/JS/Java providers: get imports from metadata (tree-sitter) or fallback to ast dict
+                imports = []
+                if parsed.metadata and "imports" in parsed.metadata:
+                    imports = parsed.metadata.get("imports", [])
+                elif isinstance(parsed.ast, dict):
+                    imports = parsed.ast.get("imports", [])
+
                 file_id = generate_entity_id(EntityType.FILE, file_path, file_path)
-                for imp in ast_data.get("imports", []):
+                for imp in imports:
                     module = imp.get("module", "")
                     if not module:
                         continue
-                    mod_id = generate_entity_id(EntityType.MODULE, file_path, module)
+
+                    # Create canonical MODULE entity: use module name directly, not per-file
+                    # This allows "who imports X?" queries and dependency chaining
+                    mod_id = generate_entity_id(EntityType.MODULE, "", module)
+
                     rel = Relationship(
                         id=generate_relationship_id(RelationshipType.IMPORTS, file_id, mod_id),
                         type=RelationshipType.IMPORTS,

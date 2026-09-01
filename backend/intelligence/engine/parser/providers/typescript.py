@@ -1,90 +1,191 @@
 """
-TypeScript/JavaScript provider using robust regex-based symbol extraction.
+TypeScript/JavaScript provider using tree-sitter for real AST parsing.
 """
-import re
-from typing import List, Dict, Any
+import tree_sitter
+import tree_sitter_typescript
+import tree_sitter_javascript
+from typing import List, Dict, Any, Optional
 from .base import LanguageProvider, ParsedFile
 
-# Precompile regexes for performance
-RE_IMPORTS_ES6 = re.compile(r"^\s*import\s+(?:type\s+)?(?:{[^}]*}|[\w*]+(?:\s+as\s+\w+)?(?:\s*,\s*{[^}]*})?)\s+from\s+['\"]([^'\"]+)['\"]", re.MULTILINE)
-RE_IMPORTS_SIDE_EFFECT = re.compile(r"^\s*import\s+['\"]([^'\"]+)['\"]", re.MULTILINE)
-RE_IMPORTS_REQUIRE = re.compile(r"require\(['\"]([^'\"]+)['\"]\)")
 
-RE_CLASS = re.compile(r"^\s*(?:export\s+(?:default\s+)?)?(?:abstract\s+)?class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+[\w<>,. ]+)?(?:\s+implements\s+[\w<>,. ]+)?", re.MULTILINE)
-RE_INTERFACE = re.compile(r"^\s*(?:export\s+(?:default\s+)?)?interface\s+(\w+)", re.MULTILINE)
-RE_FUNC_DECL = re.compile(r"^\s*(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s*\*?\s+(\w+)\s*[(<]", re.MULTILINE)
-RE_ARROW_FUNC = re.compile(r"^\s*(?:export\s+(?:default\s+)?)?(?:const|let|var)\s+(\w+)\s*(?::\s*[^=;]+)?\s*=\s*(?:async\s+)?(?:<[^>]*>\s*)?(?:\([^)]*\)|\w+)\s*=>", re.MULTILINE)
-RE_FUNC_EXPR = re.compile(r"^\s*(?:export\s+(?:default\s+)?)?(?:const|let|var)\s+(\w+)\s*(?::\s*[^=;]+)?\s*=\s*(?:async\s+)?function", re.MULTILINE)
-RE_TYPE_ALIAS = re.compile(r"^\s*(?:export\s+(?:default\s+)?)?type\s+(\w+)\s*(?:<[^>]*)?\s*=", re.MULTILINE)
-RE_ENUM = re.compile(r"^\s*(?:export\s+(?:default\s+)?)?(?:const\s+)?enum\s+(\w+)", re.MULTILINE)
+class TypeScriptTreeSitterVisitor:
+    """Walk tree-sitter AST to extract symbols and imports from TS/TSX code."""
+
+    def __init__(self, source: str, file_path: str):
+        self.source = source
+        self.source_bytes = source.encode('utf-8')
+        self.file_path = file_path
+        self.symbols: List[Dict[str, Any]] = []
+        self.imports: List[Dict[str, Any]] = []
+
+    def _get_text(self, node) -> str:
+        """Extract text for a node."""
+        if not node:
+            return ""
+        return self.source_bytes[node.start_byte:node.end_byte].decode('utf-8', errors='replace')
+
+    def _get_name(self, node) -> Optional[str]:
+        """Extract identifier name from a node."""
+        if node.type == 'identifier' or node.type == 'type_identifier':
+            return self._get_text(node)
+        # For names in declarators, find the child identifier
+        for child in node.children:
+            if child.type in ('identifier', 'type_identifier'):
+                return self._get_text(child)
+        return None
+
+    def visit(self, node):
+        """Traverse the AST and extract symbols and imports."""
+        if node.type == 'function_declaration':
+            self._handle_function_declaration(node)
+        elif node.type == 'lexical_declaration':
+            self._handle_lexical_declaration(node)
+        elif node.type == 'class_declaration':
+            self._handle_class_declaration(node)
+        elif node.type == 'import_statement':
+            self._handle_import_statement(node)
+
+        # Recurse
+        for child in node.children:
+            self.visit(child)
+
+    def _handle_function_declaration(self, node):
+        """Extract function declaration: function foo() {}"""
+        name_node = node.child_by_field_name('name')
+        if name_node:
+            name = self._get_text(name_node)
+            self.symbols.append({
+                "name": name,
+                "type": "function",
+                "line": node.start_point[0] + 1,
+                "file": self.file_path,
+                "start_line": node.start_point[0] + 1,
+                "end_line": node.end_point[0] + 1
+            })
+
+    def _handle_lexical_declaration(self, node):
+        """Extract arrow/function expressions: const foo = () => {} or const foo = function() {}"""
+        for child in node.children:
+            if child.type == 'variable_declarator':
+                name_node = child.child_by_field_name('name')
+                if not name_node:
+                    continue
+                name = self._get_text(name_node)
+
+                # Check if the value is an arrow_function or function_expression
+                value_node = child.child_by_field_name('value')
+                if value_node and value_node.type in ('arrow_function', 'function'):
+                    self.symbols.append({
+                        "name": name,
+                        "type": "function",
+                        "line": child.start_point[0] + 1,
+                        "file": self.file_path,
+                        "start_line": child.start_point[0] + 1,
+                        "end_line": child.end_point[0] + 1
+                    })
+
+    def _handle_class_declaration(self, node):
+        """Extract class and its methods."""
+        name_node = node.child_by_field_name('name')
+        if name_node:
+            class_name = self._get_text(name_node)
+            self.symbols.append({
+                "name": class_name,
+                "type": "class",
+                "line": node.start_point[0] + 1,
+                "file": self.file_path,
+                "start_line": node.start_point[0] + 1,
+                "end_line": node.end_point[0] + 1
+            })
+
+            # Extract methods
+            class_body = node.child_by_field_name('body')
+            if class_body:
+                for child in class_body.children:
+                    if child.type == 'method_definition':
+                        method_name_node = child.child_by_field_name('name')
+                        if method_name_node:
+                            method_name = self._get_text(method_name_node)
+                            self.symbols.append({
+                                "name": method_name,
+                                "type": "method",
+                                "line": child.start_point[0] + 1,
+                                "file": self.file_path,
+                                "start_line": child.start_point[0] + 1,
+                                "end_line": child.end_point[0] + 1,
+                                "parent_class": class_name
+                            })
+
+    def _handle_import_statement(self, node):
+        """Extract import statements."""
+        # Get the module/path being imported from
+        module_node = None
+        for child in node.children:
+            if child.type == 'string':
+                module_node = child
+                break
+
+        if not module_node:
+            return
+
+        # Extract the module string (skip quotes)
+        module_text = self._get_text(module_node)
+        # Remove quotes
+        module = module_text.strip('"\'')
+
+        self.imports.append({
+            "module": module,
+            "line": node.start_point[0] + 1,
+            "type": "import"
+        })
+
 
 class TypeScriptProvider(LanguageProvider):
     language = "TypeScript"
 
+    def __init__(self):
+        self.ts_lang = tree_sitter.Language(tree_sitter_typescript.language_tsx())
+        self.js_lang = tree_sitter.Language(tree_sitter_javascript.language())
+
     def parse(self, file_path: str, source: str) -> ParsedFile:
         language = "TypeScript" if file_path.endswith((".ts", ".tsx")) else "JavaScript"
-        
-        synthetic_ast = {
-            "type": "Program",
-            "file": file_path,
-            "language": language,
-            "symbols": self._extract_symbols(source, file_path),
-            "imports": self._extract_imports(source),
-        }
-        
-        return ParsedFile(
-            file_path=file_path,
-            language=language,
-            ast=synthetic_ast,
-            source=source,
-        )
 
-    def _extract_imports(self, source: str) -> List[Dict[str, Any]]:
-        imports = []
-        
-        def line_of(pos: int) -> int:
-            return source[:pos].count("\n") + 1
-            
-        for m in RE_IMPORTS_ES6.finditer(source):
-            imports.append({"module": m.group(1), "line": line_of(m.start()), "type": "import"})
-        for m in RE_IMPORTS_SIDE_EFFECT.finditer(source):
-            imports.append({"module": m.group(1), "line": line_of(m.start()), "type": "import"})
-        for m in RE_IMPORTS_REQUIRE.finditer(source):
-            imports.append({"module": m.group(1), "line": line_of(m.start()), "type": "require"})
-            
-        return imports
+        # Select the appropriate parser
+        lang = self.ts_lang if language == "TypeScript" else self.js_lang
+        parser = tree_sitter.Parser(lang)
 
-    def _extract_symbols(self, source: str, file_path: str) -> List[Dict[str, Any]]:
-        symbols = []
-        
-        def line_of(pos: int) -> int:
-            return source[:pos].count("\n") + 1
-            
-        # Matchers list of tuples: (Regex, Symbol Type)
-        matchers = [
-            (RE_CLASS, "class"),
-            (RE_INTERFACE, "interface"),
-            (RE_FUNC_DECL, "function"),
-            (RE_ARROW_FUNC, "function"),
-            (RE_FUNC_EXPR, "function"),
-            (RE_TYPE_ALIAS, "type_alias"),
-            (RE_ENUM, "enum"),
-        ]
-        
-        for regex, sym_type in matchers:
-            for m in regex.finditer(source):
-                symbols.append({"name": m.group(1), "type": sym_type, "line": line_of(m.start()), "file": file_path})
-                
-        # Deduplicate by name+line
-        seen = set()
-        deduped = []
-        for s in symbols:
-            key = (s["name"], s["line"])
-            if key not in seen:
-                seen.add(key)
-                deduped.append(s)
-                
-        return deduped
+        try:
+            tree = parser.parse(source.encode('utf-8'))
+
+            # Extract symbols and imports
+            visitor = TypeScriptTreeSitterVisitor(source, file_path)
+            visitor.visit(tree.root_node)
+
+            return ParsedFile(
+                file_path=file_path,
+                language=language,
+                ast=tree,  # Return the actual tree-sitter tree
+                source=source,
+                metadata={
+                    "symbols": visitor.symbols,
+                    "imports": visitor.imports
+                }
+            )
+        except Exception as e:
+            # Fallback to empty parse on error
+            return ParsedFile(
+                file_path=file_path,
+                language=language,
+                ast=None,
+                source=source,
+                metadata={"symbols": [], "imports": []},
+                diagnostics=[{
+                    "message": f"Parse error: {str(e)}",
+                    "line": 1,
+                    "column": 1,
+                    "severity": "ERROR"
+                }]
+            )
 
 
 class JavaScriptProvider(TypeScriptProvider):

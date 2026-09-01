@@ -14,6 +14,7 @@ class ParsedFile(BaseModel):
     ast: Any = Field(..., description="The language-specific AST object.")
     source: str = Field(..., description="The raw source code.")
     diagnostics: List[Diagnostic] = Field(default_factory=list, description="Parser errors or warnings.")
+    metadata: dict = Field(default_factory=dict, description="Additional metadata (symbols, imports, etc).")
 
 class LanguageProvider(Protocol):
     language: str

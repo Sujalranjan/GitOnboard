@@ -112,32 +112,44 @@ def _process_synthetic_ast(
     repository: RepositoryModel,
     file_id: str,
 ):
-    """Process a synthetic AST dict (TypeScript/JavaScript/Java) and populate the RIM."""
-    ast_data = parsed.ast  # dict produced by TypeScript/Java provider
-    if not isinstance(ast_data, dict):
-        return
-
+    """Process extracted symbols from TypeScript/JavaScript/Java providers and populate the RIM."""
     language = parsed.language
-    symbols = ast_data.get("symbols", [])
+
+    # Get symbols from metadata (tree-sitter providers) or fall back to ast dict (legacy Java)
+    symbols = []
+    if parsed.metadata and "symbols" in parsed.metadata:
+        symbols = parsed.metadata.get("symbols", [])
+    elif isinstance(parsed.ast, dict):
+        symbols = parsed.ast.get("symbols", [])
 
     # Map from synthetic type → EntityType
     type_map = {
         "class": EntityType.CLASS,
-        "interface": EntityType.CLASS,  # treat interfaces like classes
+        "interface": EntityType.CLASS,
+        "method": EntityType.METHOD,
         "function": EntityType.FUNCTION,
-        "type_alias": EntityType.CLASS,  # treat type aliases as nominal symbols
+        "type_alias": EntityType.CLASS,
         "enum": EntityType.CLASS,
     }
 
     for sym in symbols:
         name = sym.get("name", "")
+        if not name:
+            continue
+
         sym_type_str = sym.get("type", "function")
         entity_type = type_map.get(sym_type_str, EntityType.FUNCTION)
-        line = sym.get("line", 1)
 
-        # Qualified name = file_module.SymbolName
+        # Get line range
+        start_line = sym.get("start_line", sym.get("line", 1))
+        end_line = sym.get("end_line", start_line)
+
+        # Qualified name = file_module.SymbolName or file_module.ClassName.MethodName
         module_path = file_path.rsplit(".", 1)[0].replace("/", ".")
-        qname = f"{module_path}.{name}"
+        if entity_type == EntityType.METHOD and "parent_class" in sym:
+            qname = f"{module_path}.{sym['parent_class']}.{name}"
+        else:
+            qname = f"{module_path}.{name}"
 
         ent_id = generate_entity_id(entity_type, file_path, qname)
         if ent_id in repository.entities:
@@ -151,8 +163,8 @@ def _process_synthetic_ast(
             display_name=f"{name}()" if entity_type in (EntityType.FUNCTION, EntityType.METHOD) else name,
             location=SourceLocation(
                 repository_path=file_path,
-                start_line=line,
-                end_line=line,
+                start_line=start_line,
+                end_line=end_line,
                 language=language
             ),
             metadata={"file_id": file_path}
