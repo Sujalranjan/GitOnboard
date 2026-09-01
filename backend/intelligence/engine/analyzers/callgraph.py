@@ -5,6 +5,7 @@ Supports Python (ast-based) and TypeScript/JavaScript (tree-sitter).
 Uses symbol resolution to handle cross-file references.
 """
 import ast
+import logging
 from typing import Dict, List, Optional
 from .base import BaseAnalyzer
 from .resolution import SymbolIndex, resolve_reference, resolve_import_target
@@ -13,6 +14,9 @@ from ...rim.repository import RepositoryModel
 from ...rim.relationship import Relationship
 from ...rim.enums import EntityType, RelationshipType
 from ...rim.identity import generate_entity_id, generate_relationship_id
+from ...diagnostics import get_diagnostic_logger, ActionType
+
+logger = logging.getLogger(__name__)
 
 
 class PythonCallGraphVisitor(ast.NodeVisitor):
@@ -311,34 +315,106 @@ class CallGraphAnalyzer(BaseAnalyzer):
     supported_languages = ["Python", "TypeScript", "JavaScript"]
 
     def analyze(self, repository: RepositoryModel, asts: Dict[str, ParsedFile]) -> None:
-        import logging
-        logger = logging.getLogger(__name__)
+        diag = get_diagnostic_logger()
 
         logger.info(f"[CallGraphAnalyzer] Starting with {len(repository.relationships)} existing relationships")
+        if diag:
+            diag.log_analyzer_start("CallGraphAnalyzer", len(asts))
+
         index = SymbolIndex(repository)
+        files_processed = 0
+        rels_created = 0
 
         for file_path, parsed in asts.items():
-            if parsed.language not in self.supported_languages or not parsed.ast:
-                logger.info(f"[CallGraphAnalyzer] Skipping {file_path}: lang={parsed.language}, has_ast={bool(parsed.ast)}")
+            if parsed.language not in self.supported_languages:
+                logger.info(f"[CallGraphAnalyzer] Skipping {file_path}: unsupported language {parsed.language}")
+                if diag:
+                    diag.log_action(
+                        ActionType.ANALYZER_PROCESS_FILE,
+                        "CallGraphAnalyzer",
+                        file_path,
+                        f"Skipped: unsupported language {parsed.language}",
+                        {"language": parsed.language},
+                    )
+                continue
+
+            if not parsed.ast:
+                logger.info(f"[CallGraphAnalyzer] Skipping {file_path}: no AST (parsed.ast={type(parsed.ast).__name__})")
+                if diag:
+                    diag.log_action(
+                        ActionType.ANALYZER_PROCESS_FILE,
+                        "CallGraphAnalyzer",
+                        file_path,
+                        f"Skipped: no AST available",
+                        {"ast_type": type(parsed.ast).__name__},
+                    )
                 continue
 
             logger.info(f"[CallGraphAnalyzer] Processing {file_path}: ast_type={type(parsed.ast).__name__}")
+            if diag:
+                diag.log_file_processed(file_path, parsed.language, type(parsed.ast).__name__)
+
+            files_processed += 1
 
             try:
                 if parsed.language == "Python":
                     visitor = PythonCallGraphVisitor(file_path, repository, index)
                     visitor.visit(parsed.ast)
                     logger.info(f"[CallGraphAnalyzer] Python {file_path}: extracted {len(visitor.relationships)} relationships")
+                    if diag:
+                        diag.log_action(
+                            ActionType.ANALYZER_PROCESS_FILE,
+                            "CallGraphAnalyzer",
+                            file_path,
+                            f"Extracted {len(visitor.relationships)} relationships",
+                            {"count": len(visitor.relationships)},
+                        )
                     for rel in visitor.relationships:
                         repository.relationships[rel.id] = rel
+                        rels_created += 1
+                        if diag:
+                            diag.log_relationship_created("CallGraphAnalyzer", rel.type.value, rel.source_id, rel.target_id, file_path)
 
                 elif parsed.language in ("TypeScript", "JavaScript"):
+                    if not hasattr(parsed.ast, 'root_node'):
+                        logger.error(f"[CallGraphAnalyzer] ERROR {file_path}: ast has no root_node! ast type={type(parsed.ast)}")
+                        if diag:
+                            diag.log_error(
+                                ActionType.ANALYZER_PROCESS_FILE,
+                                "CallGraphAnalyzer",
+                                file_path,
+                                f"AST missing root_node attribute",
+                                AttributeError(f"ast type {type(parsed.ast)} has no root_node"),
+                            )
+                        continue
+
                     visitor = TypeScriptCallGraphVisitor(file_path, parsed.source, repository, index)
                     visitor.visit(parsed.ast.root_node)
                     logger.info(f"[CallGraphAnalyzer] TS/JS {file_path}: extracted {len(visitor.relationships)} relationships")
+                    if diag:
+                        diag.log_action(
+                            ActionType.ANALYZER_PROCESS_FILE,
+                            "CallGraphAnalyzer",
+                            file_path,
+                            f"Extracted {len(visitor.relationships)} relationships",
+                            {"count": len(visitor.relationships)},
+                        )
                     for rel in visitor.relationships:
                         repository.relationships[rel.id] = rel
+                        rels_created += 1
+                        if diag:
+                            diag.log_relationship_created("CallGraphAnalyzer", rel.type.value, rel.source_id, rel.target_id, file_path)
             except Exception as e:
                 logger.error(f"[CallGraphAnalyzer] Error processing {file_path}: {e}", exc_info=True)
+                if diag:
+                    diag.log_error(
+                        ActionType.ANALYZER_ERROR,
+                        "CallGraphAnalyzer",
+                        file_path,
+                        f"Exception during processing: {str(e)}",
+                        e,
+                    )
 
-        logger.info(f"[CallGraphAnalyzer] Complete with {len(repository.relationships)} total relationships")
+        logger.info(f"[CallGraphAnalyzer] Complete: {files_processed} files, {rels_created} relationships created, {len(repository.relationships)} total")
+        if diag:
+            diag.log_analyzer_complete("CallGraphAnalyzer", files_processed, rels_created)
