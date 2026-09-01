@@ -3,13 +3,14 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  FolderTree, 
-  Network, 
-  Search, 
-  Sparkles, 
-  GitMerge
+import {
+  LayoutDashboard,
+  FolderTree,
+  Network,
+  Search,
+  Sparkles,
+  GitMerge,
+  GitCompare
 } from 'lucide-react';
 
 const navItems = [
@@ -20,6 +21,7 @@ const navItems = [
   { id: 'architecture', label: 'Architecture', icon: Network, path: '/architecture' },
   { id: 'search', label: 'Search', icon: Search, path: '/search' },
   { id: 'summary', label: 'AI Summary', icon: Sparkles, path: '/summary' },
+  { id: 'rim-comparison', label: 'RIM Comparison', icon: GitCompare, path: '/rim-comparison' },
 ];
 
 export function Sidebar({ repoName }) {

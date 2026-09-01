@@ -91,7 +91,15 @@ All API routes are prefixed under `/api` (e.g., `http://localhost:8000/api`).
 
 ---
 
-## 8. AI Implementation Pipeline (`/api/v1/pipeline`) — DELETED / OBSOLETE
+## 8. RIM Comparison (Research)
+
+| Method | Endpoint | Description | Auth Required |
+|---|---|---|---|
+| `POST` | `/api/repos/{repo_name}/rim-comparison/compare` | Run the same repository question through two parallel retrieval+LLM pipelines: one with RIM structural expansion disabled (baseline) and one with RIM enabled. Returns full execution trace showing RIM's contribution: baseline candidates → RIM seed entities → relationships traversed → discovered entities/files → final context → LLM answers → token metrics → latency. Request: `{"question": "..."}`. Response includes both answers, retrieval/LLM efficiency/quality metrics, context diff, and provenance trace. | Yes |
+
+---
+
+## 9. AI Implementation Pipeline (`/api/v1/pipeline`) — DELETED / OBSOLETE
 
 > [!NOTE]
 > The legacy `/api/v1/pipeline/*` router has been completely deleted to eliminate unauthenticated execution attack surface.
