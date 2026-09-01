@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
 import { compareRimVsBaseline, RIMComparisonResponse } from '@/services/rimComparisonApi';
 import { Card, CardHeader } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
@@ -338,9 +339,27 @@ function SidePanel({
         {/* Answer */}
         <div>
           <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Answer</h4>
-          <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
-            {sideData.answer}
-          </p>
+          <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed prose dark:prose-invert prose-sm max-w-none">
+            <ReactMarkdown
+              components={{
+                p: (props) => <p className="mb-3" {...props} />,
+                h1: (props) => <h1 className="text-lg font-bold mb-2" {...props} />,
+                h2: (props) => <h2 className="text-base font-bold mb-2" {...props} />,
+                h3: (props) => <h3 className="text-sm font-bold mb-2" {...props} />,
+                ul: (props) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
+                ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
+                li: (props) => <li className="mb-1" {...props} />,
+                code: (props: any) => props.inline
+                  ? <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono" {...props} />
+                  : <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs font-mono block mb-2 overflow-x-auto" {...props} />,
+                pre: (props) => <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs" {...props} />,
+                blockquote: (props) => <blockquote className="border-l-4 border-slate-300 dark:border-slate-600 pl-3 italic text-slate-600 dark:text-slate-400 mb-3" {...props} />,
+                a: (props) => <a className="text-blue-600 dark:text-blue-400 underline" {...props} />,
+              }}
+            >
+              {sideData.answer}
+            </ReactMarkdown>
+          </div>
         </div>
 
         {/* Retrieval Metrics */}

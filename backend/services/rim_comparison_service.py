@@ -263,7 +263,8 @@ class RIMComparisonService:
                 ),
                 answer_metrics=AnswerMetrics(),
                 retrieved_files=sorted(list(baseline_files)),
-                retrieved_symbols=[c.get("match_name") or c.get("name") for c in baseline_candidates if c.get("match_type") == "symbol"]
+                retrieved_symbols=[c.get("match_name") or c.get("name") for c in baseline_candidates if c.get("match_type") == "symbol"],
+                context_block=without_rim_result.get("context", "")
             ),
             with_rim=ComparisonSide(
                 answer=with_rim_result["answer"],
@@ -286,9 +287,10 @@ class RIMComparisonService:
                 ),
                 answer_metrics=AnswerMetrics(),
                 retrieved_files=sorted(list(expanded_files)),
-                retrieved_symbols=[c.get("match_name") or c.get("name") for c in expanded_candidates if c.get("match_type") == "symbol"]
+                retrieved_symbols=[c.get("match_name") or c.get("name") for c in expanded_candidates if c.get("match_type") == "symbol"],
+                context_block=with_rim_result.get("context", "")
             ),
-            repository=repo.name,
+            repository=self.repo_name,
             branch=repo.default_branch,
             commit=analysis.commit_sha,
             analysis_id=analysis_id,
@@ -340,6 +342,7 @@ class RIMComparisonService:
 
         request = LLMRequest(
             messages=messages,
+            model="qwen3:4b-instruct",
             temperature=0.2,
             max_tokens=2000
         )
