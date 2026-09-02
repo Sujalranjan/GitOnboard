@@ -15,16 +15,32 @@ from dataclasses import dataclass, asdict
 import traceback
 
 # Create logs directory
-LOGS_DIR = Path("/home/dheeraj/repository_intelligence_platform/logs")
-LOGS_DIR.mkdir(exist_ok=True)
+# Works both locally and in Docker by finding project root
+import os
+_app_root = os.getenv('APP_ROOT', None)
+if _app_root:
+    LOGS_DIR = Path(_app_root) / "logs"
+else:
+    # Try local path first, fall back to relative
+    _local_path = Path("/home/dheeraj/repository_intelligence_platform/logs")
+    _rel_path = Path(__file__).parent.parent.parent / "logs"
+    LOGS_DIR = _local_path if _local_path.parent.exists() else _rel_path
 
-# Create subdirectories for different log types
-(LOGS_DIR / "queries").mkdir(exist_ok=True)
-(LOGS_DIR / "llm_requests").mkdir(exist_ok=True)
-(LOGS_DIR / "tool_calls").mkdir(exist_ok=True)
-(LOGS_DIR / "metrics").mkdir(exist_ok=True)
-(LOGS_DIR / "errors").mkdir(exist_ok=True)
-(LOGS_DIR / "rim_trace").mkdir(exist_ok=True)
+# Ensure logs directory exists
+try:
+    LOGS_DIR.mkdir(exist_ok=True, parents=True)
+    # Create subdirectories for different log types
+    (LOGS_DIR / "queries").mkdir(exist_ok=True, parents=True)
+    (LOGS_DIR / "llm_requests").mkdir(exist_ok=True, parents=True)
+    (LOGS_DIR / "tool_calls").mkdir(exist_ok=True, parents=True)
+    (LOGS_DIR / "metrics").mkdir(exist_ok=True, parents=True)
+    (LOGS_DIR / "errors").mkdir(exist_ok=True, parents=True)
+    (LOGS_DIR / "rim_trace").mkdir(exist_ok=True, parents=True)
+except Exception as e:
+    # Fallback to /tmp if we can't create in the expected location
+    LOGS_DIR = Path("/tmp/rim_logs")
+    LOGS_DIR.mkdir(exist_ok=True, parents=True)
+    (LOGS_DIR / "errors").mkdir(exist_ok=True, parents=True)
 
 
 @dataclass
