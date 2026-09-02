@@ -58,24 +58,36 @@ function DashboardContent() {
       } else {
         fetchRepos();
 
-        // Poll for updates while jobs are in progress
-        const pollInterval = setInterval(() => {
-          // Check if any repos have jobs in progress
-          const hasActiveJobs = repos.some(r =>
-            ['queued', 'downloading', 'analyzing', 'saving'].includes((r.job_status || '').toLowerCase())
-          );
+        // Subscribe to real-time task updates via SSE instead of polling
+        if (repos.length > 0) {
+          const setupSSE = () => {
+            // Get first repo name to subscribe to its task stream
+            const repoName = repos[0]?.project_name;
+            if (!repoName) return;
 
-          if (hasActiveJobs) {
-            fetchRepos();
-          } else {
-            clearInterval(pollInterval);
-          }
-        }, 2000); // Poll every 2 seconds
+            try {
+              const eventSource = new EventSource(`/api/repos/${repoName}/tasks/stream`);
 
-        return () => clearInterval(pollInterval);
+              eventSource.onmessage = (event) => {
+                // When tasks update, fetch repos to get latest status
+                fetchRepos();
+              };
+
+              eventSource.onerror = () => {
+                eventSource.close();
+              };
+
+              return () => eventSource.close();
+            } catch (err) {
+              console.debug("SSE not available, falling back gracefully");
+            }
+          };
+
+          return setupSSE();
+        }
       }
     }
-  }, [authLoading, isAuthenticated, repos]);
+  }, [authLoading, isAuthenticated, repos.length]);
 
   const repoList = Array.isArray(repos) ? repos : [];
   const filteredRepos = repoList.filter((repo) => {
