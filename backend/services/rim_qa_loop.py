@@ -191,7 +191,7 @@ class RIMQALoop:
                     model=self.model or llm_response.model,
                     provider=llm_response.provider,
                     is_rim=is_rim,
-                    system_prompt=self.system_prompt_parts.full_text[:500],
+                    system_prompt=self.system_prompt_parts.full_text,  # Log full system prompt
                     user_message=user_message,
                     tools_available=tools_available,
                     context_tokens=len(self.system_prompt_parts.full_text) + sum(len(m.get("content", "")) for m in messages)
