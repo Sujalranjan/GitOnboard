@@ -41,7 +41,7 @@ def get_job_progress(repo_name: str, db: Session = Depends(get_db), current_user
 
         return {
             "job_id": job.id,
-            "status": job.status,
+            "status": job.status.lower(),  # Lowercase for frontend consistency
             "progress": progress,
             "started_at": job.started_at.isoformat() if job.started_at else None,
             "completed_at": job.completed_at.isoformat() if job.completed_at else None,

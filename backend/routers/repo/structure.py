@@ -44,8 +44,23 @@ def scan_repo(repo_name: str, db: Session = Depends(get_db), current_user: User 
 
     if analysis.status != "Completed":
         job = db.query(AnalysisJob).filter(AnalysisJob.analysis_id == analysis.id).first()
-        job_status = job.status if job else analysis.status
-        return {"status": "processing", "job_status": job_status}
+        job_status = job.status.lower() if job else analysis.status.lower()
+
+        # Map status to progress percentage for frontend
+        progress_map = {
+            "queued": 5,
+            "downloading": 20,
+            "analyzing": 50,
+            "saving": 75,
+        }
+        progress = progress_map.get(job_status, 0)
+
+        return {
+            "status": "processing",
+            "job_status": job_status,
+            "progress": progress,
+            "job_id": job.id if job else None
+        }
     
     # Derive everything from core_model
     try:
