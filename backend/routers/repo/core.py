@@ -189,13 +189,23 @@ def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_c
     results = []
     for r in repos:
         # Get latest analysis status
-        latest = db.query(Analysis).filter(Analysis.repository_id == r.id).order_by(Analysis.created_at.desc()).first()
+        all_analyses = db.query(Analysis).filter(Analysis.repository_id == r.id).order_by(Analysis.created_at.desc()).all()
+        logger.info(f"[list_repos] {r.url}: Found {len(all_analyses)} analyses")
+        for idx, analysis in enumerate(all_analyses[:3]):
+            logger.info(f"  [{idx}] Analysis ID={analysis.id}, status={analysis.status}, created_at={analysis.created_at}")
+
+        latest = all_analyses[0] if all_analyses else None
         status = latest.status if latest else "Unknown"
         job_status = "Unknown"
         progress = 0
 
         if latest:
-            job = db.query(AnalysisJob).filter(AnalysisJob.analysis_id == latest.id).first()
+            jobs = db.query(AnalysisJob).filter(AnalysisJob.analysis_id == latest.id).order_by(AnalysisJob.id.desc()).all()
+            logger.info(f"[list_repos] Analysis ID={latest.id} has {len(jobs)} jobs")
+            for idx, j in enumerate(jobs[:3]):
+                logger.info(f"  Job [{idx}] ID={j.id}, status={j.status}, created_at={j.started_at}")
+
+            job = jobs[0] if jobs else None
             if job:
                 job_status = job.status.lower()  # Normalize to lowercase
                 # Calculate progress based on job status

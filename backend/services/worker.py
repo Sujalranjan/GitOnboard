@@ -49,6 +49,7 @@ class AnalysisWorker(WorkerInterface):
             repo_name = parts[-1]
 
             job.status = "Downloading"
+            analysis.status = "Downloading"  # Keep Analysis status in sync with job
             job.started_at = datetime.now(timezone.utc)
             db.commit()
             logger.info(f"Job {job_id}: status → Downloading")
@@ -80,6 +81,7 @@ class AnalysisWorker(WorkerInterface):
                     raise Exception("Download timed out after 120 seconds")
 
                 job.status = "Analyzing"
+                analysis.status = "Analyzing"  # Keep Analysis status in sync with job
                 db.commit()
                 logger.info(f"Job {job_id}: status → Analyzing")
 
@@ -253,6 +255,7 @@ class AnalysisWorker(WorkerInterface):
                 )
 
                 job.status = "Saving"
+                analysis.status = "Saving"  # Keep Analysis status in sync with job
                 db.commit()
                 logger.info(f"Job {job_id}: status → Saving")
 
@@ -346,7 +349,7 @@ class AnalysisWorker(WorkerInterface):
                 job.status = "Failed"
                 job.error = str(e)
                 job.completed_at = datetime.now(timezone.utc)
-                analysis.status = "Failed"
+                analysis.status = "Failed"  # Already set above, just confirming
                 db.commit()
 
                 # Notify SSE subscribers of failure

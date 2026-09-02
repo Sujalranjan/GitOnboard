@@ -28,8 +28,13 @@ function DashboardContent() {
   const fetchRepos = async () => {
     try {
       setIsLoading(true);
+      console.log('[Dashboard] Fetching repositories...');
       const data = await repositoryService.getAll();
       const repoList = Array.isArray(data) ? data : (data?.repositories || []);
+      console.log('[Dashboard] Fetched repos:', repoList);
+      repoList.forEach(repo => {
+        console.log(`[Dashboard] Repo: ${repo.project_name}, status=${repo.status}, job_status=${repo.job_status}, progress=${repo.progress}`);
+      });
       setRepos(repoList);
     } catch (err) {
       console.error('Failed to fetch repositories:', err);
@@ -52,47 +57,66 @@ function DashboardContent() {
   };
 
   useEffect(() => {
+    console.log('[Dashboard] useEffect triggered: authLoading=', authLoading, 'isAuthenticated=', isAuthenticated, 'repos.length=', repos.length);
+
     if (!authLoading) {
       if (!isAuthenticated) {
+        console.log('[Dashboard] Not authenticated, redirecting to home');
         window.location.href = "/";
       } else {
+        console.log('[Dashboard] Authenticated, fetching repos');
         fetchRepos();
 
         // Subscribe to real-time task updates via SSE for repos with active jobs
         // This ensures we get notified whenever any repo's job status changes
         if (repos.length > 0) {
+          console.log('[Dashboard] repos.length > 0, setting up SSE subscriptions');
           const setupSSE = () => {
             const eventSources: EventSource[] = [];
 
             // Subscribe to each repo that has an active job
             repos.forEach((repo) => {
-              if (repo.job_status && ['queued', 'downloading', 'analyzing', 'saving'].includes(repo.job_status)) {
+              const jobStatusLower = (repo.job_status || '').toLowerCase();
+              console.log(`[SSE Setup] Checking repo "${repo.project_name}": job_status="${repo.job_status}" (lower="${jobStatusLower}")`);
+
+              if (jobStatusLower && ['queued', 'downloading', 'analyzing', 'saving'].includes(jobStatusLower)) {
+                console.log(`[SSE Setup] Subscribing to "${repo.project_name}" (job_status="${repo.job_status}")`);
                 try {
                   const eventSource = new EventSource(`/api/repos/${encodeURIComponent(repo.project_name)}/tasks/stream`);
+                  console.log(`[SSE] Connected to ${repo.project_name}`);
 
                   eventSource.onmessage = (event) => {
+                    console.log(`[SSE] Message received for ${repo.project_name}:`, event.data);
                     // When tasks update, fetch repos to get latest status
                     fetchRepos();
                   };
 
-                  eventSource.onerror = () => {
+                  eventSource.onerror = (err) => {
+                    console.error(`[SSE] Error for ${repo.project_name}:`, err);
                     eventSource.close();
                   };
 
                   eventSources.push(eventSource);
                 } catch (err) {
-                  console.debug(`SSE connection failed for ${repo.project_name}: ${err}`);
+                  console.error(`[SSE] Connection failed for ${repo.project_name}: ${err}`);
                 }
+              } else {
+                console.log(`[SSE Setup] Skipping ${repo.project_name} (job_status not active)`);
               }
             });
 
+            console.log(`[SSE Setup] Created ${eventSources.length} SSE connections`);
+
             // Return cleanup function to close all SSE connections
             return () => {
+              console.log('[SSE Cleanup] Closing SSE connections');
               eventSources.forEach(es => es.close());
             };
           };
 
           return setupSSE();
+        } else {
+          console.log('[Dashboard] repos.length is 0, not setting up SSE');
         }
       }
     }
@@ -248,41 +272,54 @@ function DashboardContent() {
                     </div>
                   )}
                   
-                  {(['queued', 'downloading', 'analyzing', 'saving', 'processing'].includes((repo.status || '').toLowerCase()) || ['queued', 'downloading', 'analyzing', 'saving'].includes((repo.job_status || '').toLowerCase())) ? (() => {
-                    // Use real-time progress from API if available
-                    const progress = repo.progress ?? (() => {
-                      const statusMap: Record<string, number> = {
-                        "queued": 11,      // Changed from 10 to identify which mapping
-                        "downloading": 31, // Changed from 30
-                        "analyzing": 61,   // Changed from 60
-                        "saving": 91,      // Changed from 90
-                        "completed": 100,
-                        "failed": 0
-                      };
-                      const currentStatus = (repo.job_status || "Queued").toLowerCase();
-                      return statusMap[currentStatus] || 11;
-                    })();
-                    const currentStatus = repo.job_status || "Queued";
-                    
-                    return (
-                      <div className="mt-4">
-                        <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                          <span>{currentStatus}...</span>
-                          <span>{progress}%</span>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                          <div className="bg-blue-500 dark:bg-blue-500 h-2 rounded-full transition-all duration-1000 ease-in-out relative" style={{ width: `${progress}%` }}>
-                            <div className="absolute top-0 left-0 right-0 bottom-0 bg-white/20 animate-[shimmer_1s_infinite]"></div>
+                  {(() => {
+                    const statusLower = (repo.status || '').toLowerCase();
+                    const jobStatusLower = (repo.job_status || '').toLowerCase();
+                    const isActive = ['queued', 'downloading', 'analyzing', 'saving', 'processing'].includes(statusLower) || ['queued', 'downloading', 'analyzing', 'saving'].includes(jobStatusLower);
+
+                    console.log(`[Progress] Repo: ${repo.project_name}, status="${repo.status}", job_status="${repo.job_status}", statusLower="${statusLower}", jobStatusLower="${jobStatusLower}", isActive=${isActive}, progress=${repo.progress}`);
+
+                    if (isActive) {
+                      // Use real-time progress from API if available
+                      const progress = repo.progress ?? (() => {
+                        const statusMap: Record<string, number> = {
+                          "queued": 11,      // Changed from 10 to identify which mapping
+                          "downloading": 31, // Changed from 30
+                          "analyzing": 61,   // Changed from 60
+                          "saving": 91,      // Changed from 90
+                          "completed": 100,
+                          "failed": 0
+                        };
+                        const currentStatus = (repo.job_status || "Queued").toLowerCase();
+                        return statusMap[currentStatus] || 11;
+                      })();
+                      const currentStatus = repo.job_status || "Queued";
+
+                      console.log(`[Progress] Showing progress bar: ${repo.project_name}, progress=${progress}%, status="${currentStatus}"`);
+
+                      return (
+                        <div className="mt-4">
+                          <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                            <span>{currentStatus}...</span>
+                            <span>{progress}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div className="bg-blue-500 dark:bg-blue-500 h-2 rounded-full transition-all duration-1000 ease-in-out relative" style={{ width: `${progress}%` }}>
+                              <div className="absolute top-0 left-0 right-0 bottom-0 bg-white/20 animate-[shimmer_1s_infinite]"></div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })() : (
-                    <div>
-                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Imported At</span>
-                      <p className="text-sm text-slate-700 dark:text-slate-300">{new Date(repo.import_time || Date.now()).toLocaleString()}</p>
-                    </div>
-                  )}
+                      );
+                    } else {
+                      console.log(`[Progress] NOT showing progress bar: ${repo.project_name} (job_status="${repo.job_status}")`);
+                      return (
+                        <div>
+                          <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Imported At</span>
+                          <p className="text-sm text-slate-700 dark:text-slate-300">{new Date(repo.import_time || Date.now()).toLocaleString()}</p>
+                        </div>
+                      );
+                    }
+                  })()}
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
