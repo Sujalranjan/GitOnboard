@@ -50,6 +50,42 @@ class HybridRetriever:
         self.semantic_weight = semantic_weight
         self.exact_weight = exact_weight
         self.bm25_index: Optional[BM25Index] = None
+        self.semantic_degradation: Optional[str] = None  # Track why semantic search failed
+        self._load_or_build_lexical_index()
+        self._load_semantic_index_from_artifact()
+
+    def _load_or_build_lexical_index(self):
+        """Load pre-built BM25 index from analysis artifact, or build from FactStore."""
+        if not self.analysis_id:
+            return
+
+        # Try to load pre-built index from analysis artifact
+        try:
+            from backend.models.repository import AnalysisArtifact
+            artifact = self.db.query(AnalysisArtifact).filter(
+                AnalysisArtifact.analysis_id == self.analysis_id,
+                AnalysisArtifact.type == "bm25_index"
+            ).first()
+
+            if artifact and artifact.data:
+                # Rebuild BM25 index from stored metadata
+                try:
+                    bm25_data = artifact.data
+                    index = BM25Index()
+                    index.documents = bm25_data.get("documents", [])
+                    index.idf = bm25_data.get("idf", {})
+                    index.doc_len = bm25_data.get("doc_len", [])
+                    index.corpus_size = bm25_data.get("corpus_size", 0)
+                    index.avg_doc_len = bm25_data.get("avg_doc_len", 0.0)
+                    self.bm25_index = index
+                    logger.info(f"Loaded pre-built BM25 index for analysis {self.analysis_id}")
+                    return
+                except Exception as e:
+                    logger.warning(f"Failed to rebuild BM25 from artifact: {e}")
+        except Exception as e:
+            logger.debug(f"Could not load BM25 artifact: {e}")
+
+        # Fallback: build from FactStore
         self._build_lexical_index()
 
     def _build_lexical_index(self):
@@ -173,6 +209,57 @@ class HybridRetriever:
         self.bm25_index = BM25Index()
         self.bm25_index.index(docs, text_key="search_text")
 
+    def _load_semantic_index_from_artifact(self):
+        """Load pre-built Chroma semantic index from analysis artifact."""
+        if not self.analysis_id or self.chroma_collection:
+            return
+
+        try:
+            from backend.models.repository import AnalysisArtifact
+            artifact = self.db.query(AnalysisArtifact).filter(
+                AnalysisArtifact.analysis_id == self.analysis_id,
+                AnalysisArtifact.type == "semantic_index_db"
+            ).first()
+
+            if not artifact:
+                self.semantic_degradation = "artifact_not_found"
+                logger.debug(f"No semantic_index_db artifact for analysis {self.analysis_id}")
+                return
+
+            if not artifact.blob_data:
+                self.semantic_degradation = "artifact_empty"
+                logger.debug(f"semantic_index_db artifact is empty for analysis {self.analysis_id}")
+                return
+
+            try:
+                import chromadb
+                import tempfile
+                import zipfile
+                import io
+
+                # Extract Chroma database from zip
+                temp_dir = tempfile.mkdtemp(prefix="chroma_load_")
+                try:
+                    with zipfile.ZipFile(io.BytesIO(artifact.blob_data)) as zf:
+                        zf.extractall(temp_dir)
+
+                    # Load from extracted directory
+                    client = chromadb.PersistentClient(path=temp_dir)
+                    self.chroma_collection = client.get_collection(name="semantic_index")
+                    logger.info(f"Loaded semantic index for analysis {self.analysis_id}")
+                except Exception as e:
+                    self.semantic_degradation = f"load_error: {str(e)[:50]}"
+                    logger.warning(f"Failed to load semantic index from artifact: {e}")
+                    # Keep temp_dir for cleanup - will be handled at end
+
+            except ImportError:
+                self.semantic_degradation = "chromadb_unavailable"
+                logger.debug("chromadb not available - semantic search disabled")
+
+        except Exception as e:
+            self.semantic_degradation = f"artifact_load_error: {str(e)[:50]}"
+            logger.debug(f"Failed to load semantic index artifact: {e}")
+
     def _search_exact_facts(self, query: str) -> List[Dict[str, Any]]:
         """Finds direct, exact matches in the Fact Store (symbols, routes, database tables)."""
         if not self.analysis_id:
@@ -282,6 +369,8 @@ class HybridRetriever:
     def _search_semantic(self, query: str, top_k: int = 30) -> List[Dict[str, Any]]:
         """Queries ChromaDB vector collection, resolving to actual FactSymbol IDs for expansion."""
         if not self.chroma_collection:
+            if self.semantic_degradation:
+                logger.debug(f"Semantic search skipped for analysis {self.analysis_id}: {self.semantic_degradation}")
             return []
 
         try:

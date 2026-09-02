@@ -40,6 +40,7 @@ class RetrievalMetrics:
     rim_entities_accessed_count: int = 0
     rim_relationship_types_used: List[str] = field(default_factory=list)
     retrieval_latency_ms: float = 0.0
+    semantic_degradation: Optional[str] = None  # Reason semantic search unavailable, if any
 
 
 @dataclass
@@ -245,11 +246,13 @@ class RIMComparisonService:
         logger.info("[RIM Comparison] Computing token accounting...")
 
         baseline_side = await self._assemble_comparison_side(
-            question, baseline_result, baseline_prompt_parts, baseline_elapsed_ms
+            question, baseline_result, baseline_prompt_parts, baseline_elapsed_ms,
+            retriever=retriever
         )
         rim_side = await self._assemble_comparison_side(
             question, rim_result, rim_prompt_parts, rim_elapsed_ms,
-            rim_metadata_block=rim_metadata.text
+            rim_metadata_block=rim_metadata.text,
+            retriever=retriever
         )
 
         # 6. Build result
@@ -285,6 +288,7 @@ class RIMComparisonService:
         prompt_parts,
         elapsed_ms: float,
         rim_metadata_block: Optional[str] = None,
+        retriever: Optional[HybridRetriever] = None,
     ) -> ComparisonSide:
         """Assemble ComparisonSide from loop result with token accounting."""
 
@@ -357,7 +361,8 @@ class RIMComparisonService:
                 symbols_retrieved=len(loop_result.symbols_read),
                 rim_entities_accessed_count=len(loop_result.rim_entities_accessed),
                 rim_relationship_types_used=loop_result.rim_relationship_types_used,
-                retrieval_latency_ms=loop_result.latency_ms.get("tool_total", 0)  # Actual tool execution time only
+                retrieval_latency_ms=loop_result.latency_ms.get("tool_total", 0),  # Actual tool execution time only
+                semantic_degradation=retriever.semantic_degradation if retriever and hasattr(retriever, 'semantic_degradation') else None
             ),
             llm_efficiency_metrics=LLMEfficiencyMetrics(
                 provider=loop_result.turns[0].provider if loop_result.turns else "",

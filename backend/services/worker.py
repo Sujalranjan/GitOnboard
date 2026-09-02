@@ -255,7 +255,38 @@ class AnalysisWorker(WorkerInterface):
                     except Exception as e:
                         db.rollback()
                         logger.error(f"Error persisting facts to Fact Store: {e}")
-                
+
+                    # Build retrieval indexes (BM25 and Chroma) for this analysis
+                    logger.info("Building retrieval indexes...")
+                    try:
+                        from backend.intelligence.retrieval.retriever import HybridRetriever
+                        from backend.intelligence.retrieval.semantic_builder import SemanticIndexBuilder
+
+                        # Build BM25 index and store in memory for export
+                        retriever_temp = HybridRetriever(db=db, analysis_id=analysis.id)
+                        if retriever_temp.bm25_index:
+                            # Export BM25 index - store the documents and statistics for later rebuild
+                            bm25_data = {
+                                "documents": retriever_temp.bm25_index.documents,
+                                "idf": dict(retriever_temp.bm25_index.idf),
+                                "doc_len": retriever_temp.bm25_index.doc_len,
+                                "corpus_size": retriever_temp.bm25_index.corpus_size,
+                                "avg_doc_len": retriever_temp.bm25_index.avg_doc_len,
+                            }
+                            results["bm25_index"] = bm25_data
+                            logger.info(f"BM25 index built with {len(bm25_data['documents'])} documents")
+
+                        # Build Chroma semantic index
+                        semantic_builder = SemanticIndexBuilder()
+                        chroma_bytes = semantic_builder.build_index(rim_model.entities)
+                        if chroma_bytes:
+                            results["semantic_index_db"] = chroma_bytes
+                            logger.info(f"Semantic index built: {len(chroma_bytes)} bytes")
+                        else:
+                            logger.warning("Semantic index build skipped (chromadb unavailable or no entities)")
+                    except Exception as e:
+                        logger.warning(f"Failed to build retrieval indexes: {e}", exc_info=True)
+
                 for art_type, data in results.items():
                     if isinstance(data, bytes):
                         art = AnalysisArtifact(

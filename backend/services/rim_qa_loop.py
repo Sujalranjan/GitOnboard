@@ -42,6 +42,8 @@ class QALoopResult:
     tool_call_count: int = 0
     files_read: List[str] = field(default_factory=list)
     symbols_read: List[str] = field(default_factory=list)
+    files_searched: List[str] = field(default_factory=list)  # from search_code/search_repository
+    symbols_searched: List[str] = field(default_factory=list)  # from search_repository
     rim_entities_accessed: List[Dict[str, Any]] = field(default_factory=list)  # from query_rim only
     rim_relationship_types_used: List[str] = field(default_factory=list)  # from query_rim only
     latency_ms: Dict[str, float] = field(default_factory=dict)  # {"loop_total", "llm_total", "tool_total"}
@@ -241,6 +243,29 @@ class RIMQALoop:
                     name = arguments.get("name", "")
                     if name and name not in result.symbols_read:
                         result.symbols_read.append(name)
+                elif tool_name == "search_code" and tool_observation.success:
+                    # Track files found by search_code
+                    data = tool_observation.data or []
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict) and "file" in item:
+                                file_path = item["file"]
+                                if file_path and file_path not in result.files_searched:
+                                    result.files_searched.append(file_path)
+                elif tool_name == "search_repository" and tool_observation.success:
+                    # Track files and symbols found by search_repository
+                    data = tool_observation.data or []
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict):
+                                if "file_path" in item:
+                                    file_path = item["file_path"]
+                                    if file_path and file_path not in result.files_searched:
+                                        result.files_searched.append(file_path)
+                                if "symbol_name" in item:
+                                    symbol_name = item["symbol_name"]
+                                    if symbol_name and symbol_name not in result.symbols_searched:
+                                        result.symbols_searched.append(symbol_name)
                 elif tool_name == "query_rim" and tool_observation.success:
                     # Track RIM access from query_rim tool
                     data = tool_observation.data or {}

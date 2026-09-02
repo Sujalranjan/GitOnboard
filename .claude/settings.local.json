@@ -19,7 +19,8 @@
       "Bash(docker-compose restart *)",
       "Bash(docker-compose logs *)",
       "Bash(docker-compose exec *)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(docker restart *)"
     ]
   }
 }
