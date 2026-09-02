@@ -27,6 +27,7 @@ from backend.services.rim_qa_loop import RIMQALoop, QALoopResult
 from backend.services.rim_qa_protocol import QAProtocolAdapter
 from backend.services.rim_tool_dispatch import ToolDispatchTable, TargetEntityResolver
 from backend.services.rim_metadata import build_rim_metadata_block
+from backend.logging import StructuredLogger
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,15 @@ class RIMComparisonService:
         Both sides use identical guardrails, retrieval tools, and LLM model.
         Only difference: RIM side has upfront metadata block + query_rim tool.
         """
+        # Initialize structured logger for this session
+        structured_log = StructuredLogger(
+            session_id=self.current_user.id if self.current_user else "unknown",
+            repository=self.repo_name
+        )
+
+        # Log incoming query
+        structured_log.log_query(question, self.current_user.email if self.current_user else None)
+
         # Late binding to avoid circular imports
         from backend.routers.repo.services.analysis import get_latest_analysis
         from backend.routers.repo.semantic import get_chroma_collection
@@ -141,6 +151,7 @@ class RIMComparisonService:
             analysis_id = analysis.id
         except Exception as e:
             logger.error(f"Failed to resolve repo/analysis for {self.repo_name}: {e}")
+            structured_log.log_error("analysis_resolution", e, {"repository": self.repo_name})
             raise
 
         chroma_collection = None
