@@ -138,8 +138,8 @@ class RIMComparisonService:
             repository=self.repo_name
         )
 
-        # Log incoming query
-        structured_log.log_query(question, self.current_user.email if self.current_user else None)
+        # Log incoming query (returns request_id)
+        request_id = structured_log.log_query(question, self.current_user.email if self.current_user else None)
 
         # Late binding to avoid circular imports
         from backend.routers.repo.services.analysis import get_latest_analysis
@@ -204,7 +204,11 @@ class RIMComparisonService:
             llm_service=self.llm_service,
             tool_dispatch=baseline_dispatch,
             config=config,
-            system_prompt_parts=baseline_prompt_parts
+            system_prompt_parts=baseline_prompt_parts,
+            structured_logger=structured_log,
+            request_id=request_id,
+            repository=self.repo_name,
+            mode="baseline"
         )
 
         t0 = time.perf_counter()
@@ -240,7 +244,11 @@ class RIMComparisonService:
             llm_service=self.llm_service,
             tool_dispatch=rim_dispatch,
             config=config,
-            system_prompt_parts=rim_prompt_parts
+            system_prompt_parts=rim_prompt_parts,
+            structured_logger=structured_log,
+            request_id=request_id,
+            repository=self.repo_name,
+            mode="rim"
         )
 
         t0 = time.perf_counter()
@@ -287,6 +295,42 @@ class RIMComparisonService:
                 rim_metadata_relationships=rim_metadata.relationships,
                 query_rim_call_log=rim_result.rim_entities_accessed
             )
+        )
+
+        # Log metrics before returning
+        baseline_metrics = baseline_side.retrieval_metrics
+        rim_metrics = rim_side.retrieval_metrics
+        structured_log.log_metrics(
+            question=question,
+            baseline_metrics={
+                "tool_call_count": baseline_metrics.tool_call_count,
+                "files_retrieved": baseline_metrics.files_retrieved,
+                "symbols_retrieved": baseline_metrics.symbols_retrieved,
+                "retrieval_latency_ms": baseline_metrics.retrieval_latency_ms
+            },
+            rim_metrics={
+                "tool_call_count": rim_metrics.tool_call_count,
+                "files_retrieved": rim_metrics.files_retrieved,
+                "symbols_retrieved": rim_metrics.symbols_retrieved,
+                "rim_entities_accessed_count": rim_metrics.rim_entities_accessed_count,
+                "retrieval_latency_ms": rim_metrics.retrieval_latency_ms,
+                "semantic_degradation": rim_metrics.semantic_degradation
+            },
+            failure_detected=False
+        )
+
+        # Log completion
+        structured_log.log_completion(
+            success=True,
+            summary={
+                "repository": self.repo_name,
+                "analysis_id": analysis_id,
+                "baseline_turns": len(baseline_result.turns),
+                "rim_turns": len(rim_result.turns),
+                "baseline_tool_calls": baseline_result.tool_call_count,
+                "rim_tool_calls": rim_result.tool_call_count,
+                "files_in_context": len(all_baseline_files | all_rim_files)
+            }
         )
 
         logger.info(f"[RIM Comparison] Complete: {self.repo_name}, {analysis_id}")

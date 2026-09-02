@@ -9,12 +9,15 @@ Tracks tool calls, file reads, and RIM metadata access separately.
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from backend.agent.loop.contracts import AgentLoopConfig, StopReason, ToolObservation
 from backend.agent.loop.guardrails import LoopGuardrails
 from backend.ai.service import LLMService
 from backend.ai.schemas import LLMRequest, Message, MessageRole
+
+if TYPE_CHECKING:
+    from backend.logging.structured_logger import StructuredLogger
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +74,10 @@ class RIMQALoop:
         config: AgentLoopConfig,
         system_prompt_parts: SystemPromptParts,
         model: Optional[str] = None,
+        structured_logger: Optional["StructuredLogger"] = None,
+        request_id: Optional[str] = None,
+        repository: Optional[str] = None,
+        mode: Optional[str] = None,  # "baseline" or "rim"
     ):
         self.llm_service = llm_service
         self.tool_dispatch = tool_dispatch
@@ -78,6 +85,10 @@ class RIMQALoop:
         self.system_prompt_parts = system_prompt_parts
         self.model = model
         self.guardrails = LoopGuardrails(config)
+        self.structured_logger = structured_logger
+        self.request_id = request_id
+        self.repository = repository
+        self.mode = mode
 
     async def run(self, question: str) -> QALoopResult:
         """
@@ -157,10 +168,43 @@ class RIMQALoop:
                 logger.error(f"[RIMQALoop] LLM call failed: {e}", exc_info=True)
                 result.stop_reason = StopReason.MODEL_ERROR
                 result.answer = f"[ERROR] LLM call failed: {str(e)}"
+
+                # Log error if structured logger is available
+                if self.structured_logger and self.request_id:
+                    self.structured_logger.log_error(
+                        stage=f"llm_call_turn_{turn_index}",
+                        error=e,
+                        context={"mode": self.mode, "turn": turn_index}
+                    )
                 break
 
             turn_elapsed = time.perf_counter() - turn_start
             llm_total_ms += turn_elapsed * 1000
+
+            # Log LLM request and response if structured logger is available (after calculating latency)
+            if self.structured_logger and self.request_id:
+                is_rim = self.mode == "rim"
+                user_message = messages[-1].get("content", "") if messages else ""
+                tool_specs = self.tool_dispatch.specs(include_rim=is_rim)
+                tools_available = [spec.name for spec in tool_specs] if hasattr(tool_specs, '__iter__') else []
+                self.structured_logger.log_llm_request(
+                    model=self.model or llm_response.model,
+                    provider=llm_response.provider,
+                    is_rim=is_rim,
+                    system_prompt=self.system_prompt_parts.full_text[:500],
+                    user_message=user_message,
+                    tools_available=tools_available,
+                    context_tokens=len(self.system_prompt_parts.full_text) + sum(len(m.get("content", "")) for m in messages)
+                )
+                self.structured_logger.log_llm_response(
+                    response_text=llm_response.content,
+                    stop_reason="end_turn",  # LLMResponse doesn't include stop_reason
+                    prompt_tokens=llm_response.usage.prompt_tokens,
+                    completion_tokens=llm_response.usage.completion_tokens,
+                    latency_ms=turn_elapsed * 1000,
+                    model=llm_response.model,
+                    is_rim=is_rim
+                )
 
             # 3. Parse response: tool_call | final_answer | malformed
             parsed = self._parse_response(llm_response.content)
@@ -230,6 +274,20 @@ class RIMQALoop:
 
                 tool_elapsed = time.perf_counter() - tool_start
                 tool_total_ms += tool_elapsed * 1000
+
+                # Log tool call if structured logger is available
+                if self.structured_logger and self.request_id:
+                    is_rim = self.mode == "rim"
+                    self.structured_logger.log_tool_call(
+                        tool_name=tool_name,
+                        arguments=arguments,
+                        is_rim=is_rim,
+                        turn_number=turn_index,
+                        execution_time_ms=tool_elapsed * 1000,
+                        success=tool_observation.success,
+                        result=tool_observation.data if tool_observation.success else None,
+                        error=tool_observation.error.get("message") if tool_observation.error else None
+                    )
 
                 # 7. Sanitize observation to prevent context explosion
                 sanitized_data = self.guardrails.sanitize_observation(tool_observation.data)
