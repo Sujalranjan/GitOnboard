@@ -57,9 +57,25 @@ function DashboardContent() {
         window.location.href = "/";
       } else {
         fetchRepos();
+
+        // Poll for updates while jobs are in progress
+        const pollInterval = setInterval(() => {
+          // Check if any repos have jobs in progress
+          const hasActiveJobs = repos.some(r =>
+            ['queued', 'downloading', 'analyzing', 'saving'].includes((r.job_status || '').toLowerCase())
+          );
+
+          if (hasActiveJobs) {
+            fetchRepos();
+          } else {
+            clearInterval(pollInterval);
+          }
+        }, 2000); // Poll every 2 seconds
+
+        return () => clearInterval(pollInterval);
       }
     }
-  }, [authLoading, isAuthenticated]);
+  }, [authLoading, isAuthenticated, repos]);
 
   const repoList = Array.isArray(repos) ? repos : [];
   const filteredRepos = repoList.filter((repo) => {
