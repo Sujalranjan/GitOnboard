@@ -212,16 +212,20 @@ function DashboardContent() {
                   )}
                   
                   {['Queued', 'Downloading', 'Analyzing', 'Saving', 'Processing'].includes(repo.status) || ['Queued', 'Downloading', 'Analyzing', 'Saving'].includes(repo.job_status) ? (() => {
-                    const statusMap: Record<string, number> = {
-                      "Queued": 10,
-                      "Downloading": 30,
-                      "Analyzing": 60,
-                      "Saving": 90,
-                      "Completed": 100,
-                      "Failed": 0
-                    };
+                    // Use real-time progress from API if available
+                    const progress = repo.progress ?? (() => {
+                      const statusMap: Record<string, number> = {
+                        "queued": 11,      // Changed from 10 to identify which mapping
+                        "downloading": 31, // Changed from 30
+                        "analyzing": 61,   // Changed from 60
+                        "saving": 91,      // Changed from 90
+                        "completed": 100,
+                        "failed": 0
+                      };
+                      const currentStatus = (repo.job_status || "Queued").toLowerCase();
+                      return statusMap[currentStatus] || 11;
+                    })();
                     const currentStatus = repo.job_status || "Queued";
-                    const progress = statusMap[currentStatus] || 10;
                     
                     return (
                       <div className="mt-4">

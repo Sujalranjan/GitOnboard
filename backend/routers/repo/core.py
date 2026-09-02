@@ -192,12 +192,26 @@ def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_c
         latest = db.query(Analysis).filter(Analysis.repository_id == r.id).order_by(Analysis.created_at.desc()).first()
         status = latest.status if latest else "Unknown"
         job_status = "Unknown"
+        progress = 0
+
         if latest:
             job = db.query(AnalysisJob).filter(AnalysisJob.analysis_id == latest.id).first()
             if job:
-                job_status = job.status
+                job_status = job.status.lower()  # Normalize to lowercase
+                # Calculate progress based on job status
+                # BACKEND PROGRESS MAP (changed for debugging)
+                progress_map = {
+                    "queued": 15,      # Backend: 15
+                    "downloading": 25, # Backend: 25
+                    "analyzing": 55,   # Backend: 55
+                    "saving": 85,      # Backend: 85
+                    "completed": 100,
+                    "failed": 0,
+                    "cancelled": 0
+                }
+                progress = progress_map.get(job_status, 0)
             else:
-                job_status = latest.status
+                job_status = latest.status.lower()
         
         parts = r.url.rstrip("/").split("/")
         repo_name = parts[-1]
@@ -232,6 +246,7 @@ def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_c
             "url": r.url,
             "status": status,
             "job_status": job_status,
+            "progress": progress,
             "import_time": latest.created_at.isoformat() if latest else None,
             "language": language_str,
             "frameworks": frameworks,

@@ -510,7 +510,8 @@ function SidePanel({
                             <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs">
                               {typeof e?.name === 'string' ? e.name : JSON.stringify(e?.name ?? 'unknown')}
                             </code>
-                            {e?.entity_type && <span className="ml-1 text-gray-500">({e.entity_type})</span>}
+                            {/* @ts-ignore */}
+                            {e?.entity_type ? <span className="ml-1 text-gray-500">{`(${String(e.entity_type)})`}</span> : undefined}
                           </li>
                         ))}
                         {(traceData?.rim_metadata_seed_entities ?? []).length > 5 && (
