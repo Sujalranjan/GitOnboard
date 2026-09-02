@@ -85,16 +85,21 @@ export default function RepositoryOverviewPage() {
   }
 
   if (data && data.status === 'processing') {
-    const statusMap: Record<string, number> = {
-      "Queued": 10,
-      "Downloading": 30,
-      "Analyzing": 60,
-      "Saving": 90,
-      "Completed": 100,
-      "Failed": 0
-    };
-    const currentStatus = data.job_status || "Queued";
-    const progress = statusMap[currentStatus] || 10;
+    // Normalize status to lowercase for consistent matching
+    const currentStatus = (data.job_status || "queued").toLowerCase();
+
+    // Use real-time progress from backend if available, otherwise use status-based estimate
+    const progress = data.progress ?? (() => {
+      const statusMap: Record<string, number> = {
+        "queued": 5,
+        "downloading": 20,
+        "analyzing": 50,
+        "saving": 75,
+        "completed": 100,
+        "failed": 0
+      };
+      return statusMap[currentStatus] || 5;
+    })();
 
     const handleCancel = async () => {
       setIsCanceling(true);
@@ -124,7 +129,7 @@ export default function RepositoryOverviewPage() {
           </div>
         </div>
         <div className="flex justify-between w-full text-sm font-medium text-slate-600 mt-2">
-          <span>{currentStatus}...</span>
+          <span>{currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}...</span>
           <span>{progress}%</span>
         </div>
 
