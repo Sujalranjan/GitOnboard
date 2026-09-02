@@ -17,8 +17,8 @@ CHROMA_BASE_DIR = Path("/tmp/chroma")
 
 semantic_router = APIRouter(tags=["semantic"])
 
-@semantic_router.get("/{repo_name}/semantic-status")
-def semantic_status_repo(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@semantic_router.get("/{repo_name}/semantic-status", include_in_schema=False)
+def semantic_status_repo(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), skip_logging: bool = True):
     from backend.routers.repo.services.analysis import get_latest_analysis
     try:
         repo, latest_analysis = get_latest_analysis(repo_name, db, current_user)
@@ -33,115 +33,83 @@ def semantic_status_repo(repo_name: str, db: Session = Depends(get_db), current_
 
 @semantic_router.post("/{repo_name}/semantic-index", include_in_schema=False)
 def semantic_index_repo(repo_name: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Check if semantic index is already built during analysis. If so, return immediately."""
+    try:
+        from backend.routers.repo.services.analysis import get_latest_analysis
+        repo, latest_analysis = get_latest_analysis(repo_name, db, current_user)
+
+        # Check if semantic_index_db artifact already exists
+        existing_artifact = db.query(AnalysisArtifact).filter(
+            AnalysisArtifact.analysis_id == latest_analysis.id,
+            AnalysisArtifact.type == "semantic_index_db"
+        ).first()
+
+        if existing_artifact:
+            logger.info(f"Semantic index already built for {repo_name}")
+            set_task_status(repo_name, "semantic_index", "completed", current_user, db)
+            return {"status": "completed", "source": "pre_built"}
+    except Exception as e:
+        logger.debug(f"Could not check existing semantic index: {e}")
+
     current_status = get_task_status(repo_name, "semantic_index", current_user, db)
     if current_status == "processing":
         return {"status": "processing"}
-        
+
     set_task_status(repo_name, "semantic_index", "processing", current_user, db)
     
     def background_semantic_index():
         from backend.database import SessionLocal
+        from backend.config import settings
         bg_db = SessionLocal()
         try:
             import chromadb
             from backend.routers.repo.services.analysis import get_latest_analysis
+            from backend.models.fact_store import FactSymbol, FactFile
+
             repo, latest_analysis = get_latest_analysis(repo_name, bg_db, current_user)
-            query_layer = get_or_build_model(repo_name, bg_db, current_user)
+            logger.info(f"Building semantic index for {repo_name} (analysis_id={latest_analysis.id})")
+
             target_dir = CHROMA_BASE_DIR / f"user_{current_user.id}" / f"repo_{repo.id}" / f"analysis_{latest_analysis.id}"
             chroma_dir = target_dir / "chroma"
             chroma_dir.mkdir(parents=True, exist_ok=True)
-            state_file = target_dir / "semantic_index_state.json"
-            state = {}
-            if state_file.exists():
-                try:
-                    with open(state_file, "r") as f:
-                        state = json.load(f)
-                except Exception:
-                    state = {}
+
             client = chromadb.PersistentClient(path=str(chroma_dir.absolute()))
             collection = client.get_or_create_collection(name="semantic_index")
-            current_files = {}
-            for f in query_layer.get_files():
-                from backend.intelligence.rim.enums import EntityType
-                is_supported = f.metadata.get("is_supported", False) or f.type == EntityType.FILE
-                if is_supported:
-                    path = f.location.repository_path
-                    try:
-                        mtime = (target_dir / path).stat().st_mtime
-                    except Exception:
-                        mtime = 0
-                    current_files[path] = mtime
-            deleted_files = set(state.keys()) - set(current_files.keys())
-            modified_files = set()
-            new_files = set(current_files.keys()) - set(state.keys())
-            for f in current_files:
-                if f in state and current_files[f] > state[f]:
-                    modified_files.add(f)
-            files_to_process = new_files | modified_files
-            files_to_delete_chunks = deleted_files | modified_files
-            status = "up to date"
-            if not state:
-                status = "indexed"
-            elif files_to_process or files_to_delete_chunks:
-                status = "updated"
-            if not files_to_process and not files_to_delete_chunks:
-                set_task_status(repo_name, "semantic_index", "completed", current_user, bg_db)
-                return
-            if files_to_delete_chunks:
-                for f in files_to_delete_chunks:
-                    try:
-                        collection.delete(where={"file_path": f})
-                    except Exception:
-                        pass
+
+            # Index entities from FactStore database (persistent data, not deleted files)
             documents = []
             metadatas = []
             ids = []
-            from backend.intelligence.parser import LanguageParser
-            parser = LanguageParser()
-            
-            for rel_str in files_to_process:
-                pf = target_dir / rel_str
-                ext = pf.suffix.lower()
-                if not parser.supports_extension(ext):
-                    continue
-                    
-                try:
-                    with open(pf, "r", encoding="utf-8") as f:
-                        source = f.read()
-                    tree, _ = parser.parse_source(source, ext)
-                    parsed_entities = parser.extract_entities(tree, source, rel_str, "")
-                    
-                    for cls in parsed_entities.get("classes", []):
-                        if cls.get("source_segment"):
-                            documents.append(cls["source_segment"])
-                            metadatas.append({
-                                "file_path": rel_str,
-                                "type": "class",
-                                "name": cls["name"]
-                            })
-                            ids.append(str(uuid.uuid4()))
-                            
-                    for fn in parsed_entities.get("functions", []):
-                        if fn.get("source_segment"):
-                            documents.append(fn["source_segment"])
-                            metadatas.append({
-                                "file_path": rel_str,
-                                "type": "function",
-                                "name": fn["name"]
-                            })
-                            ids.append(str(uuid.uuid4()))
-                            
-                    for md in parsed_entities.get("methods", []):
-                        if md.get("source_segment"):
-                            documents.append(md["source_segment"])
-                            metadatas.append({
-                                "file_path": rel_str,
-                                "type": "function",
-                                "name": md["name"]
-                            })
-                            ids.append(str(uuid.uuid4()))
-                except Exception:
-                    pass
+
+            # Get all symbols from FactStore for this analysis
+            symbols = bg_db.query(FactSymbol).filter(FactSymbol.analysis_id == latest_analysis.id).all()
+            logger.info(f"Found {len(symbols)} symbols to index for analysis {latest_analysis.id}")
+            for sym in symbols:
+                doc = f"{sym.name}"  # Simple name for embedding
+                documents.append(doc)
+                metadatas.append({
+                    "file_path": sym.file.path if sym.file else "unknown",
+                    "type": "symbol",
+                    "name": sym.name,
+                })
+                ids.append(str(uuid.uuid4()))
+
+            # Get all files from FactStore for this analysis
+            files = bg_db.query(FactFile).filter(FactFile.analysis_id == latest_analysis.id).all()
+            logger.info(f"Found {len(files)} files to index for analysis {latest_analysis.id}")
+            for file_obj in files:
+                doc = file_obj.path
+                documents.append(doc)
+                metadatas.append({
+                    "file_path": file_obj.path,
+                    "type": "file",
+                    "name": file_obj.path,
+                })
+                ids.append(str(uuid.uuid4()))
+
+            # Upsert to Chroma
+            total_docs = len(documents)
+            logger.info(f"Total documents to index: {total_docs}")
             if documents:
                 batch_size = 2000
                 for i in range(0, len(documents), batch_size):
@@ -150,19 +118,13 @@ def semantic_index_repo(repo_name: str, background_tasks: BackgroundTasks, db: S
                         metadatas=metadatas[i:i+batch_size],
                         ids=ids[i:i+batch_size]
                     )
-            for f in deleted_files:
-                if f in state:
-                    del state[f]
-            for f in files_to_process:
-                state[f] = current_files[f]
-            try:
-                with open(state_file, "w") as f:
-                    json.dump(state, f, indent=2)
-            except Exception:
-                pass
+                logger.info(f"Successfully indexed {total_docs} documents to Chroma for {repo_name}")
+            else:
+                logger.warning(f"No documents to index for {repo_name} (analysis {latest_analysis.id})")
+
             set_task_status(repo_name, "semantic_index", "completed", current_user, bg_db)
         except Exception as e:
-            logger.error(f"Semantic index failed: {e}")
+            logger.error(f"Semantic index build failed for {repo_name}: {str(e)}", exc_info=True)
             set_task_status(repo_name, "semantic_index", "failed", current_user, bg_db)
         finally:
             bg_db.close()

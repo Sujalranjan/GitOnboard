@@ -24,7 +24,9 @@
       "Bash(docker exec repository_intelligence_platform-postgres-1 *)",
       "Bash(docker exec *)",
       "Bash(uv sync *)",
-      "Bash(uv add *)"
+      "Bash(uv add *)",
+      "Bash(docker-compose down *)",
+      "Bash(docker-compose up *)"
     ]
   }
 }

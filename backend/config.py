@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     # JWT Config
     jwt_secret: str = "change_me_in_production"
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 1440
+    jwt_expire_minutes: int = 10080  # 7 days instead of 1 day
 
     # Frontend URL (for redirects)
     local_frontend_url: str = "http://localhost:3000"

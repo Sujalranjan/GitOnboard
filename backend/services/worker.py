@@ -45,6 +45,7 @@ class AnalysisWorker(WorkerInterface):
             job.status = "Downloading"
             job.started_at = datetime.now(timezone.utc)
             db.commit()
+            logger.info(f"Job {job_id}: status → Downloading")
 
             # Parse owner/repo from url
             # e.g., https://github.com/owner/repo
@@ -76,6 +77,7 @@ class AnalysisWorker(WorkerInterface):
 
                 job.status = "Analyzing"
                 db.commit()
+                logger.info(f"Job {job_id}: status → Analyzing")
 
                 # 2. Analyze
                 def run_analysis():
@@ -244,6 +246,7 @@ class AnalysisWorker(WorkerInterface):
 
                 job.status = "Saving"
                 db.commit()
+                logger.info(f"Job {job_id}: status → Saving")
 
                 # 3. Save artifacts & canonical Layer 4 Fact Store
                 logger.info("Saving artifacts and canonical Fact Store tables...")
@@ -252,12 +255,13 @@ class AnalysisWorker(WorkerInterface):
                     try:
                         from backend.intelligence.store.fact_store import save_rim_to_fact_store
                         save_rim_to_fact_store(db, analysis.id, rim_model)
+                        logger.info(f"Saved {len(rim_model.entities)} entities to Fact Store")
                     except Exception as e:
                         db.rollback()
                         logger.error(f"Error persisting facts to Fact Store: {e}")
 
                     # Build retrieval indexes (BM25 and Chroma) for this analysis
-                    logger.info("Building retrieval indexes...")
+                    logger.info("Building semantic and lexical indexes...")
                     try:
                         from backend.intelligence.retrieval.retriever import HybridRetriever
                         from backend.intelligence.retrieval.semantic_builder import SemanticIndexBuilder
@@ -265,7 +269,6 @@ class AnalysisWorker(WorkerInterface):
                         # Build BM25 index and store in memory for export
                         retriever_temp = HybridRetriever(db=db, analysis_id=analysis.id)
                         if retriever_temp.bm25_index:
-                            # Export BM25 index - store the documents and statistics for later rebuild
                             bm25_data = {
                                 "documents": retriever_temp.bm25_index.documents,
                                 "idf": dict(retriever_temp.bm25_index.idf),
@@ -274,16 +277,16 @@ class AnalysisWorker(WorkerInterface):
                                 "avg_doc_len": retriever_temp.bm25_index.avg_doc_len,
                             }
                             results["bm25_index"] = bm25_data
-                            logger.info(f"BM25 index built with {len(bm25_data['documents'])} documents")
+                            logger.info(f"BM25 index ready with {len(bm25_data['documents'])} documents")
 
                         # Build Chroma semantic index
                         semantic_builder = SemanticIndexBuilder()
                         chroma_bytes = semantic_builder.build_index(rim_model.entities)
                         if chroma_bytes:
                             results["semantic_index_db"] = chroma_bytes
-                            logger.info(f"Semantic index built: {len(chroma_bytes)} bytes")
+                            logger.info(f"Semantic index ready: {len(chroma_bytes)} bytes")
                         else:
-                            logger.warning("Semantic index build skipped (chromadb unavailable or no entities)")
+                            logger.warning("Semantic index build skipped (no entities)")
                     except Exception as e:
                         logger.warning(f"Failed to build retrieval indexes: {e}", exc_info=True)
 
@@ -305,10 +308,11 @@ class AnalysisWorker(WorkerInterface):
 
                 # Update Analysis
                 analysis.status = "Completed"
-                
+
                 job.status = "Completed"
                 job.completed_at = datetime.now(timezone.utc)
                 db.commit()
+                logger.info(f"Job {job_id}: status → Completed")
                 logger.info(f"Job {job_id} completed successfully.")
 
                 # Record commit & analysis summary in dedicated log file

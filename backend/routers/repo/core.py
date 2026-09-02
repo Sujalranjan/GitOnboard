@@ -16,6 +16,40 @@ logger = logging.getLogger(__name__)
 import_router = APIRouter(tags=["repositories"])
 core_router = APIRouter(tags=["repositories"])
 
+@core_router.get("/{repo_name}/job-progress", include_in_schema=False)
+def get_job_progress(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Return current job progress with percentage."""
+    try:
+        repo, analysis = get_latest_analysis(repo_name, db, current_user)
+        job = db.query(AnalysisJob).filter(AnalysisJob.analysis_id == analysis.id).first()
+
+        if not job:
+            return {"status": "no_job", "progress": 0}
+
+        # Map status to progress percentage
+        status_map = {
+            "Queued": 5,
+            "Downloading": 20,
+            "Analyzing": 50,
+            "Saving": 75,
+            "Completed": 100,
+            "Failed": 0,
+            "Cancelled": 0,
+        }
+
+        progress = status_map.get(job.status, 0)
+
+        return {
+            "job_id": job.id,
+            "status": job.status,
+            "progress": progress,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+            "error": job.error,
+        }
+    except HTTPException:
+        return {"status": "no_analysis", "progress": 0}
+
 @import_router.post("")
 async def import_repo(req: ImportRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     url = req.url

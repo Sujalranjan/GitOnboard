@@ -223,8 +223,8 @@ async def correlation_id_middleware(request: Request, call_next):
         duration_ms = (time.time() - start_time) * 1000
         response.headers["X-Correlation-ID"] = correlation_id
 
-        # Emit structured execution log for non-health endpoints
-        if not path.endswith("/health") and path != "/":
+        # Emit structured execution log for non-health endpoints (skip noisy status checks)
+        if not path.endswith("/health") and path != "/" and "semantic-status" not in path:
             emit_execution_log(
                 event_type="http_request",
                 status=str(response.status_code),

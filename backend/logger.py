@@ -8,6 +8,12 @@ from typing import Any, Dict, Optional
 
 LOGS_DIR = Path("logs")
 
+
+class SuppressSemanticStatusFilter(logging.Filter):
+    """Suppress noisy semantic-status endpoint logs."""
+    def filter(self, record):
+        return "semantic-status" not in record.getMessage()
+
 # Correlation ID Context Variables
 correlation_id_ctx = contextvars.ContextVar[str]("correlation_id", default="")
 repo_id_ctx = contextvars.ContextVar[str]("repo_id", default="")
@@ -138,6 +144,7 @@ def setup_logging():
             return record.levelno < logging.WARNING
 
     console_handler.addFilter(NonErrorFilter())
+    console_handler.addFilter(SuppressSemanticStatusFilter())
     root_logger.addHandler(console_handler)
 
     # 2. General App Log File (logs/app.log): All debug & info events, rotated (10MB, 5 backups)
@@ -149,6 +156,7 @@ def setup_logging():
     )
     app_file_handler.setLevel(logging.DEBUG)
     app_file_handler.setFormatter(detailed_formatter)
+    app_file_handler.addFilter(SuppressSemanticStatusFilter())
     root_logger.addHandler(app_file_handler)
 
     # 3. Errors & Warnings Log File (logs/errors.log): ONLY Warnings, Errors, Exceptions with full tracebacks
@@ -162,11 +170,14 @@ def setup_logging():
     error_file_handler.setFormatter(detailed_formatter)
     root_logger.addHandler(error_file_handler)
 
-    # Silence verbose 3rd-party loggers
+    # Silence verbose 3rd-party loggers and analysis pipeline
     logging.getLogger("azure").setLevel(logging.WARNING)
     logging.getLogger("azure.core").setLevel(logging.WARNING)
     logging.getLogger("azure.storage").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("backend.intelligence").setLevel(logging.WARNING)
+    logging.getLogger("backend.intelligence.engine").setLevel(logging.WARNING)
+    logging.getLogger("backend.intelligence.retrieval").setLevel(logging.WARNING)
 
 
 def log_commit_analysis(repo_name: str, commit_info: dict, analysis_id: int, status: str, file_count: int = 0, duration_seconds: float = 0.0):
