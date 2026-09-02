@@ -1,10 +1,16 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from sqlalchemy.orm import Session
 from backend.models.user import User
 from backend.intelligence.retrieval.lexical import BM25Index, CodeTokenizer
 from backend.intelligence.retrieval.fusion import reciprocal_rank_fusion
 from backend.intelligence.retrieval.expansion import FactStoreExpander
+from backend.intelligence.retrieval.schema import (
+    RetrieverResult,
+    convert_lexical_result_to_schema,
+    convert_semantic_result_to_schema,
+    convert_exact_result_to_schema,
+)
 from backend.models.fact_store import FactSymbol, FactFile, FactRoute, FactDatabaseObject, FactCapability
 
 logger = logging.getLogger(__name__)
@@ -437,8 +443,9 @@ class HybridRetriever:
         self,
         query: str,
         top_k: int = 15,
-        expand_with_fact_store: bool = True
-    ) -> List[Dict[str, Any]]:
+        expand_with_fact_store: bool = True,
+        enable_fallback: bool = True
+    ) -> List[RetrieverResult]:
         """
         Executes end-to-end hybrid retrieval:
         1. Exact Fact Search
@@ -446,16 +453,53 @@ class HybridRetriever:
         3. Semantic Chroma Search
         4. Reciprocal Rank Fusion
         5. Graph/Fact Store Expansion
+
+        When primary strategies return empty, optionally applies fallback:
+        - Decompose query into key terms
+        - Retry with substrings
+        - Use semantic search as final fallback
+
+        Returns canonical RetrieverResult objects that all consumers can rely on.
+
+        Args:
+            query: User query
+            top_k: Number of results to return
+            expand_with_fact_store: Whether to expand with graph relationships
+            enable_fallback: Whether to auto-fallback when primary strategies fail (default: True)
         """
         if not query or not query.strip():
             return []
 
         q = query.strip()
 
+        # Try primary retrieval
+        results = self._retrieve_primary(q, top_k, expand_with_fact_store)
+
+        if results:
+            return results
+
+        # If primary returned empty and fallback enabled, try alternatives
+        if enable_fallback:
+            logger.info(f"[Retrieval] Primary strategies found nothing for '{q}', attempting fallback...")
+            results = self._retrieve_with_fallback(q, top_k, expand_with_fact_store)
+
+        return results
+
+    def _retrieve_primary(
+        self,
+        query: str,
+        top_k: int,
+        expand_with_fact_store: bool
+    ) -> List[RetrieverResult]:
+        """
+        Primary retrieval strategy (exact query on all channels).
+
+        Returns results from BM25 + Semantic + Exact, fused via RRF.
+        """
         # Step 1-3: Parallel retrieval streams
-        exact_results = self._search_exact_facts(q)
-        lexical_results = self._search_lexical(q, top_k=30)
-        semantic_results = self._search_semantic(q, top_k=30)
+        exact_results = self._search_exact_facts(query)
+        lexical_results = self._search_lexical(query, top_k=30)
+        semantic_results = self._search_semantic(query, top_k=30)
 
         # Step 4: RRF Fusion
         ranked_lists = []
@@ -487,6 +531,72 @@ class HybridRetriever:
         # Step 5: Fact Store expansion
         if expand_with_fact_store and self.analysis_id:
             expander = FactStoreExpander(self.db, self.analysis_id, max_expansions_per_seed=2, max_total_context=top_k)
-            return expander.expand_candidates(fused)
+            fused = expander.expand_candidates(fused)
 
-        return fused[:top_k]
+        # Convert to canonical schema
+        return self._convert_to_schema(fused[:top_k])
+
+    def _retrieve_with_fallback(
+        self,
+        query: str,
+        top_k: int,
+        expand_with_fact_store: bool
+    ) -> List[RetrieverResult]:
+        """
+        Fallback retrieval when primary returns empty.
+
+        Tries:
+        1. Query decomposition (key terms separately)
+        2. Substring/prefix matching
+        3. Semantic search emphasis
+        """
+        from backend.intelligence.retrieval.query_expansion import QueryExpander
+
+        primary_terms, fallback_terms = QueryExpander.decompose_query(query)
+
+        # Try key terms individually
+        all_results = {}
+        for term in primary_terms:
+            term_results = self._retrieve_primary(term, top_k, expand_with_fact_store=False)
+            for r in term_results:
+                rid = r.id
+                if rid not in all_results:
+                    all_results[rid] = r
+
+        if all_results:
+            logger.info(f"[Retrieval] Fallback found {len(all_results)} results via key term decomposition")
+            return list(all_results.values())[:top_k]
+
+        # Try substrings
+        for term in fallback_terms:
+            term_results = self._retrieve_primary(term, top_k, expand_with_fact_store=False)
+            for r in term_results:
+                rid = r.id
+                if rid not in all_results:
+                    all_results[rid] = r
+
+        if all_results:
+            logger.info(f"[Retrieval] Fallback found {len(all_results)} results via substring matching")
+            return list(all_results.values())[:top_k]
+
+        logger.info(f"[Retrieval] All fallback strategies failed for '{query}'")
+        return []
+
+    def _convert_to_schema(self, docs: List[dict]) -> List[RetrieverResult]:
+        """Convert internal dict representation to canonical schema."""
+        results = []
+        for doc in docs:
+            score_type = doc.get("score_type", "unknown")
+
+            if score_type == "lexical":
+                schema_result = convert_lexical_result_to_schema(doc)
+            elif score_type == "semantic":
+                schema_result = convert_semantic_result_to_schema(doc)
+            elif score_type == "exact_fact":
+                schema_result = convert_exact_result_to_schema(doc)
+            else:
+                schema_result = convert_lexical_result_to_schema(doc)
+
+            results.append(schema_result)
+
+        return results

@@ -123,8 +123,14 @@ def build_rim_metadata_block(
     # 2. Resolve seeds to ORM objects
     seeds = []
     for cand in candidates[:max_seed_entities]:
-        # Extract entity name from candidate
-        entity_name = cand.get("entity_name") or cand.get("symbol") or cand.get("path") or ""
+        # Extract entity name from candidate (canonical schema)
+        # RetrieverResult has entity_name as guaranteed field
+        entity_name = ""
+        if hasattr(cand, "entity_name"):
+            entity_name = cand.entity_name
+        elif isinstance(cand, dict):
+            entity_name = cand.get("entity_name") or cand.get("name") or cand.get("match_name") or ""
+
         if not entity_name:
             continue
 
@@ -347,7 +353,14 @@ def _build_rim_metadata_block_impl(
     # 2. Resolve seeds to ORM objects
     seeds = []
     for cand in candidates[:max_seed_entities]:
-        entity_name = cand.get("entity_name") or cand.get("symbol") or cand.get("path") or ""
+        # Extract entity name from candidate (canonical schema)
+        # RetrieverResult has entity_name as guaranteed field
+        entity_name = ""
+        if hasattr(cand, "entity_name"):
+            entity_name = cand.entity_name
+        elif isinstance(cand, dict):
+            entity_name = cand.get("entity_name") or cand.get("name") or cand.get("match_name") or ""
+
         if not entity_name:
             continue
 
