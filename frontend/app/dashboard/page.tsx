@@ -56,8 +56,14 @@ function DashboardContent() {
     return '';
   };
 
+  // Determine if any repo has an active job (stable dependency for useEffect)
+  const hasActiveJobs = repos.some(repo => {
+    const jobStatusLower = (repo.job_status || '').toLowerCase();
+    return ['queued', 'downloading', 'analyzing', 'saving'].includes(jobStatusLower);
+  });
+
   useEffect(() => {
-    console.log('[Dashboard] useEffect triggered: authLoading=', authLoading, 'isAuthenticated=', isAuthenticated, 'repos.length=', repos.length);
+    console.log('[Dashboard] useEffect triggered: authLoading=', authLoading, 'isAuthenticated=', isAuthenticated, 'repos.length=', repos.length, 'hasActiveJobs=', hasActiveJobs);
 
     if (!authLoading) {
       if (!isAuthenticated) {
@@ -70,57 +76,81 @@ function DashboardContent() {
         // Subscribe to real-time task updates via SSE for repos with active jobs
         // This ensures we get notified whenever any repo's job status changes
         if (repos.length > 0) {
-          console.log('[Dashboard] repos.length > 0, setting up SSE subscriptions');
-          const setupSSE = () => {
-            const eventSources: EventSource[] = [];
+          console.log('[Dashboard] repos.length > 0, setting up SSE subscriptions and polling');
+          const eventSources: EventSource[] = [];
+          let pollInterval: NodeJS.Timeout | null = null;
 
-            // Subscribe to each repo that has an active job
-            repos.forEach((repo) => {
-              const jobStatusLower = (repo.job_status || '').toLowerCase();
-              console.log(`[SSE Setup] Checking repo "${repo.project_name}": job_status="${repo.job_status}" (lower="${jobStatusLower}")`);
+          // Subscribe to each repo that has an active job
+          repos.forEach((repo) => {
+            const jobStatusLower = (repo.job_status || '').toLowerCase();
+            console.log(`[SSE Setup] Checking repo "${repo.project_name}": job_status="${repo.job_status}" (lower="${jobStatusLower}")`);
 
-              if (jobStatusLower && ['queued', 'downloading', 'analyzing', 'saving'].includes(jobStatusLower)) {
-                console.log(`[SSE Setup] Subscribing to "${repo.project_name}" (job_status="${repo.job_status}")`);
-                try {
-                  const eventSource = new EventSource(`/api/repos/${encodeURIComponent(repo.project_name)}/tasks/stream`);
-                  console.log(`[SSE] Connected to ${repo.project_name}`);
+            if (jobStatusLower && ['queued', 'downloading', 'analyzing', 'saving'].includes(jobStatusLower)) {
+              console.log(`[SSE Setup] Subscribing to "${repo.project_name}" (job_status="${repo.job_status}")`);
+              try {
+                const eventSource = new EventSource(`/api/repos/${encodeURIComponent(repo.project_name)}/tasks/stream`);
+                console.log(`[SSE] Connected to ${repo.project_name}`);
 
-                  eventSource.onmessage = (event) => {
-                    console.log(`[SSE] Message received for ${repo.project_name}:`, event.data);
-                    // When tasks update, fetch repos to get latest status
-                    fetchRepos();
-                  };
+                eventSource.onmessage = (event) => {
+                  console.log(`[SSE] Message received for ${repo.project_name}:`, event.data);
+                  // When tasks update, fetch repos to get latest status
+                  fetchRepos();
+                };
 
-                  eventSource.onerror = (err) => {
-                    console.error(`[SSE] Error for ${repo.project_name}:`, err);
-                    eventSource.close();
-                  };
+                eventSource.onerror = (err) => {
+                  console.error(`[SSE] Error for ${repo.project_name}:`, err);
+                  eventSource.close();
+                };
 
-                  eventSources.push(eventSource);
-                } catch (err) {
-                  console.error(`[SSE] Connection failed for ${repo.project_name}: ${err}`);
-                }
-              } else {
-                console.log(`[SSE Setup] Skipping ${repo.project_name} (job_status not active)`);
+                eventSources.push(eventSource);
+              } catch (err) {
+                console.error(`[SSE] Connection failed for ${repo.project_name}: ${err}`);
               }
-            });
+            } else {
+              console.log(`[SSE Setup] Skipping ${repo.project_name} (job_status not active)`);
+            }
+          });
 
-            console.log(`[SSE Setup] Created ${eventSources.length} SSE connections`);
+          console.log(`[SSE Setup] Created ${eventSources.length} SSE connections`);
 
-            // Return cleanup function to close all SSE connections
-            return () => {
-              console.log('[SSE Cleanup] Closing SSE connections');
-              eventSources.forEach(es => es.close());
-            };
+          // Add polling fallback for active jobs
+          // This ensures UI updates even if SSE connection fails
+          if (hasActiveJobs) {
+            console.log('[Polling] Starting polling for active jobs');
+            pollInterval = setInterval(() => {
+              // Check if any repo still has active job
+              const stillHasActive = repos.some(repo => {
+                const jobStatusLower = (repo.job_status || '').toLowerCase();
+                return ['queued', 'downloading', 'analyzing', 'saving'].includes(jobStatusLower);
+              });
+
+              if (stillHasActive) {
+                console.log('[Polling] Active jobs detected, fetching repos');
+                fetchRepos();
+              } else {
+                console.log('[Polling] No active jobs, stopping polling');
+                if (pollInterval) {
+                  clearInterval(pollInterval);
+                  pollInterval = null;
+                }
+              }
+            }, 1000); // Poll every 1 second
+          }
+
+          // Return cleanup function to close all SSE connections and stop polling
+          return () => {
+            console.log('[SSE Cleanup] Closing SSE connections and stopping polling');
+            eventSources.forEach(es => es.close());
+            if (pollInterval) {
+              clearInterval(pollInterval);
+            }
           };
-
-          return setupSSE();
         } else {
           console.log('[Dashboard] repos.length is 0, not setting up SSE');
         }
       }
     }
-  }, [authLoading, isAuthenticated, repos.length]);
+  }, [authLoading, isAuthenticated, hasActiveJobs]);
 
   const repoList = Array.isArray(repos) ? repos : [];
   const filteredRepos = repoList.filter((repo) => {

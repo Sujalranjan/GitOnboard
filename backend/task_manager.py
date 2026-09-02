@@ -57,6 +57,9 @@ class TaskManager:
             self._statuses[key] = {}
         self._statuses[key][task_name] = status
 
+        subscriber_count = len(self._subscribers.get(key, set()))
+        logger.info(f"[TaskManager] Notification: user_id={user_id}, repo={repo_name}, task={task_name}, status={status}, subscribers={subscriber_count}")
+
         if self._loop and not self._loop.is_closed():
             try:
                 parsed = json.loads(status)
@@ -68,7 +71,10 @@ class TaskManager:
                 payload = json.dumps({task_name: status})
 
             for queue in list(self._subscribers[key]):
+                logger.info(f"[TaskManager] Pushing to queue: {payload}")
                 self._loop.call_soon_threadsafe(queue.put_nowait, payload)
+        else:
+            logger.warning(f"[TaskManager] Event loop not available, notification discarded")
 
     def get_all(self, user_id: int, repo_name: str) -> Dict[str, str]:
         """Return snapshot of all task statuses for a repo."""
