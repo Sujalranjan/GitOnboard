@@ -20,7 +20,9 @@
       "Bash(docker-compose logs *)",
       "Bash(docker-compose exec *)",
       "Bash(curl *)",
-      "Bash(docker restart *)"
+      "Bash(docker restart *)",
+      "Bash(docker exec repository_intelligence_platform-postgres-1 *)",
+      "Bash(docker exec *)"
     ]
   }
 }
