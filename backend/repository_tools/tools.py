@@ -198,10 +198,15 @@ class RepositoryToolLayer:
         query: str,
         file_pattern: Optional[str] = None,
         max_matches: int = 25,
+        max_files_scanned: int = 40,
     ) -> List[Dict[str, Any]]:
         """
         Performs lexical regex/substring search over source files in the repository.
         Searches active worktree if present, or queries Blob Storage via FactStore metadata.
+
+        Args:
+            max_matches: Maximum number of match results to return
+            max_files_scanned: Maximum number of files to scan (prevents unbounded Azure calls)
         """
         results: List[Dict[str, Any]] = []
         try:
@@ -252,11 +257,17 @@ class RepositoryToolLayer:
             )
             from backend.storage import get_storage
             storage = get_storage()
+            files_scanned = 0
             for f_rec in files:
                 if file_pattern and not fnmatch.fnmatch(f_rec.path, file_pattern) and not fnmatch.fnmatch(os.path.basename(f_rec.path), file_pattern):
                     continue
                 if not f_rec.blob_name:
                     continue
+
+                # Stop scanning after max_files_scanned to prevent unbounded Azure calls
+                files_scanned += 1
+                if files_scanned > max_files_scanned:
+                    break
 
                 try:
                     text = storage.get_object_text(f_rec.blob_name)

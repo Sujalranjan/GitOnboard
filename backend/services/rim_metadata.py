@@ -103,7 +103,7 @@ def build_rim_metadata_block(
     """
     logger.info(f"[RIM Metadata] Building metadata block for: {question}")
 
-    block = RimMetadataBlock()
+    block = RimMetadataBlock(text="")
     resolver = TargetEntityResolver(db, analysis_id)
     traverser = FactStoreGraphTraverser(db, analysis_id)
 
@@ -327,7 +327,7 @@ def _build_rim_metadata_block_impl(
     """Implementation of build_rim_metadata_block (same function, avoiding name collision)."""
     logger.info(f"[RIM Metadata] Building metadata block for: {question}")
 
-    block = RimMetadataBlock()
+    block = RimMetadataBlock(text="")
     resolver = TargetEntityResolver(db, analysis_id)
     traverser = FactStoreGraphTraverser(db, analysis_id)
 

@@ -1,8 +1,10 @@
 """RIM Comparison research endpoint (v2 - agentic loop-based)."""
+import logging
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, Body
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -19,6 +21,9 @@ from backend.services.rim_comparison_service_v2 import (
     RIMTrace
 )
 from backend.summary.audit import redact_secrets, sanitize_dict_or_list
+from backend.services.crash_logger import get_crash_logger
+
+logger = logging.getLogger(__name__)
 
 rim_comparison_router = APIRouter(tags=["rim-comparison"])
 
@@ -127,8 +132,21 @@ async def compare_rim(
     - Tool call transcript (proof of iterative one-file-at-a-time retrieval)
     - RIM metadata and query_rim call log (for "What Did RIM Add?" section)
     """
-    service = RIMComparisonService(db=db, repo_name=repo_name, current_user=current_user)
-    result = await service.run_comparison(req.question)
+    try:
+        service = RIMComparisonService(db=db, repo_name=repo_name, current_user=current_user)
+        result = await service.run_comparison(req.question)
+    except Exception as exc:
+        # Log the crash for debugging
+        crash_logger = get_crash_logger()
+        crash_logger.log_exception(
+            exception=exc,
+            endpoint=f"POST /api/repos/{repo_name}/rim-comparison/compare",
+            user_id=current_user.id if current_user else None,
+            repository_id=repo_name,
+            request_body={"question": req.question},
+        )
+        # Re-raise to let FastAPI return 500
+        raise
 
     # Redact secrets from contexts and trace before sending to frontend
     result.without_rim.source_context_block = redact_secrets(result.without_rim.source_context_block)
