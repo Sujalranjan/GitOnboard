@@ -211,6 +211,22 @@ class TestValidRelationshipPersistence:
     def test_local_function_calls_persist(self, db):
         """Verify that relationships between local entities persist correctly."""
         from backend.models.fact_store import FactSymbol, FactRelationship
+        from backend.models.repository import Analysis, Repository
+        from backend.models.user import User
+
+        # Setup: Create user, repository, and analysis records
+        user = User(id=1, github_id="test", username="test", email="test@test.com")
+        db.add(user)
+        db.flush()
+
+        repo = Repository(id=1, url="https://github.com/test/repo", user_id=user.id)
+        db.add(repo)
+        db.flush()
+
+        analysis_id = 100
+        analysis = Analysis(id=analysis_id, repository_id=repo.id, status="Analyzing")
+        db.add(analysis)
+        db.flush()
 
         # Create model with valid local entities and relationships
         model = create_test_model()
@@ -252,7 +268,6 @@ class TestValidRelationshipPersistence:
         )
 
         # Save should succeed
-        analysis_id = 100
         save_rim_to_fact_store(db, analysis_id, model)
 
         # Verify relationships were persisted
@@ -265,6 +280,22 @@ class TestValidRelationshipPersistence:
     def test_multiple_valid_relationships_persist(self, db):
         """Verify that multiple valid relationships all persist."""
         from backend.models.fact_store import FactRelationship
+        from backend.models.repository import Analysis, Repository
+        from backend.models.user import User
+
+        # Setup: Create user, repository, and analysis records
+        user = User(id=2, github_id="test2", username="test2", email="test2@test.com")
+        db.add(user)
+        db.flush()
+
+        repo = Repository(id=2, url="https://github.com/test/repo2", user_id=user.id)
+        db.add(repo)
+        db.flush()
+
+        analysis_id = 101
+        analysis = Analysis(id=analysis_id, repository_id=repo.id, status="Analyzing")
+        db.add(analysis)
+        db.flush()
 
         model = create_test_model()
 
@@ -301,7 +332,6 @@ class TestValidRelationshipPersistence:
             )
 
         # Save should succeed
-        analysis_id = 101
         save_rim_to_fact_store(db, analysis_id, model)
 
         # Verify both relationships persisted
