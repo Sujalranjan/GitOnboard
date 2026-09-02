@@ -42,16 +42,20 @@ class AnalysisWorker(WorkerInterface):
             analysis = db.query(Analysis).filter(Analysis.id == job.analysis_id).first()
             repo = db.query(Repository).filter(Repository.id == analysis.repository_id).first()
 
+            # Parse owner/repo from url early so we can use repo_name for notifications
+            # e.g., https://github.com/owner/repo
+            parts = repo.url.rstrip('/').split('/')
+            owner = parts[-2]
+            repo_name = parts[-1]
+
             job.status = "Downloading"
             job.started_at = datetime.now(timezone.utc)
             db.commit()
             logger.info(f"Job {job_id}: status → Downloading")
 
-            # Parse owner/repo from url
-            # e.g., https://github.com/owner/repo
-            parts = repo.url.rstrip('/').split('/')
-            owner = parts[-2]
-            repo_name = parts[-1]
+            # Notify SSE subscribers
+            from backend.task_manager import task_manager
+            task_manager.notify(repo.user_id, repo_name, "import", "downloading")
             
             # TODO: get user token
             from backend.models.user import User
@@ -78,6 +82,10 @@ class AnalysisWorker(WorkerInterface):
                 job.status = "Analyzing"
                 db.commit()
                 logger.info(f"Job {job_id}: status → Analyzing")
+
+                # Notify SSE subscribers
+                from backend.task_manager import task_manager
+                task_manager.notify(repo.user_id, repo_name, "import", "analyzing")
 
                 # 2. Analyze
                 def run_analysis():
@@ -248,6 +256,10 @@ class AnalysisWorker(WorkerInterface):
                 db.commit()
                 logger.info(f"Job {job_id}: status → Saving")
 
+                # Notify SSE subscribers
+                from backend.task_manager import task_manager
+                task_manager.notify(repo.user_id, repo_name, "import", "saving")
+
                 # 3. Save artifacts & canonical Layer 4 Fact Store
                 logger.info("Saving artifacts and canonical Fact Store tables...")
                 rim_model = results.pop("rim_model", None)
@@ -315,6 +327,10 @@ class AnalysisWorker(WorkerInterface):
                 logger.info(f"Job {job_id}: status → Completed")
                 logger.info(f"Job {job_id} completed successfully.")
 
+                # Notify SSE subscribers of completion
+                from backend.task_manager import task_manager
+                task_manager.notify(repo.user_id, repo_name, "import", "completed")
+
                 # Record commit & analysis summary in dedicated log file
                 try:
                     from backend.logger import log_commit_analysis
@@ -332,6 +348,10 @@ class AnalysisWorker(WorkerInterface):
                 job.completed_at = datetime.now(timezone.utc)
                 analysis.status = "Failed"
                 db.commit()
+
+                # Notify SSE subscribers of failure
+                from backend.task_manager import task_manager
+                task_manager.notify(repo.user_id, repo_name, "import", "failed")
 
                 try:
                     from backend.logger import log_commit_analysis

@@ -58,29 +58,38 @@ function DashboardContent() {
       } else {
         fetchRepos();
 
-        // Subscribe to real-time task updates via SSE instead of polling
+        // Subscribe to real-time task updates via SSE for repos with active jobs
+        // This ensures we get notified whenever any repo's job status changes
         if (repos.length > 0) {
           const setupSSE = () => {
-            // Get first repo name to subscribe to its task stream
-            const repoName = repos[0]?.project_name;
-            if (!repoName) return;
+            const eventSources: EventSource[] = [];
 
-            try {
-              const eventSource = new EventSource(`/api/repos/${repoName}/tasks/stream`);
+            // Subscribe to each repo that has an active job
+            repos.forEach((repo) => {
+              if (repo.job_status && ['queued', 'downloading', 'analyzing', 'saving'].includes(repo.job_status)) {
+                try {
+                  const eventSource = new EventSource(`/api/repos/${encodeURIComponent(repo.project_name)}/tasks/stream`);
 
-              eventSource.onmessage = (event) => {
-                // When tasks update, fetch repos to get latest status
-                fetchRepos();
-              };
+                  eventSource.onmessage = (event) => {
+                    // When tasks update, fetch repos to get latest status
+                    fetchRepos();
+                  };
 
-              eventSource.onerror = () => {
-                eventSource.close();
-              };
+                  eventSource.onerror = () => {
+                    eventSource.close();
+                  };
 
-              return () => eventSource.close();
-            } catch (err) {
-              console.debug("SSE not available, falling back gracefully");
-            }
+                  eventSources.push(eventSource);
+                } catch (err) {
+                  console.debug(`SSE connection failed for ${repo.project_name}: ${err}`);
+                }
+              }
+            });
+
+            // Return cleanup function to close all SSE connections
+            return () => {
+              eventSources.forEach(es => es.close());
+            };
           };
 
           return setupSSE();
@@ -239,7 +248,7 @@ function DashboardContent() {
                     </div>
                   )}
                   
-                  {['Queued', 'Downloading', 'Analyzing', 'Saving', 'Processing'].includes(repo.status) || ['Queued', 'Downloading', 'Analyzing', 'Saving'].includes(repo.job_status) ? (() => {
+                  {(['queued', 'downloading', 'analyzing', 'saving', 'processing'].includes((repo.status || '').toLowerCase()) || ['queued', 'downloading', 'analyzing', 'saving'].includes((repo.job_status || '').toLowerCase())) ? (() => {
                     // Use real-time progress from API if available
                     const progress = repo.progress ?? (() => {
                       const statusMap: Record<string, number> = {
