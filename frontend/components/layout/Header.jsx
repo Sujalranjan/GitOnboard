@@ -13,10 +13,15 @@ export function Header() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   const [query, setQuery] = useState(searchParams ? (searchParams.get('search') || '') : '');
   const [debounceTimeout, setDebounceTimeout] = useState(null);
   const searchInputRef = React.useRef(null);
+  const [mounted, setMounted] = useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const isInsideRepository = Boolean(pathname?.startsWith('/repository'));
 
@@ -93,27 +98,31 @@ export function Header() {
       
       <div className="flex items-center gap-2 sm:gap-4">
         <ThemeToggle />
-        {user ? (
-          <>
-            <Button variant="ghost" size="icon" className="relative text-slate-500 dark:text-slate-400 hidden sm:flex">
-              <Bell className="h-5 w-5" />
+        {mounted && !isLoading ? (
+          user ? (
+            <>
+              <Button variant="ghost" size="icon" className="relative text-slate-500 dark:text-slate-400 hidden sm:flex">
+                <Bell className="h-5 w-5" />
+              </Button>
+              <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 overflow-hidden flex items-center justify-center">
+                {user.avatar ? (
+                  <img src={user.avatar} alt={user.username} className="h-full w-full object-cover" />
+                ) : (
+                  <User className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+                )}
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-1">
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" size="sm" onClick={() => window.location.href = "/api/auth/github/login"}>
+              Log In
             </Button>
-            <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 overflow-hidden flex items-center justify-center">
-              {user.avatar ? (
-                <img src={user.avatar} alt={user.username} className="h-full w-full object-cover" />
-              ) : (
-                <User className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-              )}
-            </div>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-1">
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Logout</span>
-            </Button>
-          </>
+          )
         ) : (
-          <Button variant="primary" size="sm" onClick={() => window.location.href = "/api/auth/github/login"}>
-            Log In
-          </Button>
+          <div className="h-9 w-20 rounded bg-slate-200 dark:bg-slate-800 animate-pulse" />
         )}
       </div>
     </header>
