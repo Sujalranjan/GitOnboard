@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from backend.intelligence.retrieval.retriever import HybridRetriever
 from backend.intelligence.retrieval.graph_traverser import FactStoreGraphTraverser
 from backend.agent.intent.semantic_query import SemanticQueryClass, TraversalDirection, SemanticQueryIntent
-from backend.models.fact_store import FactSymbol, FactFile, FactRoute, FactDatabaseObject
+from backend.models.fact_store import FactSymbol, FactFile, FactRoute, FactDatabaseObject, FactCapability
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,85 @@ class TargetEntityResolver:
         self.db = db
         self.analysis_id = analysis_id
 
-    def resolve(self, entity_name: str) -> Optional[Any]:
-        """Resolve entity name to FactSymbol/FactFile/FactRoute/FactDatabaseObject."""
+    def resolve(self, entity_name: str, entity_type: Optional[str] = None) -> Optional[Any]:
+        """Resolve entity name to FactSymbol/FactFile/FactRoute/FactDatabaseObject.
+
+        Args:
+            entity_name: Name of the entity to resolve
+            entity_type: Optional entity type hint (from retriever). Can be 'SYMBOL', 'ROUTE', 'FILE', 'DATABASE_OBJECT', 'CAPABILITY', etc.
+
+        Returns:
+            Resolved ORM object or None
+        """
+        # If entity_type provided, try specific table first
+        if entity_type:
+            entity_type_upper = str(entity_type).upper()
+
+            # ROUTE type → search FactRoute
+            if 'ROUTE' in entity_type_upper:
+                # entity_name might be "METHOD /path" or just "/path"
+                # Try matching against path with method prefix first
+                search_patterns = [
+                    entity_name,  # Try full match (METHOD /path)
+                    entity_name.split(' ', 1)[-1] if ' ' in entity_name else None,  # Try just /path
+                ]
+
+                route = None
+                for pattern in search_patterns:
+                    if not pattern:
+                        continue
+                    route = self.db.query(FactRoute).filter(
+                        FactRoute.analysis_id == self.analysis_id,
+                        FactRoute.path.ilike(f"%{pattern}%"),
+                    ).first()
+                    if route:
+                        break
+
+                if route:
+                    logger.debug(f"[Resolver] Resolved {entity_name} to FactRoute via entity_type hint (path={route.path})")
+                    return route
+
+            # SYMBOL type → search FactSymbol
+            if 'SYMBOL' in entity_type_upper:
+                symbol = self.db.query(FactSymbol).filter(
+                    FactSymbol.analysis_id == self.analysis_id,
+                    FactSymbol.name.ilike(entity_name),
+                ).first()
+                if symbol:
+                    logger.debug(f"[Resolver] Resolved {entity_name} to FactSymbol via entity_type hint")
+                    return symbol
+
+            # FILE/PATH type → search FactFile
+            if 'FILE' in entity_type_upper or 'PATH' in entity_type_upper:
+                file = self.db.query(FactFile).filter(
+                    FactFile.analysis_id == self.analysis_id,
+                    FactFile.path.ilike(f"%{entity_name}%"),
+                ).first()
+                if file:
+                    logger.debug(f"[Resolver] Resolved {entity_name} to FactFile via entity_type hint")
+                    return file
+
+            # DATABASE/TABLE type → search FactDatabaseObject
+            if 'DATABASE' in entity_type_upper or 'TABLE' in entity_type_upper:
+                db_obj = self.db.query(FactDatabaseObject).filter(
+                    FactDatabaseObject.analysis_id == self.analysis_id,
+                    FactDatabaseObject.name.ilike(entity_name),
+                ).first()
+                if db_obj:
+                    logger.debug(f"[Resolver] Resolved {entity_name} to FactDatabaseObject via entity_type hint")
+                    return db_obj
+
+            # CAPABILITY type → search FactCapability
+            if 'CAPABILITY' in entity_type_upper:
+                capability = self.db.query(FactCapability).filter(
+                    FactCapability.analysis_id == self.analysis_id,
+                    FactCapability.name.ilike(entity_name),
+                ).first()
+                if capability:
+                    logger.debug(f"[Resolver] Resolved {entity_name} to FactCapability via entity_type hint")
+                    return capability
+
+        # Fallback: try all tables in order
         # Try FactSymbol
         symbol = self.db.query(FactSymbol).filter(
             FactSymbol.analysis_id == self.analysis_id,
@@ -52,13 +129,20 @@ class TargetEntityResolver:
         if file:
             return file
 
-        # Try FactRoute
-        route = self.db.query(FactRoute).filter(
-            FactRoute.analysis_id == self.analysis_id,
-            FactRoute.path.ilike(f"%{entity_name}%"),
-        ).first()
-        if route:
-            return route
+        # Try FactRoute (entity_name might be "METHOD /path" or just "/path")
+        search_patterns = [
+            entity_name,
+            entity_name.split(' ', 1)[-1] if ' ' in entity_name else None,
+        ]
+        for pattern in search_patterns:
+            if not pattern:
+                continue
+            route = self.db.query(FactRoute).filter(
+                FactRoute.analysis_id == self.analysis_id,
+                FactRoute.path.ilike(f"%{pattern}%"),
+            ).first()
+            if route:
+                return route
 
         # Try FactDatabaseObject
         db_obj = self.db.query(FactDatabaseObject).filter(
@@ -67,6 +151,14 @@ class TargetEntityResolver:
         ).first()
         if db_obj:
             return db_obj
+
+        # Try FactCapability
+        capability = self.db.query(FactCapability).filter(
+            FactCapability.analysis_id == self.analysis_id,
+            FactCapability.name.ilike(entity_name),
+        ).first()
+        if capability:
+            return capability
 
         return None
 
@@ -120,9 +212,10 @@ def build_rim_metadata_block(
         logger.info("[RIM Metadata] No seeds resolved; returning empty block")
         return block
 
-    # 2. Resolve seeds to ORM objects
+    # 2. Resolve seeds to ORM objects (try ALL candidates, keep those that resolve)
     seeds = []
-    for cand in candidates[:max_seed_entities]:
+    resolved_count = 0
+    for cand in candidates:
         # Extract entity name from candidate (canonical schema)
         # RetrieverResult has entity_name as guaranteed field
         entity_name = ""
@@ -134,10 +227,20 @@ def build_rim_metadata_block(
         if not entity_name:
             continue
 
-        target = resolver.resolve(entity_name)
+        # Extract entity_type if available to guide resolution
+        entity_type = None
+        if hasattr(cand, "entity_type"):
+            entity_type = cand.entity_type
+        elif isinstance(cand, dict):
+            entity_type = cand.get("entity_type")
+
+        logger.debug(f"[RIM Metadata] Resolving: {entity_name} (type: {entity_type})")
+        target = resolver.resolve(entity_name, entity_type)
         if target:
             seeds.append((entity_name, target, cand))
             logger.debug(f"[RIM Metadata] Resolved seed: {entity_name} -> {type(target).__name__}")
+        else:
+            logger.warning(f"[RIM Metadata] Failed to resolve: {entity_name} (type: {entity_type})")
 
     if not seeds:
         block.text = "RIM_METADATA: No structural facts could be resolved for this question in this repository's index."
@@ -350,9 +453,10 @@ def _build_rim_metadata_block_impl(
         logger.info("[RIM Metadata] No seeds resolved; returning empty block")
         return block
 
-    # 2. Resolve seeds to ORM objects
+    # 2. Resolve seeds to ORM objects (try ALL candidates, keep those that resolve)
     seeds = []
-    for cand in candidates[:max_seed_entities]:
+    resolved_count = 0
+    for cand in candidates:
         # Extract entity name from candidate (canonical schema)
         # RetrieverResult has entity_name as guaranteed field
         entity_name = ""
@@ -364,10 +468,24 @@ def _build_rim_metadata_block_impl(
         if not entity_name:
             continue
 
-        target = resolver.resolve(entity_name)
+        # Extract entity_type if available to guide resolution
+        entity_type = None
+        if hasattr(cand, "entity_type"):
+            entity_type = cand.entity_type
+        elif isinstance(cand, dict):
+            entity_type = cand.get("entity_type")
+
+        logger.debug(f"[RIM Metadata] Resolving: {entity_name} (type: {entity_type})")
+        target = resolver.resolve(entity_name, entity_type)
         if target:
             seeds.append((entity_name, target, cand))
-            logger.debug(f"[RIM Metadata] Resolved seed: {entity_name} -> {type(target).__name__}")
+            resolved_count += 1
+            logger.debug(f"[RIM Metadata] Resolved seed {resolved_count}: {entity_name} -> {type(target).__name__}")
+            if resolved_count >= max_seed_entities:
+                logger.debug(f"[RIM Metadata] Reached max_seed_entities={max_seed_entities}")
+                break
+        else:
+            logger.debug(f"[RIM Metadata] Candidate not resolved: {entity_name} (type: {entity_type})")
 
     if not seeds:
         block.text = "RIM_METADATA: No structural facts could be resolved for this question in this repository's index."
