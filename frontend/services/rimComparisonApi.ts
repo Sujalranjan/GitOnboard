@@ -9,21 +9,30 @@ export interface RIMComparisonRequest {
 }
 
 export interface RetrievalMetrics {
+  tool_call_count: number;
   files_retrieved: number;
   symbols_retrieved: number;
-  rim_relationships_count?: number;
-  rim_discovered_files?: number;
-  rim_discovered_symbols?: number;
+  rim_entities_accessed_count: number;
+  rim_relationship_types_used: string[];
   retrieval_latency_ms: number;
 }
 
 export interface LLMEfficiencyMetrics {
-  input_tokens: number | null;
-  output_tokens: number | null;
-  total_tokens: number | null;
-  context_size_chars: number;
-  context_assembly_latency_ms: number;
+  provider: string;
+  model: string;
+  actual_prompt_tokens: number;
+  actual_completion_tokens: number;
+  actual_total_tokens: number;
+  estimated_system_tokens: number;
+  estimated_rim_tokens: number;
+  estimated_source_tokens: number;
+  estimated_other_tokens: number;
+  token_estimation_method: string;
+  token_estimation_is_approximate: boolean;
+  token_reconciliation_diff: number;
   llm_latency_ms: number;
+  retrieval_latency_ms: number;
+  token_counting_latency_ms: number;
   total_latency_ms: number;
 }
 
@@ -33,14 +42,22 @@ export interface AnswerMetrics {
   notes: string;
 }
 
+export interface ToolCallTranscript {
+  turn: number;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  observation_summary: string;
+}
+
 export interface ComparisonSide {
   answer: string;
   retrieval_metrics: RetrievalMetrics;
   llm_efficiency_metrics: LLMEfficiencyMetrics;
   answer_metrics: AnswerMetrics;
-  retrieved_files: string[];
-  retrieved_symbols: string[];
-  context_block: string;
+  rim_metadata_block: string | null;
+  source_context_block: string;
+  tool_call_transcript: ToolCallTranscript[];
+  stop_reason: string;
 }
 
 export interface ContextDiff {
@@ -49,28 +66,10 @@ export interface ContextDiff {
   files_only_with_rim: string[];
 }
 
-export interface RIMExecutionTrace {
-  query: string;
-  baseline_candidates: Record<string, any>[];
-  rim_seed_entities: Record<string, any>[];
-  rim_relationships_traversed: Record<string, any>[];
-  rim_discovered_entities: Record<string, any>[];
-  files_added_by_rim: string[];
-
-  context_without_rim: string;
-  context_with_rim: string;
-
-  llm_input_without_rim: Array<{ role: string; content: string }>;
-  llm_input_with_rim: Array<{ role: string; content: string }>;
-
-  llm_output_without_rim: string;
-  llm_output_with_rim: string;
-
-  token_usage_without_rim: { [key: string]: number } | null;
-  token_usage_with_rim: { [key: string]: number } | null;
-
-  latency_without_rim_ms: { [key: string]: number };
-  latency_with_rim_ms: { [key: string]: number };
+export interface RIMTrace {
+  rim_metadata_seed_entities: Record<string, unknown>[];
+  rim_metadata_relationships: Record<string, unknown>[];
+  query_rim_call_log: Record<string, unknown>[];
 }
 
 export interface RIMComparisonResponse {
@@ -83,7 +82,7 @@ export interface RIMComparisonResponse {
   analysis_id: number | null;
 
   context_diff: ContextDiff;
-  trace: RIMExecutionTrace;
+  trace: RIMTrace;
 }
 
 export async function compareRimVsBaseline(

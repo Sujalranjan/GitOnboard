@@ -9,7 +9,7 @@ from .graph import graph_router
 from .trace import trace_router
 from .intelligence import intelligence_router
 from .symbols import symbols_router
-from .rim_comparison import rim_comparison_router
+from .rim_comparison_v2 import rim_comparison_router
 
 repo_router = APIRouter()
 repo_router.add_api_route("", list_repos, methods=["GET"], tags=["repositories"])

@@ -267,6 +267,11 @@ function ComparisonResult({ run, index, onEvalChange }: ComparisonResultProps) {
             </thead>
             <tbody>
               <MetricRow
+                label="Tool Calls / Iterations"
+                without={result.without_rim.retrieval_metrics.tool_call_count}
+                with={result.with_rim.retrieval_metrics.tool_call_count}
+              />
+              <MetricRow
                 label="Files Retrieved"
                 without={result.without_rim.retrieval_metrics.files_retrieved}
                 with={result.with_rim.retrieval_metrics.files_retrieved}
@@ -277,24 +282,37 @@ function ComparisonResult({ run, index, onEvalChange }: ComparisonResultProps) {
                 with={result.with_rim.retrieval_metrics.symbols_retrieved}
               />
               <MetricRow
-                label="RIM Relationships"
+                label="RIM Entities Accessed"
                 without={0}
-                with={result.with_rim.retrieval_metrics.rim_relationships_count || 0}
+                with={result.with_rim.retrieval_metrics.rim_entities_accessed_count}
               />
               <MetricRow
-                label="Input Tokens"
-                without={result.without_rim.llm_efficiency_metrics.input_tokens}
-                with={result.with_rim.llm_efficiency_metrics.input_tokens}
+                label="Input Tokens (Actual)"
+                without={result.without_rim.llm_efficiency_metrics.actual_prompt_tokens}
+                with={result.with_rim.llm_efficiency_metrics.actual_prompt_tokens}
               />
               <MetricRow
-                label="Output Tokens"
-                without={result.without_rim.llm_efficiency_metrics.output_tokens}
-                with={result.with_rim.llm_efficiency_metrics.output_tokens}
+                label="Est. System Tokens"
+                without={result.without_rim.llm_efficiency_metrics.estimated_system_tokens}
+                with={result.with_rim.llm_efficiency_metrics.estimated_system_tokens}
+                estimated={true}
               />
               <MetricRow
-                label="Total Tokens"
-                without={result.without_rim.llm_efficiency_metrics.total_tokens}
-                with={result.with_rim.llm_efficiency_metrics.total_tokens}
+                label="Est. RIM Metadata Tokens"
+                without={0}
+                with={result.with_rim.llm_efficiency_metrics.estimated_rim_tokens}
+                estimated={true}
+              />
+              <MetricRow
+                label="Est. Source Tokens"
+                without={result.without_rim.llm_efficiency_metrics.estimated_source_tokens}
+                with={result.with_rim.llm_efficiency_metrics.estimated_source_tokens}
+                estimated={true}
+              />
+              <MetricRow
+                label="Output Tokens (Actual)"
+                without={result.without_rim.llm_efficiency_metrics.actual_completion_tokens}
+                with={result.with_rim.llm_efficiency_metrics.actual_completion_tokens}
               />
               <MetricRow
                 label="Total Latency (ms)"
@@ -367,6 +385,10 @@ function SidePanel({
           <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3 text-sm">Retrieval Metrics</h4>
           <div className="grid grid-cols-2 gap-2 text-xs text-slate-700 dark:text-slate-300">
             <div>
+              <span className="text-slate-500 dark:text-slate-400">Tool Calls:</span>
+              <span className="ml-2 font-mono">{sideData.retrieval_metrics.tool_call_count}</span>
+            </div>
+            <div>
               <span className="text-slate-500 dark:text-slate-400">Files:</span>
               <span className="ml-2 font-mono">{sideData.retrieval_metrics.files_retrieved}</span>
             </div>
@@ -380,8 +402,8 @@ function SidePanel({
             </div>
             {showRimContribution && (
               <div>
-                <span className="text-slate-500 dark:text-slate-400">RIM rels:</span>
-                <span className="ml-2 font-mono">{sideData.retrieval_metrics.rim_relationships_count || 0}</span>
+                <span className="text-slate-500 dark:text-slate-400">RIM Entities:</span>
+                <span className="ml-2 font-mono">{sideData.retrieval_metrics.rim_entities_accessed_count}</span>
               </div>
             )}
           </div>
@@ -392,64 +414,79 @@ function SidePanel({
           <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3 text-sm">LLM Efficiency</h4>
           <div className="space-y-1 text-xs text-slate-700 dark:text-slate-300">
             <div className="flex justify-between">
-              <span className="text-slate-500 dark:text-slate-400">Input Tokens:</span>
-              <span className="font-mono">{sideData.llm_efficiency_metrics.input_tokens !== null ? sideData.llm_efficiency_metrics.input_tokens : 'N/A'}</span>
+              <span className="text-slate-500 dark:text-slate-400">Input Tokens (Actual):</span>
+              <span className="font-mono">{sideData.llm_efficiency_metrics.actual_prompt_tokens}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500 dark:text-slate-400">Output Tokens:</span>
-              <span className="font-mono">{sideData.llm_efficiency_metrics.output_tokens !== null ? sideData.llm_efficiency_metrics.output_tokens : 'N/A'}</span>
+              <span className="text-slate-500 dark:text-slate-400">Output Tokens (Actual):</span>
+              <span className="font-mono">{sideData.llm_efficiency_metrics.actual_completion_tokens}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500 dark:text-slate-400">Total:</span>
-              <span className="font-mono">{sideData.llm_efficiency_metrics.total_tokens !== null ? sideData.llm_efficiency_metrics.total_tokens : 'N/A'}</span>
+              <span className="text-gray-500 dark:text-gray-400 text-xs">(Est. breakdown: system {sideData.llm_efficiency_metrics.estimated_system_tokens} + source {sideData.llm_efficiency_metrics.estimated_source_tokens}{sideData.llm_efficiency_metrics.estimated_rim_tokens > 0 ? ` + rim ${sideData.llm_efficiency_metrics.estimated_rim_tokens}` : ''})</span>
+              <span></span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500 dark:text-slate-400">LLM Time:</span>
-              <span className="font-mono">{sideData.llm_efficiency_metrics.llm_latency_ms.toFixed(0)}ms</span>
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-1 mt-1 flex justify-between">
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">LLM Time:</span>
+              <span className="font-mono">{(sideData.llm_efficiency_metrics.llm_latency_ms ?? 0).toFixed(0)}ms</span>
             </div>
+            {sideData.llm_efficiency_metrics.retrieval_latency_ms !== undefined && (
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">Retrieval Time:</span>
+                <span className="font-mono">{sideData.llm_efficiency_metrics.retrieval_latency_ms.toFixed(0)}ms</span>
+              </div>
+            )}
             <div className="flex justify-between">
-              <span className="text-slate-500 dark:text-slate-400">Total Time:</span>
-              <span className="font-mono font-bold">{sideData.llm_efficiency_metrics.total_latency_ms.toFixed(0)}ms</span>
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">Total Time:</span>
+              <span className="font-mono font-bold">{(sideData.llm_efficiency_metrics.total_latency_ms ?? 0).toFixed(0)}ms</span>
             </div>
           </div>
         </div>
 
-        {/* Retrieved Context */}
-        <Collapsible title="Retrieved Context" defaultOpen={false}>
-          <div className="space-y-2 text-xs text-slate-700 dark:text-slate-300">
-            {sideData.retrieved_files.length > 0 ? (
-              <div>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">Files:</span>
-                <div className="mt-1 space-y-1 ml-2">
-                  {sideData.retrieved_files.map((f) => (
-                    <code key={f} className="block text-slate-600 dark:text-slate-400 truncate">{f}</code>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <span className="text-slate-500">No files retrieved</span>
-            )}
-            {sideData.retrieved_symbols.length > 0 && (
-              <div className="mt-3">
-                <span className="font-semibold text-slate-700 dark:text-slate-300">Symbols:</span>
-                <div className="mt-1 space-y-1 ml-2">
-                  {sideData.retrieved_symbols.map((s) => (
-                    <code key={s} className="block text-slate-600 dark:text-slate-400 truncate">{s}</code>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </Collapsible>
 
         {/* View LLM Context */}
         <Collapsible title="View LLM Context" defaultOpen={false}>
-          <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300">
-            <div>
-              <span className="font-semibold block mb-2 text-slate-700 dark:text-slate-300">Context Block ({sideData.context_block.length} chars):</span>
+          <div className="space-y-4 text-xs text-slate-700 dark:text-slate-300">
+            {/* Sub-section 1: RIM_METADATA */}
+            <div className="border-l-4 border-blue-400 pl-4">
+              <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                RIM_METADATA {sideData.rim_metadata_block ? `(~${Math.ceil(sideData.rim_metadata_block.length / 4)} tokens)` : ''}
+              </h4>
+              {sideData.rim_metadata_block ? (
+                <pre className="bg-slate-900 text-slate-100 p-3 rounded overflow-x-auto text-xs max-h-48 overflow-y-auto">
+                  {sideData.rim_metadata_block}
+                </pre>
+              ) : (
+                <p className="text-gray-500 italic py-2">None (baseline retrieval mode — no repository knowledge graph facts provided)</p>
+              )}
+            </div>
+
+            {/* Sub-section 2: SOURCE_CONTEXT */}
+            <div className="border-l-4 border-green-400 pl-4">
+              <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                SOURCE_CONTEXT (~{Math.ceil((sideData.source_context_block ?? '').length / 4)} tokens)
+              </h4>
               <pre className="bg-slate-900 text-slate-100 p-3 rounded overflow-x-auto text-xs max-h-48 overflow-y-auto">
-                {sideData.context_block}
+                {sideData.source_context_block || '(no source context retrieved)'}
               </pre>
+            </div>
+
+            {/* Sub-section 3: TOOL_CALL_TRANSCRIPT */}
+            <div className="border-l-4 border-purple-400 pl-4">
+              <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                TOOL_CALL_TRANSCRIPT ({sideData.tool_call_transcript?.length ?? 0} calls)
+              </h4>
+              {sideData.tool_call_transcript && sideData.tool_call_transcript.length > 0 ? (
+                <div className="text-xs space-y-1 max-h-48 overflow-y-auto font-mono">
+                  {sideData.tool_call_transcript.map((call, i) => (
+                    <div key={i} className="text-gray-300 bg-slate-900 p-2 rounded">
+                      <span className="text-yellow-400">[{call.turn}]</span> {call.tool_name} → {(call.observation_summary || '').substring(0, 100)}
+                      {(call.observation_summary || '').length > 100 && '...'}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 italic py-2">(no tool calls made)</p>
+              )}
             </div>
           </div>
         </Collapsible>
@@ -457,55 +494,63 @@ function SidePanel({
         {/* What Did RIM Add? */}
         {showRimContribution && (
           <Collapsible title="What Did RIM Add?" defaultOpen={true}>
-            <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300">
-              {traceData.rim_seed_entities.length > 0 ? (
-                <>
-                  <div>
-                    <span className="font-semibold block mb-2">Seed Entities ({traceData.rim_seed_entities.length}):</span>
-                    <div className="ml-2 space-y-1">
-                      {traceData.rim_seed_entities.slice(0, 5).map((e, i) => (
-                        <div key={i} className="text-slate-600 dark:text-slate-400">
-                          <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">{e.name}</code>
-                          <span className="ml-2 text-slate-500">→ {e.file_path}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="font-semibold block mb-2">Relationships Traversed ({traceData.rim_relationships_traversed.length}):</span>
-                    <div className="ml-2 space-y-1">
-                      {traceData.rim_relationships_traversed.slice(0, 5).map((r, i) => (
-                        <div key={i} className="text-slate-600 dark:text-slate-400">
-                          <Badge variant="info" className="text-xs">{r.rel_type}</Badge>
-                          <span className="ml-2">{r.expansion_reason}</span>
-                        </div>
-                      ))}
-                      {traceData.rim_relationships_traversed.length > 5 && (
-                        <span className="text-slate-500 text-xs">+{traceData.rim_relationships_traversed.length - 5} more relationships</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {traceData.files_added_by_rim.length > 0 && (
+            <div className="space-y-4 text-xs text-slate-700 dark:text-slate-300">
+              {/* Upfront RIM metadata contribution */}
+              <div>
+                <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                  From Upfront RIM_METADATA Block
+                </h4>
+                {(traceData?.rim_metadata_seed_entities ?? []).length > 0 ? (
+                  <div className="space-y-2">
                     <div>
-                      <span className="font-semibold block mb-2">Files Added by RIM ({traceData.files_added_by_rim.length}):</span>
-                      <div className="ml-2 space-y-1">
-                        {traceData.files_added_by_rim.slice(0, 5).map((f) => (
-                          <code key={f} className="block text-slate-600 dark:text-slate-400 truncate">
-                            + {f}
-                          </code>
+                      <span className="text-slate-600 dark:text-slate-400 text-xs">Seed Entities:</span>
+                      <ul className="list-disc list-inside ml-2 mt-1 space-y-1">
+                        {(traceData?.rim_metadata_seed_entities ?? []).slice(0, 5).map((e, i) => (
+                          <li key={i} className="text-slate-600 dark:text-slate-400">
+                            <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs">
+                              {typeof e?.name === 'string' ? e.name : JSON.stringify(e?.name ?? 'unknown')}
+                            </code>
+                            {e?.entity_type && <span className="ml-1 text-gray-500">({e.entity_type})</span>}
+                          </li>
                         ))}
-                        {traceData.files_added_by_rim.length > 5 && (
-                          <span className="text-slate-500 text-xs">+{traceData.files_added_by_rim.length - 5} more files</span>
+                        {(traceData?.rim_metadata_seed_entities ?? []).length > 5 && (
+                          <li className="text-slate-500">+{(traceData?.rim_metadata_seed_entities ?? []).length - 5} more</li>
                         )}
-                      </div>
+                      </ul>
                     </div>
-                  )}
-                </>
-              ) : (
-                <span className="text-slate-500">RIM did not add any entities.</span>
-              )}
+                    <div className="text-gray-500 text-xs">
+                      {(traceData?.rim_metadata_relationships ?? []).length} relationships discovered
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-gray-500 italic">No seed entities resolved</span>
+                )}
+              </div>
+
+              {/* On-demand query_rim tool calls */}
+              <div>
+                <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                  From query_rim Tool Calls ({(traceData?.query_rim_call_log ?? []).length} calls)
+                </h4>
+                {(traceData?.query_rim_call_log ?? []).length > 0 ? (
+                  <ul className="list-disc list-inside ml-2 space-y-1">
+                    {(traceData?.query_rim_call_log ?? []).slice(0, 5).map((call, i) => (
+                      <li key={i} className="text-slate-600 dark:text-slate-400">
+                        <span className="font-mono text-xs">
+                          {call?.entity_name || 'unknown'}
+                        </span>
+                        {call?.relationship_type && <span className="ml-1">({call.relationship_type})</span>}
+                        {call?.related_count && <span className="ml-1 text-gray-500">→ {call.related_count} results</span>}
+                      </li>
+                    ))}
+                    {(traceData?.query_rim_call_log ?? []).length > 5 && (
+                      <li className="text-slate-500">+{(traceData?.query_rim_call_log ?? []).length - 5} more calls</li>
+                    )}
+                  </ul>
+                ) : (
+                  <span className="text-gray-500 italic">No on-demand query_rim calls made</span>
+                )}
+              </div>
             </div>
           </Collapsible>
         )}
@@ -577,9 +622,10 @@ interface MetricRowProps {
   label: string;
   without: any;
   with: any;
+  estimated?: boolean;
 }
 
-function MetricRow({ label, without, with: withVal }: MetricRowProps) {
+function MetricRow({ label, without, with: withVal, estimated = false }: MetricRowProps) {
   const withoutStr = withoutVal(without);
   const withStr = withoutVal(withVal);
 
@@ -596,9 +642,16 @@ function MetricRow({ label, without, with: withVal }: MetricRowProps) {
     diff = delta >= 0 ? `+${delta} (${pct}%)` : `${delta} (${pct}%)`;
   }
 
+  const rowClass = estimated
+    ? 'text-gray-500 dark:text-gray-400'
+    : 'text-slate-900 dark:text-slate-100';
+
   return (
-    <tr className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
-      <td className="py-2 px-3 text-slate-900 dark:text-slate-100">{label}</td>
+    <tr className={`border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 ${estimated ? 'bg-slate-50 dark:bg-slate-900/30' : ''}`}>
+      <td className={`py-2 px-3 font-semibold ${rowClass}`}>
+        {label}
+        {estimated && <span className="text-xs ml-1 text-gray-400">(estimated)</span>}
+      </td>
       <td className="py-2 px-3 text-right text-slate-600 dark:text-slate-400 font-mono">{withoutStr}</td>
       <td className="py-2 px-3 text-right text-slate-600 dark:text-slate-400 font-mono">{withStr}</td>
       <td className="py-2 px-3 text-right text-slate-600 dark:text-slate-400 font-mono text-xs">{diff}</td>
@@ -609,14 +662,13 @@ function MetricRow({ label, without, with: withVal }: MetricRowProps) {
 function ResearchSummary({ result }: { result: RIMComparisonResponse }) {
   const { trace, without_rim, with_rim } = result;
 
-  const rimAddedFiles = trace.files_added_by_rim.length;
-  const rimRels = trace.rim_relationships_traversed.length;
+  const rimMetadataRels = (trace?.rim_metadata_relationships ?? []).length;
+  const queryRimCalls = (trace?.query_rim_call_log ?? []).length;
+  const rimToolCalls = with_rim.retrieval_metrics.tool_call_count ?? 0;
 
-  const tokenDiff = without_rim.llm_efficiency_metrics.total_tokens && with_rim.llm_efficiency_metrics.total_tokens
-    ? with_rim.llm_efficiency_metrics.total_tokens - without_rim.llm_efficiency_metrics.total_tokens
-    : null;
+  const actualTokenDiff = (with_rim.llm_efficiency_metrics.actual_total_tokens ?? 0) - (without_rim.llm_efficiency_metrics.actual_total_tokens ?? 0);
 
-  const latencyDiff = with_rim.llm_efficiency_metrics.total_latency_ms - without_rim.llm_efficiency_metrics.total_latency_ms;
+  const latencyDiff = (with_rim.llm_efficiency_metrics.total_latency_ms ?? 0) - (without_rim.llm_efficiency_metrics.total_latency_ms ?? 0);
 
   return (
     <Card>
@@ -625,24 +677,29 @@ function ResearchSummary({ result }: { result: RIMComparisonResponse }) {
         <div className="flex items-start gap-2">
           <ArrowRight className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
           <span>
-            {rimAddedFiles > 0
-              ? `RIM discovered ${rimAddedFiles} additional file(s) through ${rimRels} relationship(s).`
-              : 'RIM did not discover additional files for this query.'}
+            {rimMetadataRels > 0 || queryRimCalls > 0
+              ? `RIM metadata block contained ${rimMetadataRels} relationship(s), with ${queryRimCalls} on-demand query_rim call(s).`
+              : 'RIM metadata block contained no relationships for this query.'}
           </span>
         </div>
 
-        {tokenDiff !== null && (
-          <div className="flex items-start gap-2">
-            <ArrowRight className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-            <span>
-              {tokenDiff < 0
-                ? `RIM reduced total tokens by ${Math.abs(tokenDiff)} (${((tokenDiff / (without_rim.llm_efficiency_metrics.total_tokens || 1)) * 100).toFixed(1)}%).`
-                : tokenDiff > 0
-                  ? `RIM increased total tokens by ${tokenDiff} (${((tokenDiff / (without_rim.llm_efficiency_metrics.total_tokens || 1)) * 100).toFixed(1)}%).`
-                  : 'Token counts were identical.'}
-            </span>
-          </div>
-        )}
+        <div className="flex items-start gap-2">
+          <ArrowRight className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+          <span>
+            Both sides made {without_rim.retrieval_metrics.tool_call_count} (baseline) vs {rimToolCalls} (RIM) tool calls to explore the repository.
+          </span>
+        </div>
+
+        <div className="flex items-start gap-2">
+          <ArrowRight className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+          <span>
+            {actualTokenDiff < 0
+              ? `RIM reduced actual token usage by ${Math.abs(actualTokenDiff)} (${(((actualTokenDiff / (without_rim.llm_efficiency_metrics.actual_total_tokens || 1)) * 100)).toFixed(1)}%).`
+              : actualTokenDiff > 0
+                ? `RIM increased actual token usage by ${actualTokenDiff} (${(((actualTokenDiff / (without_rim.llm_efficiency_metrics.actual_total_tokens || 1)) * 100)).toFixed(1)}%).`
+                : 'Actual token counts were identical.'}
+          </span>
+        </div>
 
         <div className="flex items-start gap-2">
           <ArrowRight className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />

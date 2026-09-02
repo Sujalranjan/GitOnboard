@@ -55,9 +55,11 @@ def build_default_service() -> "LLMService":
         if not providers:
             logger.warning("LLMService: PROD mode specified but no cloud API keys (GEMINI_API_KEY, OPENROUTER_API_KEY) found.")
     else:
-        # LOCAL Mode (Default): primary Ollama model with lightweight fallback
+        # LOCAL Mode (Default): primary Qwen instruct (faster) with Qwen coder fallback (more capable)
         ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-        ollama_model = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b")
+        # Primary: Qwen 3 instruct (4B - fast, fits in memory, good for JSON protocol)
+        ollama_model = os.environ.get("OLLAMA_MODEL", "qwen3:4b-instruct")
+        # Fallback: Qwen 2.5 coder (7B - more capable, better reasoning if 4B hits limits)
         ollama_fallback_model = os.environ.get("OLLAMA_FALLBACK_MODEL", "qwen2.5-coder:7b")
         ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
         from .providers.ollama import OllamaProvider

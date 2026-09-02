@@ -14,7 +14,7 @@ from ..schemas import LLMRequest, LLMResponse, TokenUsage, NonRetriableError, Re
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
-DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b")
+DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:4b-instruct")
 
 
 class OllamaProvider:
@@ -28,8 +28,10 @@ class OllamaProvider:
         self.timeout = timeout
 
     def _build_body(self, request: LLMRequest, force_json: bool = False) -> Dict[str, Any]:
+        # Respect request.model if provided, otherwise use provider's assigned default
+        model_name = request.model or self.default_model
         body = {
-            "model": self.default_model,  # Always use this provider's assigned model
+            "model": model_name,
             "messages": [{"role": m.role.value, "content": m.content} for m in request.messages],
             "stream": False,
             "options": {
@@ -42,7 +44,8 @@ class OllamaProvider:
         return body
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
-        model_name = self.default_model  # Always use this provider's assigned model
+        # Respect request.model if provided, otherwise use provider's assigned default
+        model_name = request.model or self.default_model
         logger.info(f"[LLM_LIFECYCLE] OllamaProvider: Sending request to {self.base_url}/api/chat (model: {model_name}, timeout={self.timeout}s)...")
         t0 = time.time()
         timeout_config = httpx.Timeout(timeout=self.timeout, connect=10.0, read=self.timeout, write=10.0)

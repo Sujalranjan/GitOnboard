@@ -33,23 +33,35 @@ class QAProtocolAdapter:
     """Builds and parses the JSON action protocol for Q&A."""
 
     GROUNDING_RULES = """You are a code assistant analyzing a software repository to answer questions.
+CRITICAL: You MUST use repository tools to find information. You MUST NOT rely on general knowledge.
+
+YOUR TASK:
+1. First, use tools to search the repository and find relevant files/symbols
+2. Read source files ONE AT A TIME using the read_file tool
+3. Query relationships using available tools (query_rim if available)
+4. Based on what you find, provide your answer
+
+RESPONSE FORMAT (MANDATORY):
+Each turn, respond with EXACTLY ONE of these JSON objects:
+- To search/read: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "..."}}
+- To read a file: {"action": "tool_call", "tool_name": "read_file", "arguments": {"path": "...", "start_line": 1, "end_line": 100}}
+- To look up a symbol: {"action": "tool_call", "tool_name": "get_symbol", "arguments": {"name": "..."}}
+- To find callers: {"action": "tool_call", "tool_name": "get_callers", "arguments": {"symbol_name": "..."}}
+- To find callees: {"action": "tool_call", "tool_name": "get_callees", "arguments": {"symbol_name": "..."}}
+- When done: {"action": "final_answer", "answer": "Your comprehensive answer based on tools"}
 
 RULES:
-1. Read source files ONE AT A TIME using available tools
-2. Use search to find relevant files/symbols first
-3. Query the repository intelligence graph (RIM) to understand relationships
-4. Always reason step-by-step
-5. Only claim to have read code you actually examined with your tools
-6. Base your answer ONLY on information from your tools, never on general knowledge of libraries/frameworks
-7. If you cannot find an answer, clearly state what you were missing
+1. ALWAYS start with a search_repository or find_files tool call to identify relevant code
+2. Read files ONE AT A TIME using read_file
+3. ONE tool call per turn - wait for results before the next action
+4. NEVER provide an answer without first using tools to examine the code
+5. Only claim to have read code you actually examined with tools
+6. Base your answer ONLY on information from tools, NEVER on general knowledge
 
-RESPONSE PROTOCOL:
-Respond with exactly one JSON action per turn:
-- To call a tool: {"action": "tool_call", "tool_name": "...", "arguments": {...}}
-- To provide your answer: {"action": "final_answer", "answer": "..."}
-
-Choose one action per response. Do not call multiple tools in one turn.
-Read files ONE AT A TIME. Do not request multiple file reads in a single turn."""
+Example flow:
+Turn 0: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "login authentication"}}
+Turn 1: {"action": "tool_call", "tool_name": "read_file", "arguments": {"path": "src/auth.py", "start_line": 1, "end_line": 50}}
+Turn 2: {"action": "final_answer", "answer": "Based on examining src/auth.py, the login process..."}"""
 
     def build_system_prompt(self, tool_specs: List[ToolSpec], rim_metadata_block: Optional[str]) -> SystemPromptParts:
         """
@@ -131,17 +143,50 @@ Use these facts to understand the repository structure. Query the `query_rim` to
         import json
         import re
 
-        # Try to extract JSON object from response
-        json_match = re.search(r'\{[^{}]*\}', text)
-        if not json_match:
-            logger.debug(f"No JSON object found in response: {text[:100]}")
+        # Try to extract JSON object from response.
+        # Search for '{' and attempt to parse from each position until successful.
+        # This handles nested JSON (e.g., arguments with nested dicts).
+        obj = None
+        for match in re.finditer(r'\{', text):
+            start_pos = match.start()
+            # Find the matching closing brace by counting braces
+            brace_count = 0
+            end_pos = start_pos
+            for i in range(start_pos, len(text)):
+                if text[i] == '{':
+                    brace_count += 1
+                elif text[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_pos = i + 1
+                        break
+
+            if brace_count == 0:  # Found matching close brace
+                try:
+                    # Try to parse just this JSON object
+                    json_str = text[start_pos:end_pos]
+                    obj = json.loads(json_str)
+                    if isinstance(obj, dict):
+                        # Successfully parsed a JSON object
+                        action = obj.get("action", "").lower()
+                        if action in ["tool_call", "final_answer"]:
+                            # This is a valid action object
+                            break
+                except json.JSONDecodeError:
+                    # This position didn't yield valid JSON, try next {
+                    obj = None
+                    continue
+
+        if obj is None or not isinstance(obj, dict):
+            logger.debug(f"No valid JSON action object found in response: {text[:100]}")
             return {
                 "action": "malformed",
-                "error": "no JSON object found",
+                "error": "no valid JSON action object found",
             }
 
         try:
-            obj = json.loads(json_match.group())
+            # obj is already parsed
+            pass
         except json.JSONDecodeError as e:
             logger.debug(f"JSON parse error: {e}")
             return {
