@@ -25,9 +25,16 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get('search') || '';
 
-  const fetchRepos = async () => {
+  const fetchRepos = async (isInitialLoad: boolean = false) => {
     try {
-      setIsLoading(true);
+      // Only show loading state on initial load, not during background refreshes
+      if (isInitialLoad || repos.length === 0) {
+        setIsLoading(true);
+        console.log('[Dashboard] Initial load - showing loader');
+      } else {
+        console.log('[Dashboard] Background refresh - preserving UI');
+      }
+
       console.log('[Dashboard] Fetching repositories...');
       const data = await repositoryService.getAll();
       const repoList = Array.isArray(data) ? data : (data?.repositories || []);
@@ -38,9 +45,13 @@ function DashboardContent() {
       setRepos(repoList);
     } catch (err) {
       console.error('Failed to fetch repositories:', err);
-      setRepos([]);
+      if (repos.length === 0) {
+        setRepos([]);
+      }
     } finally {
-      setIsLoading(false);
+      if (isInitialLoad || repos.length === 0) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -70,8 +81,8 @@ function DashboardContent() {
         console.log('[Dashboard] Not authenticated, redirecting to home');
         window.location.href = "/";
       } else {
-        console.log('[Dashboard] Authenticated, fetching repos');
-        fetchRepos();
+        console.log('[Dashboard] Authenticated, fetching repos (initial load)');
+        fetchRepos(true);
 
         // Subscribe to real-time task updates via SSE for repos with active jobs
         // This ensures we get notified whenever any repo's job status changes
