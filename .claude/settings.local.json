@@ -26,7 +26,9 @@
       "Bash(uv sync *)",
       "Bash(uv add *)",
       "Bash(docker-compose down *)",
-      "Bash(docker-compose up *)"
+      "Bash(docker-compose up *)",
+      "Bash(docker-compose *)",
+      "Bash(pkill -f \"npm run dev\")"
     ]
   }
 }
