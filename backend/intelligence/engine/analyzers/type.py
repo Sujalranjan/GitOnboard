@@ -49,12 +49,22 @@ class PythonTypeVisitor(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef):
         class_qname = self._get_qualified_name(node.name)
         class_id = generate_entity_id(EntityType.CLASS, self.file_path, class_qname)
-        
+
         for base in node.bases:
             base_name = self._extract_base_name(base)
             if not base_name:
                 continue
 
+            # Skip builtin and external base classes that won't have Entity records
+            # (object, Exception, typing module bases, etc.)
+            if base_name in ("object", "Exception", "BaseException"):
+                continue
+            if base_name.startswith("typing.") or base_name in ("ABC", "Generic"):
+                continue
+
+            # Only create INHERITS relationship if base is from an imported module
+            # Local base classes defined in same file/scope can't be resolved yet
+            base_id = None
             if base_name in self.imported_symbols:
                 mod, sym_name, full_qname = self.imported_symbols[base_name]
                 target_file = mod.replace(".", "/") + ".py"
@@ -65,20 +75,17 @@ class PythonTypeVisitor(ast.NodeVisitor):
                     mod = self.imported_modules[parts[0]]
                     target_file = mod.replace(".", "/") + ".py"
                     base_id = generate_entity_id(EntityType.CLASS, target_file, f"{mod}.{parts[1]}")
-                else:
-                    base_id = generate_entity_id(EntityType.CLASS, "", base_name)
-            else:
-                base_qname = self._get_qualified_name(base_name)
-                base_id = generate_entity_id(EntityType.CLASS, self.file_path, base_qname)
-                
-            rel = Relationship(
-                id=generate_relationship_id(RelationshipType.INHERITS, class_id, base_id),
-                type=RelationshipType.INHERITS,
-                source_id=class_id,
-                target_id=base_id,
-                metadata={"base": base_name, "line": node.lineno}
-            )
-            self.relationships.append(rel)
+
+            # Only create relationship if we can identify an imported base class
+            if base_id:
+                rel = Relationship(
+                    id=generate_relationship_id(RelationshipType.INHERITS, class_id, base_id),
+                    type=RelationshipType.INHERITS,
+                    source_id=class_id,
+                    target_id=base_id,
+                    metadata={"base": base_name, "line": node.lineno}
+                )
+                self.relationships.append(rel)
                 
         self.namespace_stack.append(node.name)
         self.generic_visit(node)

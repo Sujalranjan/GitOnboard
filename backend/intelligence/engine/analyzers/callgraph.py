@@ -93,22 +93,17 @@ class PythonCallGraphVisitor(ast.NodeVisitor):
                 # Try to resolve the callee
                 callee_id = resolve_reference(self.repository, self.file_path, callee_name, self.current_caller_id, self.index)
 
-                if not callee_id:
-                    # Fallback: assume same module
-                    module_path = self.file_path.replace("/", ".").replace(".py", "")
-                    if module_path.endswith(".__init__"):
-                        module_path = module_path[:-9]
-                    callee_qname = f"{module_path}.{callee_name}" if module_path else callee_name
-                    callee_id = generate_entity_id(EntityType.FUNCTION, self.file_path, callee_qname)
-
-                rel = Relationship(
-                    id=generate_relationship_id(RelationshipType.CALLS, self.current_caller_id, callee_id),
-                    type=RelationshipType.CALLS,
-                    source_id=self.current_caller_id,
-                    target_id=callee_id,
-                    metadata={"call_name": callee_name}
-                )
-                self.relationships.append(rel)
+                # Only create CALLS relationship if callee exists in the model
+                # External/unresolved calls are intentionally out of scope
+                if callee_id:
+                    rel = Relationship(
+                        id=generate_relationship_id(RelationshipType.CALLS, self.current_caller_id, callee_id),
+                        type=RelationshipType.CALLS,
+                        source_id=self.current_caller_id,
+                        target_id=callee_id,
+                        metadata={"call_name": callee_name}
+                    )
+                    self.relationships.append(rel)
 
         self.generic_visit(node)
 
@@ -255,13 +250,9 @@ class TypeScriptCallGraphVisitor:
         # Resolve the callee
         callee_id = resolve_reference(self.repository, self.file_path, callee_name, self.current_caller_id, self.index)
 
-        if not callee_id:
-            # Fallback: assume same module
-            module_path = self.file_path.rsplit(".", 1)[0].replace("/", ".")
-            callee_qname = f"{module_path}.{callee_name}"
-            callee_id = generate_entity_id(EntityType.FUNCTION, self.file_path, callee_qname)
-
-        if self.current_caller_id:
+        # Only create CALLS relationship if callee exists in the model
+        # External/unresolved calls are intentionally out of scope
+        if self.current_caller_id and callee_id:
             rel = Relationship(
                 id=generate_relationship_id(RelationshipType.CALLS, self.current_caller_id, callee_id),
                 type=RelationshipType.CALLS,
