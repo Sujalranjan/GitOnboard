@@ -129,53 +129,109 @@ The model learns: "If metadata doesn't mention it, I can answer without searchin
 ### Do NOT Deploy
 RIM in its current form. No overall improvement and demonstrable grounding regression on negative queries.
 
-### Phase 7 — Negative-Query Grounding Investigation (Required Before Redesign)
+### Phase 7 — Negative-Query Grounding Investigation (Investigation Only)
 
-**Goal**: Isolate the root cause of the negative-query grounding failure.
+**CRITICAL: Phase 7 is investigation only. No redesign. No implementation.**
 
-**Key Questions**:
-1. **Metadata wording** — Is contextual absence being interpreted as repository evidence?
-2. **System-prompt precedence** — Do RIM instructions implicitly override search directives?
-3. **Context placement** — Does metadata position bias the model's reasoning?
-4. **Tool policy** — Is the model explicitly required to verify absence vs. trusting metadata?
-5. **Query classification** — Are negative queries properly recognized as requiring exhaustive retrieval?
-6. **query_rim semantics** — Does it distinguish *"not found"* from *"verified absence"*?
+**Hypothesis**:
+> RIM metadata may cause the LLM to treat structural absence as evidence of repository-wide absence, reducing its tendency to perform verification searches.
 
-**Investigation Method**:
-- Run focused A/B on negative queries only (Q19-Q21, 10+ runs per condition)
-- Instrument system prompt to log why model chooses search vs. context inference
-- Measure retrieval/non-retrieval rate by condition
-- Determine which of the six factors above is primary driver
+**Investigation Matrix**:
 
-**Critical Design Principle** (for any future redesign):
+Use 3 negative-query types to test the hypothesis:
+
+| Query Type | Query | Domain |
+|------------|-------|--------|
+| Technology | "Does this repo use Redis for auth?" | Dependency/library absence |
+| Symbol | "Is there a function called `fooBar`?" | Code entity absence |
+| Feature | "Does this repo implement password reset?" | Feature/pattern absence |
+
+**Experimental Design**: 
 ```
-Positive structural question
-  → RIM can guide retrieval
-  → minimal targeted search
+3 queries × 3 conditions × 10 runs each = 90 total executions
 
-Negative / absence question
-  → RIM provides hypotheses/context
-  → repository retrieval MUST verify absence
-  → grounded answer required
+Condition A: Baseline (no RIM metadata, no query_rim)
+Condition B: Metadata only (RIM metadata, no query_rim)
+Condition C: Full RIM (RIM metadata, query_rim)
 ```
 
-**RIM should be evidence for where/how to look, not evidence that something doesn't exist.**
+**Instrumentation** (capture the actual behavior path):
 
-### Do NOT Do
+```
+Query
+  ↓
+RIM metadata presented?
+  ↓
+LLM decision point
+  ↓
+→ Repository search performed? (search_repository, read_file, etc.)
+→ query_rim called?
+→ Depth of retrieval (single search vs. multiple attempts)
+  ↓
+Final answer
+```
 
-- Do NOT immediately re-run the full 315-query benchmark after a redesign attempt
-- Do NOT add blunt fixes like "always search the repository first" (destroys efficiency)
-- Do NOT treat the entire RIM architecture as flawed based on this failure mode
+**Critical Metric: Verification Rate**
 
-### Path Forward
+Define: Percentage of negative queries for which model performs repository retrieval before asserting absence.
 
-**Phase 7 (Required)**: 
-- Focused investigation of negative-query grounding failure
-- Root-cause diagnosis (narrow to one of the six factors above)
-- Design targeted fix that preserves evidence verification
-- Validate with negative-query A/B (10+ runs)
+Categorize each answer as:
+- **Verified absence**: Search performed; evidence supports absence
+- **Unverified absence**: Assertion based on metadata/context, no search
+- **Uncertain**: Model appropriately declines to claim definitive absence
+- **False absence**: Repository actually contains the entity (error)
 
-**Only after Phase 7**: If root cause is understood and targeted fix shows promise, return to full Phase 6 methodology with corrected implementation.
+**Six Specific Questions to Answer**:
+
+1. **Does RIM metadata reduce verification rate?**
+   - Compare B vs A: is verification rate lower when metadata present?
+
+2. **Is metadata absence interpreted as repository absence?**
+   - When RIM_METADATA lacks a fact, does LLM treat it as evidence the fact doesn't exist?
+
+3. **Does query_rim distinguish "not found" from "does not exist"?**
+   - When query_rim returns empty results, does LLM understand this as "retrieval found nothing" vs. "repository contains nothing"?
+
+4. **Does prompt/context placement affect behavior?**
+   - Would different RIM metadata position (before vs. after query) change verification rate?
+
+5. **Does explicit verification requirement restore grounding?**
+   - If system prompt adds "You must search the repository to verify absence," does verification rate recover?
+
+6. **What intervention has the smallest efficiency cost?**
+   - Which fix maintains RIM's speed advantages while restoring verification?
+
+**Execution Protocol**:
+
+1. Define ground truth for each of the 3 queries (similar to Phase 6 methodology)
+2. Run 90 executions with full instrumentation
+3. For each execution, record:
+   - Final answer
+   - Whether search was performed
+   - Which tools were called (query_rim, search_repository, read_file, etc.)
+   - Whether answer was verified or unverified
+4. Aggregate verification rate by condition
+5. Answer the six questions above from the data
+6. Do NOT attempt a fix; only describe findings
+
+**Do NOT Do**:
+
+- Do NOT redesign or patch RIM during Phase 7
+- Do NOT re-run the full 315-query benchmark based on Phase 7 findings
+- Do NOT treat Phase 7 as validation that RIM is now safe
+- Do NOT add blunt fixes like "always search first"
+
+**Success Criterion**:
+
+Phase 7 succeeds when you can definitively answer which of the six factors is driving the grounding failure, with evidence from the 90-run matrix.
+
+**Verdict Unchanged**:
+
+Until a corrected RIM implementation is benchmarked against Phase 6 methodology (full 315-query evaluation with ground-truth scoring):
+
+**RIM remains CURRENTLY_UNSAFE.**
+
+A successful Phase 7 investigation can only *enable* a new Phase 8 benchmark; it cannot invalidate the existing Phase 6 result.
 
 ---
 
