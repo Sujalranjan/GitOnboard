@@ -127,22 +127,55 @@ The model learns: "If metadata doesn't mention it, I can answer without searchin
 ## Recommendation
 
 ### Do NOT Deploy
-RIM in its current form causes demonstrable harm to retrieval-based QA on negative queries, with no aggregate benefit.
+RIM in its current form. No overall improvement and demonstrable grounding regression on negative queries.
 
-### Before Reconsidering
+### Phase 7 — Negative-Query Grounding Investigation (Required Before Redesign)
 
-1. **Investigate root cause**: Why does metadata injection suppress evidence-seeking behavior?
-2. **Redesign**: Modify system prompt or metadata injection to preserve retrieval behavior for negative queries
-3. **Targeted fix**: Run A/B on negative queries only (10+ runs) to validate recovery
-4. **Re-benchmark**: Full 21-query benchmark with corrected implementation
+**Goal**: Isolate the root cause of the negative-query grounding failure.
+
+**Key Questions**:
+1. **Metadata wording** — Is contextual absence being interpreted as repository evidence?
+2. **System-prompt precedence** — Do RIM instructions implicitly override search directives?
+3. **Context placement** — Does metadata position bias the model's reasoning?
+4. **Tool policy** — Is the model explicitly required to verify absence vs. trusting metadata?
+5. **Query classification** — Are negative queries properly recognized as requiring exhaustive retrieval?
+6. **query_rim semantics** — Does it distinguish *"not found"* from *"verified absence"*?
+
+**Investigation Method**:
+- Run focused A/B on negative queries only (Q19-Q21, 10+ runs per condition)
+- Instrument system prompt to log why model chooses search vs. context inference
+- Measure retrieval/non-retrieval rate by condition
+- Determine which of the six factors above is primary driver
+
+**Critical Design Principle** (for any future redesign):
+```
+Positive structural question
+  → RIM can guide retrieval
+  → minimal targeted search
+
+Negative / absence question
+  → RIM provides hypotheses/context
+  → repository retrieval MUST verify absence
+  → grounded answer required
+```
+
+**RIM should be evidence for where/how to look, not evidence that something doesn't exist.**
+
+### Do NOT Do
+
+- Do NOT immediately re-run the full 315-query benchmark after a redesign attempt
+- Do NOT add blunt fixes like "always search the repository first" (destroys efficiency)
+- Do NOT treat the entire RIM architecture as flawed based on this failure mode
 
 ### Path Forward
 
-**Phase 7 (Conditional)**: 
-- Redesign RIM metadata injection
-- Focus on preserving evidence-seeking for negative queries
-- Run targeted negative-query A/B before full re-benchmark
-- If successful, return to full Phase 6 methodology with corrected system
+**Phase 7 (Required)**: 
+- Focused investigation of negative-query grounding failure
+- Root-cause diagnosis (narrow to one of the six factors above)
+- Design targeted fix that preserves evidence verification
+- Validate with negative-query A/B (10+ runs)
+
+**Only after Phase 7**: If root cause is understood and targeted fix shows promise, return to full Phase 6 methodology with corrected implementation.
 
 ---
 
@@ -164,15 +197,19 @@ RIM in its current form causes demonstrable harm to retrieval-based QA on negati
 
 ## Verdict
 
-**RIM is CURRENTLY_UNSAFE for deployment.**
+**RIM is CURRENTLY_UNSAFE as a default repository-QA context mechanism.**
 
-Evidence supports:
-1. No median-level benefit across the benchmark
-2. Systematic grounding regression on negative queries
-3. Inconsistent performance across query types
-4. Evidence-seeking behavior degradation
+**Specific finding:**
 
-**Do not proceed to production deployment.**
+RIM metadata injection produces no overall median-score improvement (5→5→5) while creating a repeatable, systematic grounding regression on negative/absence queries (median 4→3). Full RIM partially mitigates but does not reliably eliminate the regression.
+
+**Evidence:**
+1. Zero median-level benefit across 315 controlled executions
+2. Systematic -1 grounding regression on negative queries (B vs A)
+3. Ungrounded answers become indistinguishable from hallucinations
+4. Evidence-seeking behavior degrades when metadata is available
+
+**Do not proceed to production deployment in current form.**
 
 ---
 
