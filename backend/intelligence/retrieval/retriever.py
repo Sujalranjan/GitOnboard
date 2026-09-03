@@ -68,6 +68,7 @@ class HybridRetriever:
         # Try to load pre-built index from analysis artifact
         try:
             from backend.models.repository import Analysis, AnalysisArtifact
+            from backend.intelligence.retrieval.artifact_persistence import persist_rebuilt_bm25
 
             # Get current fact_store_version for staleness check
             analysis = self.db.query(Analysis).filter(Analysis.id == self.analysis_id).first()
@@ -90,8 +91,8 @@ class HybridRetriever:
                             f"but FactStore is now {current_fact_store_version[:8]}... "
                             f"Rebuilding from current FactStore."
                         )
-                        # BM25 is stale — rebuild from FactStore
-                        self._build_lexical_index()
+                        # BM25 is stale — rebuild from FactStore and persist fresh version
+                        self._build_and_persist_lexical_index()
                         return
 
                 # Rebuild BM25 index from stored metadata
@@ -112,6 +113,64 @@ class HybridRetriever:
 
         # Fallback: build from FactStore
         self._build_lexical_index()
+
+    def _build_and_persist_lexical_index(self):
+        """
+        Rebuild BM25 from FactStore and persist the fresh artifact.
+
+        Used when stale BM25 is detected to ensure fresh index is available for future retrievals.
+        """
+        if not self.analysis_id:
+            return
+
+        # Build fresh BM25 in-memory
+        self._build_lexical_index()
+
+        # If build succeeded, persist the fresh artifact
+        if self.bm25_index:
+            try:
+                from backend.models.repository import Analysis
+                from backend.intelligence.retrieval.artifact_persistence import persist_rebuilt_bm25
+
+                analysis = self.db.query(Analysis).filter(Analysis.id == self.analysis_id).first()
+                if not analysis:
+                    logger.error(f"Cannot persist BM25: analysis {self.analysis_id} not found")
+                    return
+
+                # Prepare BM25 data for persistence
+                bm25_data = {
+                    "documents": self.bm25_index.documents,
+                    "idf": dict(self.bm25_index.idf),
+                    "doc_len": self.bm25_index.doc_len,
+                    "corpus_size": self.bm25_index.corpus_size,
+                    "avg_doc_len": self.bm25_index.avg_doc_len,
+                    "fact_store_version": analysis.fact_store_version,  # Include current version
+                }
+
+                # Persist to artifact store
+                success = persist_rebuilt_bm25(
+                    db=self.db,
+                    analysis_id=self.analysis_id,
+                    bm25_data=bm25_data,
+                    current_fact_store_version=analysis.fact_store_version,
+                )
+
+                if success:
+                    logger.info(
+                        f"[BM25_LIFECYCLE_COMPLETE] Rebuilt and persisted BM25 for analysis {self.analysis_id} "
+                        f"version {analysis.fact_store_version[:8]}..."
+                    )
+                else:
+                    logger.warning(
+                        f"[BM25_PERSIST_FAILED_FALLBACK] BM25 rebuilt but persistence failed for analysis {self.analysis_id}. "
+                        f"Will use in-memory BM25 for this retrieval; next initialization may rebuild again."
+                    )
+
+            except Exception as e:
+                logger.error(
+                    f"Exception during BM25 persist after rebuild for analysis {self.analysis_id}: {e}",
+                    exc_info=True
+                )
 
     def _build_lexical_index(self):
         """Constructs an in-memory BM25 index of the codebase entities from the Fact Store."""
