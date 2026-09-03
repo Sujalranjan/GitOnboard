@@ -29,7 +29,10 @@
       "Bash(docker-compose up *)",
       "Bash(docker-compose *)",
       "Bash(pkill -f \"npm run dev\")",
-      "Artifact"
+      "Artifact",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(docker volume *)"
     ]
   }
 }

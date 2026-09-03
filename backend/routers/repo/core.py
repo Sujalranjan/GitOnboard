@@ -62,6 +62,8 @@ async def import_repo(req: ImportRequest, db: Session = Depends(get_db), current
     if repo_name.endswith(".git"):
         repo_name = repo_name[:-4]
 
+    logger.info(f"[import_repo] Importing {owner}/{repo_name} from {url}")
+
     # Pre-flight check
     try:
         limit_data = await check_repo_limits(owner, repo_name, current_user.github_access_token)
@@ -71,13 +73,18 @@ async def import_repo(req: ImportRequest, db: Session = Depends(get_db), current
         logger.error(f"GitHub API error: {e}")
         raise HTTPException(status_code=500, detail="Failed to communicate with GitHub API.")
 
+    logger.info(f"[import_repo] check_repo_limits returned: github_repo_id='{limit_data['github_repo_id']}'")
+
     # Check if repo exists
     repo = db.query(Repository).filter(
         Repository.user_id == current_user.id,
         Repository.github_repo_id == limit_data["github_repo_id"]
     ).first()
 
-    if not repo:
+    if repo:
+        logger.info(f"[import_repo] Found existing repo with ID {repo.id}, URL={repo.url}")
+    else:
+        logger.info(f"[import_repo] No existing repo found, creating new one")
         repo = Repository(
             github_repo_id=limit_data["github_repo_id"],
             url=url,
@@ -87,6 +94,7 @@ async def import_repo(req: ImportRequest, db: Session = Depends(get_db), current
         db.add(repo)
         db.commit()
         db.refresh(repo)
+        logger.info(f"[import_repo] Created new repo ID {repo.id} with URL={url}")
 
     # Check for unfinished jobs
     unfinished = db.query(AnalysisJob).join(Analysis).filter(

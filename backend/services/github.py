@@ -21,8 +21,11 @@ async def check_repo_limits(owner: str, repo: str, token: str = None):
     """Pre-flight check for repository size."""
     # Skip GitHub API calls in LOCAL mode
     if settings.deployment_type == "LOCAL":
+        # Generate unique ID per repository (format: local-owner-repo)
+        # This ensures each repo has a distinct github_repo_id, preventing collisions
+        local_repo_id = f"local-{owner}-{repo}"
         return {
-            "github_repo_id": "local",
+            "github_repo_id": local_repo_id,
             "default_branch": "main",
             "size_kb": 1024
         }
@@ -61,9 +64,11 @@ async def download_repo_zipball(owner: str, repo: str, branch: str, target_dir: 
     if settings.deployment_type == "LOCAL":
         logger.info(f"LOCAL mode: Using git clone for {owner}/{repo}")
         os.makedirs(target_dir, exist_ok=True)
+        logger.info(f"[PHASE2_DEBUG] Target directory created: {target_dir}")
 
         try:
             git_url = f"https://github.com/{owner}/{repo}.git"
+            logger.info(f"[PHASE2_DEBUG] Starting git clone: {git_url}")
             # Clone the repository (without history for speed)
             result = subprocess.run(
                 ["git", "clone", "--depth=1", "--branch", branch, git_url, target_dir],
@@ -71,6 +76,12 @@ async def download_repo_zipball(owner: str, repo: str, branch: str, target_dir: 
                 text=True,
                 timeout=60
             )
+
+            logger.info(f"[PHASE2_DEBUG] Git clone returned with code: {result.returncode}")
+            if result.stdout:
+                logger.info(f"[PHASE2_DEBUG] Git stdout: {result.stdout[:300]}")
+            if result.stderr:
+                logger.warning(f"[PHASE2_DEBUG] Git stderr: {result.stderr[:300]}")
 
             if result.returncode != 0:
                 logger.warning(f"Git clone failed: {result.stderr}, falling back to empty repo")
@@ -97,6 +108,8 @@ async def download_repo_zipball(owner: str, repo: str, branch: str, target_dir: 
             }}
         except Exception as e:
             logger.warning(f"LOCAL mode git clone error: {e}, returning empty")
+            import traceback
+            logger.warning(f"[PHASE2_DEBUG] Exception traceback: {traceback.format_exc()}")
             return {"file_count": 0, "commit_info": {
                 "hash": "local_clone_error",
                 "timestamp": None,

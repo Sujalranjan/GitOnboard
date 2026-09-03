@@ -410,38 +410,59 @@ async def get_raw_file(
     from backend.models.fact_store import FactFile
     from backend.storage import get_storage
 
+    logger.info(f"[FILE_API] GET /{repo_name}/file?path={path}")
+    logger.info(f"[FILE_API] Analysis ID: {analysis.id}, Repo ID: {repo.id}")
+
     try:
         clean_path = normalize_relative(path)
+        logger.info(f"[FILE_API] Clean path: {clean_path}")
     except PathTraversalError:
         raise HTTPException(status_code=400, detail=f"Invalid repository-relative file path: '{path}'")
+
     fact_file = (
         db.query(FactFile)
         .filter(FactFile.analysis_id == analysis.id, FactFile.path == clean_path)
         .first()
     )
 
-    if fact_file and fact_file.blob_name:
-        try:
-            storage = get_storage()
-            content = storage.get_object_text(fact_file.blob_name)
-            if content is not None:
-                return {
-                    "path": clean_path,
-                    "content": content,
-                    "size": fact_file.size,
-                    "language": fact_file.language,
-                    "content_type": fact_file.content_type,
-                }
-        except Exception as e:
-            logger.warning(f"Error reading blob {fact_file.blob_name}: {e}")
+    if fact_file:
+        logger.info(f"[FILE_API] FactFile found - blob_name: {fact_file.blob_name}, size: {fact_file.size}")
+        if fact_file.blob_name:
+            try:
+                storage = get_storage()
+                logger.info(f"[FILE_API] Attempting to read blob: {fact_file.blob_name}")
+                content = storage.get_object_text(fact_file.blob_name)
+                logger.info(f"[FILE_API] Blob read successful, content size: {len(content) if content else 0}")
+                if content is not None:
+                    logger.info(f"[FILE_API] Returning blob content")
+                    return {
+                        "path": clean_path,
+                        "content": content,
+                        "size": fact_file.size,
+                        "language": fact_file.language,
+                        "content_type": fact_file.content_type,
+                    }
+                else:
+                    logger.info(f"[FILE_API] Blob content is None, falling through")
+            except FileNotFoundError as e:
+                logger.warning(f"[FILE_API] Blob not found: {fact_file.blob_name}")
+            except Exception as e:
+                logger.warning(f"[FILE_API] Error reading blob {fact_file.blob_name}: {type(e).__name__}: {e}")
+        else:
+            logger.info(f"[FILE_API] FactFile has no blob_name")
+    else:
+        logger.info(f"[FILE_API] No FactFile found for path: {clean_path}")
 
     # Fallback to GitHub API if token and repository URL are available
+    logger.info(f"[FILE_API] Attempting GitHub API fallback, token available: {bool(current_user.github_access_token)}")
     if current_user.github_access_token and repo.url:
         try:
             parts = repo.url.rstrip("/").split("/")
             if len(parts) >= 2:
                 owner = parts[-2]
+                logger.info(f"[FILE_API] GitHub fetch: {owner}/{repo_name}/{clean_path}")
                 content = await fetch_file_content(owner, repo_name, repo.default_branch or "main", clean_path, current_user.github_access_token)
+                logger.info(f"[FILE_API] GitHub returned content size: {len(content) if content else 0}")
                 if content is not None:
                     return {
                         "path": clean_path,
@@ -451,9 +472,10 @@ async def get_raw_file(
                         "content_type": "text/plain",
                     }
         except Exception as e:
-            logger.debug(f"GitHub fallback read failed for {clean_path}: {e}")
+            logger.warning(f"[FILE_API] GitHub fallback read failed for {clean_path}: {e}")
 
     # If neither Azurite blob nor GitHub contains the file, return explicit 404
+    logger.warning(f"[FILE_API] No content found for {clean_path}, returning 404")
     raise HTTPException(
         status_code=404,
         detail=f"File not found in storage or repository: '{clean_path}'"

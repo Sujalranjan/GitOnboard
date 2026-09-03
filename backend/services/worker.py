@@ -139,9 +139,18 @@ class AnalysisWorker(WorkerInterface):
                                 content_type = content_type or "text/plain"
                                 file_size = full_p.stat().st_size
 
+                                # Upload to Azure blob storage
                                 with open(full_p, "rb") as fh:
+                                    logger.info(f"[BLOB_UPLOAD] Uploading {rel_p} to blob: {blob_key}")
                                     storage.put_object(blob_key, fh, content_type=content_type)
 
+                                # Verify blob exists in storage before recording in database
+                                logger.info(f"[BLOB_VERIFY] Verifying blob exists: {blob_key}")
+                                if not storage.object_exists(blob_key):
+                                    raise FileNotFoundError(f"Blob upload succeeded but verification failed: {blob_key} not found in storage")
+                                logger.info(f"[BLOB_VERIFY] Blob verified: {blob_key} exists in storage")
+
+                                # Create or update file entity
                                 f_ent = file_entities_by_path.get(rel_p)
                                 if not f_ent:
                                     f_id = generate_entity_id(EntityType.FILE, rel_p, rel_p)
@@ -161,12 +170,14 @@ class AnalysisWorker(WorkerInterface):
                                     model.entities[f_id] = f_ent
                                     file_entities_by_path[rel_p] = f_ent
 
+                                # Only record blob_name after successful upload AND verification
                                 f_ent.metadata["blob_name"] = blob_key
                                 f_ent.metadata["snapshot_id"] = snapshot_id
                                 f_ent.metadata["content_type"] = content_type
                                 f_ent.metadata["size"] = file_size
+                                logger.info(f"[BLOB_RECORD] Recorded blob_name in metadata: {blob_key}")
                             except Exception as up_err:
-                                logger.warning(f"Failed to upload blob for {rel_p}: {up_err}")
+                                logger.error(f"[BLOB_FAILED] Failed to upload blob for {rel_p}: {type(up_err).__name__}: {up_err}")
 
                     # Run Capability Engine
                     capability_engine = CapabilityBuilderEngine()
@@ -363,8 +374,19 @@ class AnalysisWorker(WorkerInterface):
                 except Exception:
                     pass
             finally:
+                # Clean up temporary worktree
                 if target_dir.exists():
-                    shutil.rmtree(target_dir, ignore_errors=True)
+                    try:
+                        logger.info(f"[CLEANUP] Removing temporary worktree: {target_dir}")
+                        shutil.rmtree(target_dir, ignore_errors=True)
+                        if not target_dir.exists():
+                            logger.info(f"[CLEANUP] Worktree cleanup successful: {target_dir}")
+                        else:
+                            logger.warning(f"[CLEANUP] Worktree cleanup failed - directory still exists: {target_dir}")
+                    except Exception as cleanup_err:
+                        logger.error(f"[CLEANUP] Exception during worktree cleanup: {type(cleanup_err).__name__}: {cleanup_err}")
+                else:
+                    logger.info(f"[CLEANUP] Temporary worktree already removed: {target_dir}")
 
         except Exception as e:
             logger.error(f"Critical worker error on job {job_id}: {e}")

@@ -56,6 +56,11 @@ class RepositorySourceReader:
         for base in base_paths:
             direct = (base / clean_path).resolve()
             if direct.exists() and direct.is_file():
+                # Log when reading from local worktrees (for auditing)
+                if "/app/data/worktrees" in str(base) or "data/worktrees" in str(base):
+                    logger.info(f"[SOURCE_READER] Reading from local worktree: {direct}")
+                else:
+                    logger.debug(f"[SOURCE_READER] Reading from base path: {direct}")
                 return direct
 
             # Check dot-prefixed alias (e.g., github/workflows/ -> .github/workflows/)
@@ -116,6 +121,7 @@ class RepositorySourceReader:
                 matched_file = fact_files[0]
 
             if matched_file and matched_file.blob_name:
+                logger.info(f"[SOURCE_READER] Reading from Azure blob: {matched_file.blob_name}")
                 storage = get_storage()
                 content = storage.get_object_text(matched_file.blob_name)
                 if content is not None:

@@ -99,6 +99,7 @@ class AzureBlobStorage(ObjectStorage):
         content_type: Optional[str] = None,
         metadata: Optional[dict] = None,
     ) -> str:
+        import time
         self.ensure_container_exists()
         blob_client = self.container_client.get_blob_client(key)
 
@@ -109,26 +110,55 @@ class AzureBlobStorage(ObjectStorage):
         else:
             payload = data
 
-        blob_client.upload_blob(
-            payload,
-            overwrite=True,
-            content_settings=content_settings,
-            metadata=metadata,
-        )
+        try:
+            logger.info(f"[AZURE_STORAGE] put_object starting for key: {key}")
+            start = time.time()
+            blob_client.upload_blob(
+                payload,
+                overwrite=True,
+                content_settings=content_settings,
+                metadata=metadata,
+                timeout=30.0,
+            )
+            elapsed = time.time() - start
+            logger.info(f"[AZURE_STORAGE] put_object succeeded in {elapsed:.2f}s for {key}")
+        except Exception as e:
+            logger.error(f"[AZURE_STORAGE] put_object failed for {key}: {type(e).__name__}: {e}", exc_info=True)
+            raise
+
         return key
 
     def get_object(self, key: str) -> bytes:
+        import time
+        logger.info(f"[AZURE_STORAGE] get_object called with key: {key}")
         self.ensure_container_exists()
         blob_client = self.container_client.get_blob_client(key)
         try:
-            stream = blob_client.download_blob()
-            return stream.readall()
-        except ResourceNotFoundError:
+            logger.info(f"[AZURE_STORAGE] Attempting download_blob for {key}")
+            start = time.time()
+            stream = blob_client.download_blob(timeout=30.0)
+            data = stream.readall()
+            elapsed = time.time() - start
+            logger.info(f"[AZURE_STORAGE] download_blob successful in {elapsed:.2f}s, got {len(data)} bytes")
+            return data
+        except ResourceNotFoundError as e:
+            logger.warning(f"[AZURE_STORAGE] ResourceNotFoundError for {key}: {e}")
             raise FileNotFoundError(f"Object not found in storage: {key}")
+        except Exception as e:
+            logger.error(f"[AZURE_STORAGE] Unexpected exception in get_object: {type(e).__name__}: {e}", exc_info=True)
+            raise
 
     def get_object_text(self, key: str, encoding: str = "utf-8") -> str:
-        raw_bytes = self.get_object(key)
-        return raw_bytes.decode(encoding, errors="replace")
+        logger.info(f"[AZURE_STORAGE] get_object_text called with key: {key}")
+        try:
+            raw_bytes = self.get_object(key)
+            logger.info(f"[AZURE_STORAGE] get_object returned {len(raw_bytes)} bytes")
+            result = raw_bytes.decode(encoding, errors="replace")
+            logger.info(f"[AZURE_STORAGE] Decoded to {len(result)} chars")
+            return result
+        except Exception as e:
+            logger.error(f"[AZURE_STORAGE] Exception in get_object_text: {type(e).__name__}: {e}", exc_info=True)
+            raise
 
     def delete_object(self, key: str) -> bool:
         self.ensure_container_exists()

@@ -133,8 +133,21 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                 file_id_map[entity.id] = db_id
 
         if file_records:
+            # Log blob verification before committing to database
+            blob_count = sum(1 for f in file_records if f.blob_name)
+            no_blob_count = sum(1 for f in file_records if not f.blob_name)
+            logger.info(f"[FACT_STORE] Saving {len(file_records)} FactFile records:")
+            logger.info(f"  - {blob_count} files WITH blob_name (uploaded to Azure)")
+            logger.info(f"  - {no_blob_count} files WITHOUT blob_name (upload failed or skipped)")
+
+            if no_blob_count > 0:
+                no_blob_files = [f.path for f in file_records if not f.blob_name]
+                logger.warning(f"[FACT_STORE] {no_blob_count} files without blob_name: {no_blob_files[:5]}" +
+                              (f" ... and {no_blob_count - 5} more" if no_blob_count > 5 else ""))
+
             db.add_all(file_records)
             db.flush()
+            logger.info(f"[FACT_STORE] FactFile records committed to database")
 
         # 2. Save Code Symbols
         seen_symbol_ids = set()
