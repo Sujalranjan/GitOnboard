@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models.user import User
-from backend.models.repository import AnalysisArtifact
+from backend.models.repository import AnalysisArtifact, Analysis
 from backend.dependencies.auth import get_current_user
 from backend.routers.repo.services.analysis import get_latest_analysis
 from backend.routers.repo.services.models import get_or_build_model
+from backend.services.indexing_health_service import get_indexing_health
 
 logger = logging.getLogger(__name__)
 
@@ -142,13 +143,13 @@ def get_health_smells(repo_name: str, db: Session = Depends(get_db), current_use
         repo, analysis = get_latest_analysis(repo_name, db, current_user)
     except HTTPException:
         return {"smells": []}
-    
+
     findings_art = db.query(AnalysisArtifact).filter(
         AnalysisArtifact.analysis_id == analysis.id,
         AnalysisArtifact.type == "findings"
     ).first()
     findings = findings_art.data if findings_art else []
-    
+
     smells = []
     for f in findings:
         severity = f.get("severity", "").upper() if isinstance(f, dict) else ""
@@ -160,3 +161,46 @@ def get_health_smells(repo_name: str, db: Session = Depends(get_db), current_use
                 "file_path": f.get("file_path", "") if isinstance(f, dict) else ""
             })
     return {"smells": smells}
+
+@health_router.get("/{repo_name}/health/indexing")
+def get_indexing_health_status(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get indexing health status for retrieval indexes (BM25, Chroma, exact search)."""
+    repo, analysis = get_latest_analysis(repo_name, db, current_user)
+
+    health = get_indexing_health(db, analysis.id)
+    if not health:
+        return {
+            "analysis_id": analysis.id,
+            "analysis_status": analysis.status,
+            "indexing_status": analysis.indexing_status,
+            "indexed_at": analysis.indexed_at.isoformat() if analysis.indexed_at else None,
+            "indexes": {
+                "exact": {"status": "UNKNOWN", "document_count": None},
+                "bm25": {"status": "UNKNOWN", "document_count": None},
+                "semantic": {"status": "UNKNOWN", "document_count": None},
+            }
+        }
+
+    return {
+        "analysis_id": analysis.id,
+        "analysis_status": analysis.status,
+        "indexing_status": health.overall_status.value,
+        "indexed_at": analysis.indexed_at.isoformat() if analysis.indexed_at else None,
+        "indexes": {
+            "exact": {
+                "status": health.exact.status.value,
+                "document_count": health.exact.document_count,
+                "error": health.exact.error_code.value if health.exact.error_code else None,
+            },
+            "bm25": {
+                "status": health.bm25.status.value,
+                "document_count": health.bm25.document_count,
+                "error": health.bm25.error_code.value if health.bm25.error_code else None,
+            },
+            "semantic": {
+                "status": health.semantic.status.value,
+                "document_count": health.semantic.document_count,
+                "error": health.semantic.error_code.value if health.semantic.error_code else None,
+            },
+        }
+    }

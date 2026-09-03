@@ -277,44 +277,137 @@ class AnalysisWorker(WorkerInterface):
                 # 3. Save artifacts & canonical Layer 4 Fact Store
                 logger.info("Saving artifacts and canonical Fact Store tables...")
                 rim_model = results.pop("rim_model", None)
+
+                # Track indexing health
+                from backend.intelligence.retrieval.indexing_health import (
+                    IndexStatus, OverallIndexingStatus, IndexFailureCode,
+                    IndexingHealthReport, IndexHealthSnapshot, record_indexing_failure,
+                    compute_overall_status
+                )
+
+                exact_ok = False
+                bm25_ok = False
+                semantic_ok = False
+
                 if rim_model:
                     try:
                         from backend.intelligence.store.fact_store import save_rim_to_fact_store
                         save_rim_to_fact_store(db, analysis.id, rim_model)
                         logger.info(f"Saved {len(rim_model.entities)} entities to Fact Store")
+                        exact_ok = True  # Exact search depends on FactStore
                     except Exception as e:
                         db.rollback()
                         logger.error(f"Error persisting facts to Fact Store: {e}")
 
                     # Build retrieval indexes (BM25 and Chroma) for this analysis
                     logger.info("Building semantic and lexical indexes...")
+
+                    bm25_doc_count = 0
+                    bm25_error_code = None
+                    bm25_error_msg = ""
+
+                    semantic_doc_count = 0
+                    semantic_error_code = None
+                    semantic_error_msg = ""
+
                     try:
                         from backend.intelligence.retrieval.retriever import HybridRetriever
                         from backend.intelligence.retrieval.semantic_builder import SemanticIndexBuilder
 
                         # Build BM25 index and store in memory for export
-                        retriever_temp = HybridRetriever(db=db, analysis_id=analysis.id)
-                        if retriever_temp.bm25_index:
-                            bm25_data = {
-                                "documents": retriever_temp.bm25_index.documents,
-                                "idf": dict(retriever_temp.bm25_index.idf),
-                                "doc_len": retriever_temp.bm25_index.doc_len,
-                                "corpus_size": retriever_temp.bm25_index.corpus_size,
-                                "avg_doc_len": retriever_temp.bm25_index.avg_doc_len,
-                            }
-                            results["bm25_index"] = bm25_data
-                            logger.info(f"BM25 index ready with {len(bm25_data['documents'])} documents")
+                        try:
+                            retriever_temp = HybridRetriever(db=db, analysis_id=analysis.id)
+                            if retriever_temp.bm25_index:
+                                bm25_doc_count = retriever_temp.bm25_index.corpus_size
+                                bm25_data = {
+                                    "documents": retriever_temp.bm25_index.documents,
+                                    "idf": dict(retriever_temp.bm25_index.idf),
+                                    "doc_len": retriever_temp.bm25_index.doc_len,
+                                    "corpus_size": retriever_temp.bm25_index.corpus_size,
+                                    "avg_doc_len": retriever_temp.bm25_index.avg_doc_len,
+                                }
+                                results["bm25_index"] = bm25_data
+                                logger.info(f"BM25 index ready with {bm25_doc_count} documents")
+                                bm25_ok = True
+                            else:
+                                if not rim_model.entities:
+                                    bm25_error_code = IndexFailureCode.BM25_EMPTY_FACTSTORE
+                                    bm25_error_msg = "No entities in FactStore"
+                                else:
+                                    bm25_error_code = IndexFailureCode.BM25_BUILD_FAILED
+                                    bm25_error_msg = "BM25 index creation returned None"
+                                record_indexing_failure(analysis.id, "bm25", bm25_error_code, bm25_error_msg)
+                        except Exception as bm25_err:
+                            bm25_error_code = IndexFailureCode.BM25_BUILD_FAILED
+                            bm25_error_msg = str(bm25_err)[:100]
+                            record_indexing_failure(analysis.id, "bm25", bm25_error_code, bm25_error_msg)
 
                         # Build Chroma semantic index
-                        semantic_builder = SemanticIndexBuilder()
-                        chroma_bytes = semantic_builder.build_index(rim_model.entities)
-                        if chroma_bytes:
-                            results["semantic_index_db"] = chroma_bytes
-                            logger.info(f"Semantic index ready: {len(chroma_bytes)} bytes")
-                        else:
-                            logger.warning("Semantic index build skipped (no entities)")
+                        try:
+                            semantic_builder = SemanticIndexBuilder()
+                            chroma_bytes = semantic_builder.build_index(rim_model.entities)
+                            if chroma_bytes:
+                                results["semantic_index_db"] = chroma_bytes
+                                semantic_doc_count = len(rim_model.entities)  # Approximate
+                                logger.info(f"Semantic index ready: {len(chroma_bytes)} bytes with ~{semantic_doc_count} entities")
+                                semantic_ok = True
+                            else:
+                                # Check if it's due to chromadb unavailable or empty entities
+                                if not rim_model.entities:
+                                    semantic_error_code = IndexFailureCode.CHROMA_ENTITY_SKIP
+                                    semantic_error_msg = "No entities to embed"
+                                else:
+                                    semantic_error_code = IndexFailureCode.CHROMA_BUILD_FAILED
+                                    semantic_error_msg = "Chroma index build returned None"
+                                record_indexing_failure(analysis.id, "semantic", semantic_error_code, semantic_error_msg)
+                        except ImportError:
+                            semantic_error_code = IndexFailureCode.CHROMA_UNAVAILABLE
+                            semantic_error_msg = "chromadb not installed"
+                            record_indexing_failure(analysis.id, "semantic", semantic_error_code, semantic_error_msg)
+                        except Exception as chroma_err:
+                            semantic_error_code = IndexFailureCode.CHROMA_BUILD_FAILED
+                            semantic_error_msg = str(chroma_err)[:100]
+                            record_indexing_failure(analysis.id, "semantic", semantic_error_code, semantic_error_msg)
+
                     except Exception as e:
-                        logger.warning(f"Failed to build retrieval indexes: {e}", exc_info=True)
+                        logger.error(f"Failed to build retrieval indexes: {e}", exc_info=True)
+                        if not bm25_ok and not bm25_error_code:
+                            bm25_error_code = IndexFailureCode.BM25_BUILD_FAILED
+                            bm25_error_msg = str(e)[:100]
+                        if not semantic_ok and not semantic_error_code:
+                            semantic_error_code = IndexFailureCode.CHROMA_BUILD_FAILED
+                            semantic_error_msg = str(e)[:100]
+
+                    # Record indexing health
+                    overall_status = compute_overall_status(exact_ok, bm25_ok, semantic_ok)
+                    health_report = IndexingHealthReport(
+                        overall_status=overall_status,
+                        exact=IndexHealthSnapshot(
+                            status=IndexStatus.SUCCESS if exact_ok else IndexStatus.FAILED,
+                            document_count=len(rim_model.entities) if exact_ok else 0,
+                        ),
+                        bm25=IndexHealthSnapshot(
+                            status=IndexStatus.SUCCESS if bm25_ok else IndexStatus.FAILED,
+                            document_count=bm25_doc_count,
+                            error_code=bm25_error_code,
+                            error_message=bm25_error_msg,
+                            created_at=datetime.now(timezone.utc),
+                        ),
+                        semantic=IndexHealthSnapshot(
+                            status=IndexStatus.SUCCESS if semantic_ok else (
+                                IndexStatus.UNAVAILABLE if semantic_error_code == IndexFailureCode.CHROMA_UNAVAILABLE else IndexStatus.FAILED
+                            ),
+                            document_count=semantic_doc_count,
+                            error_code=semantic_error_code,
+                            error_message=semantic_error_msg,
+                            created_at=datetime.now(timezone.utc),
+                        ),
+                    )
+
+                    analysis.indexing_status = overall_status.value
+                    analysis.indexing_details = health_report.to_dict()
+                    analysis.indexed_at = datetime.now(timezone.utc)
+                    logger.info(f"Indexing health: overall={overall_status.value} exact={exact_ok} bm25={bm25_ok} semantic={semantic_ok}")
 
                 for art_type, data in results.items():
                     if isinstance(data, bytes):

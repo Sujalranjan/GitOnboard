@@ -24,14 +24,17 @@ class Repository(Base):
 
 class Analysis(Base):
     __tablename__ = "analyses"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     repository_id = Column(Integer, ForeignKey("repositories.id"), nullable=False)
     commit_sha = Column(String, nullable=True)
     engine_version = Column(String, nullable=False, default="v1.0")
-    status = Column(String, nullable=False, default="Queued")
+    status = Column(String, nullable=False, default="Queued")  # Queued, Downloading, Analyzing, Saving, Completed, Failed
+    indexing_status = Column(String, nullable=False, default="PENDING")  # PENDING, SUCCESS, PARTIAL, FAILED
+    indexing_details = Column(JSONType, nullable=True)  # {exact: {...}, bm25: {...}, semantic: {...}}
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    
+    indexed_at = Column(DateTime(timezone=True), nullable=True)
+
     repository = relationship("Repository", back_populates="analyses")
     artifacts = relationship("AnalysisArtifact", back_populates="analysis", cascade="all, delete-orphan")
     jobs = relationship("AnalysisJob", back_populates="analysis", cascade="all, delete-orphan")
