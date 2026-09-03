@@ -181,38 +181,85 @@ Categorize each answer as:
 - **Uncertain**: Model appropriately declines to claim definitive absence
 - **False absence**: Repository actually contains the entity (error)
 
-**Six Specific Questions to Answer**:
+**Frozen Hypothesis Framework** (Locked Before Execution):
 
-1. **Does RIM metadata reduce verification rate?**
-   - Compare B vs A: is verification rate lower when metadata present?
+| Candidate Cause | Evidence Required |
+|-----------------|-------------------|
+| **Metadata semantics** | Model treats missing RIM facts as proof of absence |
+| **Prompt precedence** | Search instruction present but overridden by RIM instructions |
+| **Context placement** | Same metadata produces different behavior when position changes |
+| **Tool policy** | Model not required to verify negative claims |
+| **Query classification** | Negative queries not recognized as requiring verification |
+| **query_rim semantics** | Tool conflates "not found" with "does not exist" |
 
-2. **Is metadata absence interpreted as repository absence?**
-   - When RIM_METADATA lacks a fact, does LLM treat it as evidence the fact doesn't exist?
+**Primary Metric: Verification Rate**
 
-3. **Does query_rim distinguish "not found" from "does not exist"?**
-   - When query_rim returns empty results, does LLM understand this as "retrieval found nothing" vs. "repository contains nothing"?
+Count tool calls for each execution. Record:
+- **Verified**: search_repository OR read_file called before negative claim → search performed
+- **Unverified**: negative claim without retrieval → no search performed
+- **Fallback**: model appropriately declines to claim definitive absence
 
-4. **Does prompt/context placement affect behavior?**
-   - Would different RIM metadata position (before vs. after query) change verification rate?
+**Example outcome**:
+```
+A (Baseline):  29/30 verified (96%)
+B (Metadata):  17/30 verified (57%) ← regression
+C (Full RIM):  24/30 verified (80%) ← partial recovery
+```
 
-5. **Does explicit verification requirement restore grounding?**
-   - If system prompt adds "You must search the repository to verify absence," does verification rate recover?
+**Tool Traces** (More diagnostic than answer scores):
 
-6. **What intervention has the smallest efficiency cost?**
-   - Which fix maintains RIM's speed advantages while restoring verification?
+For each of 90 runs, record the actual tool sequence:
 
-**Execution Protocol**:
+```
+Pattern 1 (Verification failure):
+  RIM metadata present
+    ↓
+  model decides answer already known
+    ↓
+  no retrieval attempted
+    ↓
+  negative claim made
+  → Evidence for: metadata-induced short-circuit
 
-1. Define ground truth for each of the 3 queries (similar to Phase 6 methodology)
-2. Run 90 executions with full instrumentation
-3. For each execution, record:
+Pattern 2 (Search but synthesis failure):
+  RIM metadata present
+    ↓
+  model searches (verification attempted)
+    ↓
+  search returns no results
+    ↓
+  model still gives vague answer
+  → Evidence for: answer synthesis / evidence representation failure
+
+Pattern 3 (Query classification):
+  negative query received
+    ↓
+  query_rim called instead of search_repository
+    ↓
+  empty result treated as "does not exist"
+  → Evidence for: query_rim semantics conflation
+```
+
+**Decision Rule**:
+
+Do NOT assume result must be one of the six hypotheses. Let tool traces determine which pattern(s) emerge from the data. Multiple patterns may be present simultaneously.
+
+**Execution Protocol** (Frozen Before Runs Begin):
+
+1. **Define ground truth** for each of the 3 queries (what "verified absence" looks like)
+2. **Lock this hypothesis framework and evidence table** — no modifications during execution
+3. **Run 90 executions** with full tool-trace instrumentation:
+   - 3 queries × 3 conditions × 10 runs each
+   - Fixed model, repository commit, scoring protocol
+4. **For each execution, record**:
+   - Full tool call sequence (tools called in order)
+   - Verification rate (search attempted? yes/no)
    - Final answer
-   - Whether search was performed
-   - Which tools were called (query_rim, search_repository, read_file, etc.)
-   - Whether answer was verified or unverified
-4. Aggregate verification rate by condition
-5. Answer the six questions above from the data
-6. Do NOT attempt a fix; only describe findings
+   - Which behavioral pattern emerged (Pattern 1/2/3 or novel)
+5. **Aggregate** verification rate by condition
+6. **Map evidence to causes** using the frozen hypothesis table
+7. **Identify root cause pattern(s)** from tool traces
+8. **Do NOT attempt a fix** — only describe findings and which hypothesis was supported by evidence
 
 **Do NOT Do**:
 
@@ -225,13 +272,20 @@ Categorize each answer as:
 
 Phase 7 succeeds when you can definitively answer which of the six factors is driving the grounding failure, with evidence from the 90-run matrix.
 
-**Verdict Unchanged**:
+**Verdict FROZEN During Phase 7** (Critical):
 
-Until a corrected RIM implementation is benchmarked against Phase 6 methodology (full 315-query evaluation with ground-truth scoring):
+**RIM remains CURRENTLY_UNSAFE throughout Phase 7 investigation.**
 
-**RIM remains CURRENTLY_UNSAFE.**
+Phase 7 findings CANNOT change this verdict. Phase 7 can ONLY:
+- Explain WHY the regression occurs
+- Suggest what a fix might target
+- Enable Phase 8 (a new full benchmark of corrected implementation)
 
-A successful Phase 7 investigation can only *enable* a new Phase 8 benchmark; it cannot invalidate the existing Phase 6 result.
+A successful Phase 7 investigation identifying the root cause is a **prerequisite for Phase 8**, not validation that the problem is solved.
+
+**Only Phase 8** — a full 315-query re-benchmark of a corrected RIM implementation against the Phase 6 methodology — can produce evidence that RIM is safe for deployment.
+
+Phase 7 verdict status: **CURRENTLY_UNSAFE (unchanged)**
 
 ---
 
