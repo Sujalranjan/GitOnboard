@@ -1,0 +1,11 @@
+[
+  {
+    "evidence_id": "ev_0001",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "dependencies = ['typer>=0.9.0', 'rich>=13.0.0']",
+    "line_start": 3,
+    "line_end": 3
+  }
+]

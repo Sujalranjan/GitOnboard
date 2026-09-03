@@ -1,0 +1,20 @@
+[
+  {
+    "unit_id": "frontend",
+    "name": "frontend",
+    "unit_type": "web_app",
+    "root_path": "frontend",
+    "entrypoints": [
+      "frontend/src/index.tsx"
+    ]
+  },
+  {
+    "unit_id": "backend",
+    "name": "backend",
+    "unit_type": "backend_api",
+    "root_path": "backend",
+    "entrypoints": [
+      "backend/app.py"
+    ]
+  }
+]

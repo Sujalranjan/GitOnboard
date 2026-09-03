@@ -1,0 +1,3 @@
+{
+  "raw_prompt_context": "=== SECTION 1: VERIFIED CODE EVIDENCE (STATIC ANALYSIS) ===\n{\n  \"name\": \"Unknown\",\n  \"primary_language\": \"Unknown\",\n  \"languages\": {},\n  \"frameworks\": [],\n  \"entrypoints\": [\n    \"main.py\"\n  ],\n  \"modules\": [],\n  \"metrics\": {\n    \"total_files\": \"unknown\",\n    \"lines_of_code\": \"unknown\",\n    \"total_functions\": \"unknown\",\n    \"total_classes\": \"unknown\",\n    \"largest_modules\": []\n  }\n}"
+}

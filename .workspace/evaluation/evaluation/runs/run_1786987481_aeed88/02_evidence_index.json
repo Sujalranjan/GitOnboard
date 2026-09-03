@@ -1,0 +1,65 @@
+[
+  {
+    "evidence_id": "ev_0001",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "'fastapi>=0.110.0',",
+    "line_start": 5,
+    "line_end": 5
+  },
+  {
+    "evidence_id": "ev_0002",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "'uvicorn>=0.28.0',",
+    "line_start": 6,
+    "line_end": 6
+  },
+  {
+    "evidence_id": "ev_0003",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "'sqlalchemy>=2.0.0',",
+    "line_start": 7,
+    "line_end": 7
+  },
+  {
+    "evidence_id": "ev_0004",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "'psycopg2-binary>=2.9.0',",
+    "line_start": 8,
+    "line_end": 8
+  },
+  {
+    "evidence_id": "ev_0005",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "'pydantic>=2.0.0'",
+    "line_start": 9,
+    "line_end": 9
+  },
+  {
+    "evidence_id": "ev_0006",
+    "path": "docker-compose.yml",
+    "source_classification": "configuration",
+    "source_type": "config_entry",
+    "snippet": "image: postgres:15",
+    "line_start": 7,
+    "line_end": 7
+  },
+  {
+    "evidence_id": "ev_0007",
+    "path": "src/routers/users.py",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /",
+    "line_start": 6,
+    "line_end": 6
+  }
+]

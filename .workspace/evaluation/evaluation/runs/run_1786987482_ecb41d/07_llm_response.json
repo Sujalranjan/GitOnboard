@@ -1,0 +1,6 @@
+{
+  "raw_content": "{\"overview\": {\"text\": \"11_vendored_heavy_node summarized with verified evidence.\", \"evidence_ids\": [\"ev_0001\"]}, \"deployable_units\": [{\"name\": \"backend_api\", \"unit_type\": \"backend_api\", \"root_path\": \"/\", \"summary\": \"backend_api component\", \"evidence_ids\": [\"ev_0001\"]}], \"technologies\": [{\"name\": \"JavaScript\", \"category\": \"Language\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}, {\"name\": \"Express\", \"category\": \"Framework\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}], \"data_and_storage\": {\"databases\": []}, \"operations_and_deployment\": {}, \"discrepancies\": [], \"unverified_doc_claims\": []}",
+  "provider": "mock_v2",
+  "model": "mock_v2",
+  "tokens": 460
+}

@@ -1,0 +1,6 @@
+{
+  "raw_content": "{\"overview\": {\"text\": \"Demo Service is an HTTP API service built with FastAPI.\", \"evidence_ids\": [\"ev_0001\"]}, \"deployable_units\": [{\"name\": \"demo\", \"unit_type\": \"backend_api\", \"root_path\": \"/\", \"summary\": \"Main API\", \"evidence_ids\": [\"ev_0001\"]}], \"technologies\": [{\"name\": \"FastAPI\", \"category\": \"Framework\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}], \"data_and_storage\": {}, \"operations_and_deployment\": {}, \"discrepancies\": [], \"unverified_doc_claims\": []}",
+  "provider": "mock_v2",
+  "model": "mock_v2",
+  "tokens": 450
+}

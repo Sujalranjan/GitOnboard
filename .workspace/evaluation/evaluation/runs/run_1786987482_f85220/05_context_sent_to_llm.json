@@ -1,0 +1,3 @@
+{
+  "raw_prompt_context": "=== 1. IDENTITY & TECH STACK EVIDENCE ===\n[ev_0001] (manifest_dep in pyproject.toml): dependencies = ['fastapi']\n\n=== 2. ARCHITECTURE & DEPLOYABLE UNITS ===\n- Unit: primary-service (Type: backend_api, Path: /, Entrypoints: ['src/main.py'])\n\n=== 3. API SURFACE & CAPABILITIES ===\n[DOC: README.md#Calc API]\n# Calc API\nA simple calculation API.\n\n\n=== 4. DATA & OPERATIONS EVIDENCE ===\n\n=== 5. VERIFIED CLAIMS & DISCREPANCIES ===\n- Claim: Fastapi | Status: strongly_supported | Reasoning: lifecycle: declared=True, app_usage=True, config=False, doc=False | Evidence: ['ev_0001', 'ev_0001']\n- Claim: Kafka | Status: documented_unverified | Reasoning: lifecycle: declared=False, app_usage=False, config=False, doc=True | Evidence: []"
+}

@@ -1,0 +1,6 @@
+{
+  "raw_content": "{\"overview\": {\"text\": \"08_outdated_readme_sqlite summarized with verified evidence.\", \"evidence_ids\": [\"ev_0001\"]}, \"deployable_units\": [{\"name\": \"backend_api\", \"unit_type\": \"backend_api\", \"root_path\": \"/\", \"summary\": \"backend_api component\", \"evidence_ids\": [\"ev_0001\"]}], \"technologies\": [{\"name\": \"Python\", \"category\": \"Language\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}, {\"name\": \"FastAPI\", \"category\": \"Framework\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}, {\"name\": \"SQLAlchemy\", \"category\": \"Framework\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}, {\"name\": \"PostgreSQL\", \"category\": \"Database\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}], \"data_and_storage\": {\"databases\": [\"PostgreSQL\"]}, \"operations_and_deployment\": {}, \"discrepancies\": [{\"claimed_in_doc\": \"SQLite database\", \"actual_code_fact\": \"PostgreSQL via psycopg2, SQLAlchemy connection string, and Docker Compose postgres service\", \"evidence_ids\": [\"ev_0001\"]}], \"unverified_doc_claims\": []}",
+  "provider": "mock_v2",
+  "model": "mock_v2",
+  "tokens": 460
+}

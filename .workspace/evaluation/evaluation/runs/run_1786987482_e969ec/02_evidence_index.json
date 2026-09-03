@@ -1,0 +1,20 @@
+[
+  {
+    "evidence_id": "ev_0001",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "dependencies = ['fastapi', 'sqlalchemy', 'celery', 'pydantic', 'alembic']",
+    "line_start": 3,
+    "line_end": 3
+  },
+  {
+    "evidence_id": "ev_0002",
+    "path": "docker-compose.yml",
+    "source_classification": "configuration",
+    "source_type": "config_entry",
+    "snippet": "image: postgres:15",
+    "line_start": 7,
+    "line_end": 7
+  }
+]

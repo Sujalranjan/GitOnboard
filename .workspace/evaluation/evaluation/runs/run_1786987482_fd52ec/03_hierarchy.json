@@ -1,0 +1,30 @@
+[
+  {
+    "unit_id": "packages/ui",
+    "name": "ui",
+    "unit_type": "web_app",
+    "root_path": "packages/ui",
+    "entrypoints": []
+  },
+  {
+    "unit_id": "apps/api",
+    "name": "api",
+    "unit_type": "shared_library",
+    "root_path": "apps/api",
+    "entrypoints": []
+  },
+  {
+    "unit_id": "apps/worker",
+    "name": "worker",
+    "unit_type": "background_worker",
+    "root_path": "apps/worker",
+    "entrypoints": []
+  },
+  {
+    "unit_id": "apps/web",
+    "name": "web",
+    "unit_type": "web_app",
+    "root_path": "apps/web",
+    "entrypoints": []
+  }
+]

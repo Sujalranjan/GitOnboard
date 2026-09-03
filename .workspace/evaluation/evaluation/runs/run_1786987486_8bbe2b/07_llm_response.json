@@ -1,0 +1,6 @@
+{
+  "raw_content": "{\"overview\": {\"text\": \"DemoApp is a Python web application.\", \"evidence_ids\": []}, \"deployable_units\": [], \"technologies\": [], \"data_and_storage\": {}, \"operations_and_deployment\": {}, \"discrepancies\": [], \"unverified_doc_claims\": []}",
+  "provider": "mock",
+  "model": "mock",
+  "tokens": 280
+}

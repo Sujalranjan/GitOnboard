@@ -1,0 +1,20 @@
+[
+  {
+    "evidence_id": "ev_0001",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "dependencies = ['fastapi', 'uvicorn']",
+    "line_start": 3,
+    "line_end": 3
+  },
+  {
+    "evidence_id": "ev_0002",
+    "path": "app/main.py",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /",
+    "line_start": 4,
+    "line_end": 4
+  }
+]

@@ -1,0 +1,11 @@
+[
+  {
+    "unit_id": "root",
+    "name": "primary-service",
+    "unit_type": "shared_library",
+    "root_path": "/",
+    "entrypoints": [
+      "main.py"
+    ]
+  }
+]

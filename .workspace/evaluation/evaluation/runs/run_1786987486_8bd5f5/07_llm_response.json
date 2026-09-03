@@ -1,0 +1,6 @@
+{
+  "raw_content": "{\"overview\": {\"text\": \"Audited App\", \"evidence_ids\": [\"ev_0001\"]}, \"deployable_units\": [], \"technologies\": [{\"name\": \"fastapi\", \"category\": \"Framework\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}], \"discrepancies\": []}",
+  "provider": "mock",
+  "model": "mock",
+  "tokens": 250
+}

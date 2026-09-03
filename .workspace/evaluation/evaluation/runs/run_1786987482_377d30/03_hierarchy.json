@@ -1,0 +1,11 @@
+[
+  {
+    "unit_id": "root",
+    "name": "primary-service",
+    "unit_type": "web_app",
+    "root_path": "/",
+    "entrypoints": [
+      "app/page.tsx"
+    ]
+  }
+]

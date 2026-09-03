@@ -1,0 +1,19 @@
+{
+  "run_id": "run_1786987484_16fc2e",
+  "duration_seconds": 0.005,
+  "evidence_coverage": {
+    "total_evidence_created": 2,
+    "evidence_selected_for_llm": 2,
+    "evidence_omitted": 0
+  },
+  "architecture_coverage": {
+    "deployable_units_discovered": 1,
+    "deployable_units_supplied": 1
+  },
+  "validation_metrics": {
+    "accepted_claims": 6,
+    "rejected_claims": 0,
+    "fabricated_paths_detected": 0,
+    "false_contradictions_rejected": 0
+  }
+}

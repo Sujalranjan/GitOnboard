@@ -1,0 +1,29 @@
+[
+  {
+    "evidence_id": "ev_0001",
+    "path": "Cargo.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "actix-web = \"4.4\"",
+    "line_start": 7,
+    "line_end": 7
+  },
+  {
+    "evidence_id": "ev_0002",
+    "path": "Cargo.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "tokio = { version = \"1.0\", features = [\"full\"] }",
+    "line_start": 8,
+    "line_end": 8
+  },
+  {
+    "evidence_id": "ev_0003",
+    "path": "Cargo.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "serde = { version = \"1.0\", features = [\"derive\"] }",
+    "line_start": 9,
+    "line_end": 9
+  }
+]

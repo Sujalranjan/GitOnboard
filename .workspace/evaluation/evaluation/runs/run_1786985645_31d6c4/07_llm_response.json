@@ -1,0 +1,6 @@
+{
+  "raw_content": "### FastAPI mini documentary\n\nThere's a [FastAPI mini documentary](https://www.youtube.com/watch?v=mpR8ngthqiE) released at the end of 2025, you can watch it online:\n\n<a class=\"fastapi-feature-banner\" href=\"https://www.youtube.com/watch?v=mpR8ngthqiE\"><img src=\"https://fastapi.tiangolo.com/img/fastapi-documentary.jpg\" alt=\"FastAPI Mini Documentary\"></a>\n\n### **Typer**, the FastAPI of CLIs\n\n<a href=\"https://typer.tiangolo.com\"><img src=\"https://typer.tiangolo.com/img/logo-margin/logo-margin-vector.svg\" style=\"width: 20%;\"></a>\n\nIf you are building a <abbr title=\"Command Line Interface\">CLI</abbr> app to be used in the terminal instead of a web API, check out [**Typer**](https://typer.tiangolo.com/).\n\n**Typer** is FastAPI's little sibling. And it's intended to be the **FastAPI of CLIs**. \u2328\ufe0f \ud83d\ude80",
+  "provider": "ollama",
+  "model": "qwen2.5-coder:7b",
+  "tokens": 4330
+}

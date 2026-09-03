@@ -1,0 +1,11 @@
+[
+  {
+    "unit_id": "root",
+    "name": "primary-service",
+    "unit_type": "cli_tool",
+    "root_path": "/",
+    "entrypoints": [
+      "main.py"
+    ]
+  }
+]

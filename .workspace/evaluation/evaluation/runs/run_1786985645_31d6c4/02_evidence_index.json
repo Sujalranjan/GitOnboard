@@ -1,0 +1,371 @@
+[
+  {
+    "evidence_id": "ev_0001",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"starlette>=0.46.0\",",
+    "line_start": 45,
+    "line_end": 45
+  },
+  {
+    "evidence_id": "ev_0002",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"pydantic>=2.9.0\",",
+    "line_start": 46,
+    "line_end": 46
+  },
+  {
+    "evidence_id": "ev_0003",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"typing-extensions>=4.8.0\",",
+    "line_start": 47,
+    "line_end": 47
+  },
+  {
+    "evidence_id": "ev_0004",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"typing-inspection>=0.4.2\",",
+    "line_start": 48,
+    "line_end": 48
+  },
+  {
+    "evidence_id": "ev_0005",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"annotated-doc>=0.0.2\",",
+    "line_start": 49,
+    "line_end": 49
+  },
+  {
+    "evidence_id": "ev_0006",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"docs_src/dependencies/tutorial007_py310.py\" = [\"F821\"]",
+    "line_start": 286,
+    "line_end": 286
+  },
+  {
+    "evidence_id": "ev_0007",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"docs_src/dependencies/tutorial008_an_py310.py\" = [\"F821\"]",
+    "line_start": 287,
+    "line_end": 287
+  },
+  {
+    "evidence_id": "ev_0008",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"docs_src/dependencies/tutorial008_py310.py\" = [\"F821\"]",
+    "line_start": 288,
+    "line_end": 288
+  },
+  {
+    "evidence_id": "ev_0009",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"docs_src/dependencies/tutorial008b_an_py310.py\" = [\"B904\"]",
+    "line_start": 289,
+    "line_end": 289
+  },
+  {
+    "evidence_id": "ev_0010",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"docs_src/dependencies/tutorial008b_py310.py\" = [\"B904\"]",
+    "line_start": 290,
+    "line_end": 290
+  },
+  {
+    "evidence_id": "ev_0011",
+    "path": "pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"docs_src/dependencies/tutorial010_py310.py\" = [\"F821\"]",
+    "line_start": 291,
+    "line_end": 291
+  },
+  {
+    "evidence_id": "ev_0012",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /events-typed",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0013",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "POST /index-weights/",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0014",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "POST /offers/",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0015",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "PUT /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0016",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "PUT /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0017",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "PUT /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0018",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "PUT /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0019",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "POST /images/multiple/",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0020",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "PUT /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0021",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "PUT /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0022",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /items/",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0023",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /users/{user_id}/items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0024",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0025",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0026",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0027",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0028",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /items/{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0029",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /items/",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0030",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /predict",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0031",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "PUT /get-or-create-task/{task_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0032",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0033",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0034",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0035",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "PUT /{item_id}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0036",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /users/",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0037",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /users/me",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0038",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /users/{username}",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0039",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "POST /",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0040",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "POST /user/",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0041",
+    "path": "routes",
+    "source_classification": "application",
+    "source_type": "route_decl",
+    "snippet": "GET /items/",
+    "line_start": null,
+    "line_end": null
+  }
+]

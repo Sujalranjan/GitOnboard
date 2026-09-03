@@ -1,0 +1,21 @@
+[
+  {
+    "statement": "Deployable Unit backend_api at path /api",
+    "reason": "Path '/api' does not exist in repository snapshot.",
+    "attempted_evidence_ids": [
+      "ev_0002"
+    ]
+  },
+  {
+    "statement": "Technology Python",
+    "reason": "Citations [] do not genuinely entail technology 'Python'.",
+    "attempted_evidence_ids": []
+  },
+  {
+    "statement": "Discrepancy: The application uses SQLAlchemy for ORM. vs The application uses Tortoise ORM instead of SQLAlchemy.",
+    "reason": "No authoritative CONTRADICTED claim found in repository evidence.",
+    "attempted_evidence_ids": [
+      "ev_0006"
+    ]
+  }
+]

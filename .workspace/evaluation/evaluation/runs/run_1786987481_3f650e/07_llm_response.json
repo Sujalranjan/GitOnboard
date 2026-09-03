@@ -1,0 +1,6 @@
+{
+  "raw_content": "{\"overview\": {\"text\": \"01_small_python_api summarized with verified evidence.\", \"evidence_ids\": [\"ev_0001\"]}, \"deployable_units\": [{\"name\": \"cli_tool\", \"unit_type\": \"cli_tool\", \"root_path\": \"/\", \"summary\": \"cli_tool component\", \"evidence_ids\": [\"ev_0001\"]}], \"technologies\": [{\"name\": \"Python\", \"category\": \"Language\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}, {\"name\": \"Click\", \"category\": \"Framework\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}, {\"name\": \"Requests\", \"category\": \"Framework\", \"status\": \"strongly_supported\", \"evidence_ids\": [\"ev_0001\"]}], \"data_and_storage\": {\"databases\": []}, \"operations_and_deployment\": {}, \"discrepancies\": [], \"unverified_doc_claims\": []}",
+  "provider": "mock_v2",
+  "model": "mock_v2",
+  "tokens": 460
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "evidence_id": "ev_0001",
+    "path": "frontend/package.json",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "\"react\": \"^18.0.0\"",
+    "line_start": null,
+    "line_end": null
+  },
+  {
+    "evidence_id": "ev_0002",
+    "path": "backend/pyproject.toml",
+    "source_classification": "configuration",
+    "source_type": "manifest_dep",
+    "snippet": "dependencies = ['fastapi>=0.100.0', 'uvicorn>=0.20.0']",
+    "line_start": 3,
+    "line_end": 3
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "statement": "Deployable Unit Backend API at path /api",
+    "reason": "Path '/api' does not exist in repository snapshot.",
+    "attempted_evidence_ids": [
+      "ev_0002"
+    ]
+  },
+  {
+    "statement": "Discrepancy: The project uses Redis for caching. vs Redis is not used in the codebase.",
+    "reason": "No authoritative CONTRADICTED claim found in repository evidence.",
+    "attempted_evidence_ids": [
+      "ev_0007"
+    ]
+  }
+]

@@ -1,0 +1,11 @@
+[
+  {
+    "unit_id": "root",
+    "name": "primary-service",
+    "unit_type": "backend_api",
+    "root_path": "/",
+    "entrypoints": [
+      "src/main.rs"
+    ]
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "unit_id": "root",
+    "name": "primary-service",
+    "unit_type": "web_app",
+    "root_path": "/",
+    "entrypoints": []
+  },
+  {
+    "unit_id": "frontend",
+    "name": "frontend",
+    "unit_type": "web_app",
+    "root_path": "frontend",
+    "entrypoints": []
+  },
+  {
+    "unit_id": "frontend/.next",
+    "name": ".next",
+    "unit_type": "shared_library",
+    "root_path": "frontend/.next",
+    "entrypoints": []
+  },
+  {
+    "unit_id": "frontend/.next/build",
+    "name": "build",
+    "unit_type": "shared_library",
+    "root_path": "frontend/.next/build",
+    "entrypoints": []
+  },
+  {
+    "unit_id": "frontend/.next/dev",
+    "name": "dev",
+    "unit_type": "shared_library",
+    "root_path": "frontend/.next/dev",
+    "entrypoints": []
+  },
+  {
+    "unit_id": "frontend/.next/dev/build",
+    "name": "build",
+    "unit_type": "shared_library",
+    "root_path": "frontend/.next/dev/build",
+    "entrypoints": []
+  }
+]
