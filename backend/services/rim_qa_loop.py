@@ -546,8 +546,19 @@ class RIMQALoop:
         elif tool_name == "search_repository" and isinstance(data, list):
             summary = f"[search_repository] Found {len(data)} results:\n"
             for result in data[:10]:  # Include first 10 results
-                path = result.get("path", "?") if isinstance(result, dict) else str(result)[:50]
-                summary += f"  - {path}\n"
+                if isinstance(result, dict):
+                    file_path = result.get("file", result.get("path", "?"))
+                    result_type = result.get("type", "")
+                    # For symbol/code results, include additional context
+                    if result_type == "symbol" and "symbol" in result:
+                        summary += f"  - {file_path}: {result['symbol']} (lines {result.get('lines', '?')})\n"
+                    elif result_type == "code" and "line" in result:
+                        snippet = result.get("snippet", "")[:50]
+                        summary += f"  - {file_path}:{result['line']} {snippet}\n"
+                    else:
+                        summary += f"  - {file_path}\n"
+                else:
+                    summary += f"  - {str(result)[:50]}\n"
             if len(data) > 10:
                 summary += f"  ... and {len(data) - 10} more results\n"
             return summary
