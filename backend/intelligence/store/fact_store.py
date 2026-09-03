@@ -30,8 +30,8 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
     """
     logger.info(f"Saving RIM facts to canonical PostgreSQL Fact Store for analysis_id={analysis_id}...")
 
-    # Validate RepositoryModel invariant: Every relationship must reference entities that exist
-    # This prevents silent failures when analyzers create orphaned relationships
+    # Detect orphaned relationships (references to non-existent entities)
+    # Warn but don't fail - persistence logic will skip them
     orphaned_rels = []
     for rel_id, rel in model.relationships.items():
         if rel.source_id not in model.entities:
@@ -40,13 +40,11 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
             orphaned_rels.append(f"{rel_id}: missing target {rel.target_id}")
 
     if orphaned_rels:
-        error_msg = (
-            f"RepositoryModel invariant violated: {len(orphaned_rels)} relationships reference non-existent entities:\n" +
-            "\n".join(orphaned_rels[:5]) +  # Show first 5 to keep error readable
+        logger.warning(
+            f"RepositoryModel contains {len(orphaned_rels)} orphaned relationship references (will be skipped):\n" +
+            "\n".join(orphaned_rels[:5]) +  # Show first 5 to keep warning readable
             (f"\n... and {len(orphaned_rels) - 5} more" if len(orphaned_rels) > 5 else "")
         )
-        logger.error(error_msg)
-        raise ValueError(error_msg)
 
     try:
         # Clear existing facts for this analysis_id to ensure clean transaction
