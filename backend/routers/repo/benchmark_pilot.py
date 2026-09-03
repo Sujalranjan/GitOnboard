@@ -191,7 +191,14 @@ async def pilot_benchmark(
         )
 
         # Extract metrics
-        llm_service_info = llm_service.get_service_info()
+        # Get model from first provider if available
+        model_name = "unknown"
+        if hasattr(llm_service, 'providers') and llm_service.providers:
+            provider = llm_service.providers[0]
+            if hasattr(provider, 'model_name'):
+                model_name = provider.model_name
+            elif hasattr(provider, 'model'):
+                model_name = provider.model
 
         return PilotBenchmarkResponse(
             run_id=run_id,
@@ -200,24 +207,24 @@ async def pilot_benchmark(
             repository=repo_name,
             commit=getattr(analysis, "commit_hash", None),
             analysis_id=analysis_id,
-            model=llm_service_info.get("model", "unknown"),
+            model=model_name,
             timestamp=timestamp,
             latency_ms=elapsed_ms,
             tool_call_count=result.tool_call_count,
             files_retrieved=result.files_read,
-            symbols_retrieved=result.symbols_referenced,
+            symbols_retrieved=list(set(result.symbols_read + result.symbols_searched)),
             rim_metadata_available=include_rim_metadata,
             query_rim_available=include_query_rim,
-            rim_facts_used=len(result.rim_entities_accessed),
+            rim_facts_used=0,
             answer=result.answer,
             tool_call_transcript=[
                 {
-                    "tool": turn.tool_name,
-                    "input": turn.tool_input,
-                    "output_summary": turn.tool_output[:200] if turn.tool_output else ""
+                    "tool": turn.tool_call.get("tool_name") if turn.tool_call else None,
+                    "input": turn.tool_call if turn.tool_call else {},
+                    "observation": turn.tool_observation
                 }
                 for turn in result.turns
-                if turn.tool_name
+                if turn.tool_call
             ],
             rim_metadata_block=rim_metadata_text
         )
