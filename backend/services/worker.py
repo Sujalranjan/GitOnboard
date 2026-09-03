@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
 from datetime import datetime, timezone
 from fastapi import HTTPException
@@ -299,6 +300,10 @@ class AnalysisWorker(WorkerInterface):
                         db.rollback()
                         logger.error(f"Error persisting facts to Fact Store: {e}")
 
+                    # Generate immutability version for FactStore
+                    # This ensures BM25 built now corresponds to current FactStore
+                    analysis.fact_store_version = str(uuid.uuid4())
+
                     # Build retrieval indexes (BM25 and Chroma) for this analysis
                     logger.info("Building semantic and lexical indexes...")
 
@@ -325,9 +330,10 @@ class AnalysisWorker(WorkerInterface):
                                     "doc_len": retriever_temp.bm25_index.doc_len,
                                     "corpus_size": retriever_temp.bm25_index.corpus_size,
                                     "avg_doc_len": retriever_temp.bm25_index.avg_doc_len,
+                                    "fact_store_version": analysis.fact_store_version,  # Store version for staleness check
                                 }
                                 results["bm25_index"] = bm25_data
-                                logger.info(f"BM25 index ready with {bm25_doc_count} documents")
+                                logger.info(f"BM25 index ready with {bm25_doc_count} documents (version={analysis.fact_store_version[:8]}...)")
                                 bm25_ok = True
                             else:
                                 if not rim_model.entities:

@@ -67,16 +67,35 @@ class HybridRetriever:
 
         # Try to load pre-built index from analysis artifact
         try:
-            from backend.models.repository import AnalysisArtifact
+            from backend.models.repository import Analysis, AnalysisArtifact
+
+            # Get current fact_store_version for staleness check
+            analysis = self.db.query(Analysis).filter(Analysis.id == self.analysis_id).first()
+            current_fact_store_version = analysis.fact_store_version if analysis else None
+
             artifact = self.db.query(AnalysisArtifact).filter(
                 AnalysisArtifact.analysis_id == self.analysis_id,
                 AnalysisArtifact.type == "bm25_index"
             ).first()
 
             if artifact and artifact.data:
+                bm25_data = artifact.data
+                artifact_fact_store_version = bm25_data.get("fact_store_version")
+
+                # Check if BM25 corresponds to current FactStore (Phase 4-C staleness detection)
+                if artifact_fact_store_version and current_fact_store_version:
+                    if artifact_fact_store_version != current_fact_store_version:
+                        logger.warning(
+                            f"BM25 artifact is stale: built for version {artifact_fact_store_version[:8]}... "
+                            f"but FactStore is now {current_fact_store_version[:8]}... "
+                            f"Rebuilding from current FactStore."
+                        )
+                        # BM25 is stale — rebuild from FactStore
+                        self._build_lexical_index()
+                        return
+
                 # Rebuild BM25 index from stored metadata
                 try:
-                    bm25_data = artifact.data
                     index = BM25Index()
                     index.documents = bm25_data.get("documents", [])
                     index.idf = bm25_data.get("idf", {})
@@ -84,7 +103,7 @@ class HybridRetriever:
                     index.corpus_size = bm25_data.get("corpus_size", 0)
                     index.avg_doc_len = bm25_data.get("avg_doc_len", 0.0)
                     self.bm25_index = index
-                    logger.info(f"Loaded pre-built BM25 index for analysis {self.analysis_id}")
+                    logger.info(f"Loaded fresh BM25 index for analysis {self.analysis_id} (version={current_fact_store_version[:8] if current_fact_store_version else 'unknown'}...)")
                     return
                 except Exception as e:
                     logger.warning(f"Failed to rebuild BM25 from artifact: {e}")

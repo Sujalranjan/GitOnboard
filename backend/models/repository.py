@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime, timezone
 from backend.database import Base
+import uuid
 
 JSONType = JSON().with_variant(JSONB, "postgresql")
 
@@ -32,6 +33,7 @@ class Analysis(Base):
     status = Column(String, nullable=False, default="Queued")  # Queued, Downloading, Analyzing, Saving, Completed, Failed
     indexing_status = Column(String, nullable=False, default="PENDING")  # PENDING, SUCCESS, PARTIAL, FAILED
     indexing_details = Column(JSONType, nullable=True)  # {exact: {...}, bm25: {...}, semantic: {...}}
+    fact_store_version = Column(String, nullable=True, default=lambda: str(uuid.uuid4()))  # UUID for immutability guarantee
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     indexed_at = Column(DateTime(timezone=True), nullable=True)
 

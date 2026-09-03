@@ -19,6 +19,14 @@ class IndexStatus(str, Enum):
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
     UNAVAILABLE = "UNAVAILABLE"  # E.g., optional dependency not installed
+    STALE = "STALE"  # Index exists but doesn't match current FactStore
+
+
+class FreshnessStatus(str, Enum):
+    """Freshness status of an index relative to FactStore."""
+    FRESH = "FRESH"  # Index corresponds to current FactStore
+    STALE = "STALE"  # Index doesn't correspond to current FactStore
+    UNKNOWN = "UNKNOWN"  # Cannot determine freshness
 
 
 class OverallIndexingStatus(str, Enum):
@@ -58,6 +66,7 @@ class IndexHealthSnapshot:
     error_code: Optional[IndexFailureCode] = None
     error_message: Optional[str] = None
     created_at: Optional[datetime] = None
+    freshness: Optional[FreshnessStatus] = None  # For indexes with staleness detection
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dict for storage."""
@@ -67,6 +76,7 @@ class IndexHealthSnapshot:
             "error_code": self.error_code.value if self.error_code else None,
             "error_message": self.error_message,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "freshness": self.freshness.value if self.freshness else None,
         }
 
     @staticmethod
@@ -78,6 +88,7 @@ class IndexHealthSnapshot:
             error_code=IndexFailureCode(data.get("error_code")) if data.get("error_code") else None,
             error_message=data.get("error_message"),
             created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else None,
+            freshness=FreshnessStatus(data.get("freshness")) if data.get("freshness") else None,
         )
 
 
