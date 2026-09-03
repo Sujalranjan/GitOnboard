@@ -252,7 +252,9 @@ def build_rim_metadata_block(
     seen_rel_types = set()
 
     for seed_name, target, _ in seeds:
-        logger.debug(f"[RIM Metadata] Traversing seed: {seed_name}")
+        # Extract canonical entity name from resolved ORM object
+        canonical_seed_name = target.name if hasattr(target, 'name') else seed_name
+        logger.debug(f"[RIM Metadata] Traversing seed: {canonical_seed_name} (resolved from: {seed_name})")
 
         # Determine which relationship classes to traverse based on target type
         query_classes_to_traverse = []
@@ -302,7 +304,7 @@ def build_rim_metadata_block(
             try:
                 result = traverser.traverse(intent, target)
             except Exception as e:
-                logger.warning(f"[RIM Metadata] Traversal failed for {seed_name} / {query_class}: {e}")
+                logger.warning(f"[RIM Metadata] Traversal failed for {canonical_seed_name} / {query_class}: {e}")
                 continue
 
             # Add related entities as fact lines
@@ -311,8 +313,8 @@ def build_rim_metadata_block(
                 if related_count >= max_related_per_seed:
                     break
 
-                # Render fact line
-                line = self._render_fact_line(seed_name, result.query_class, entity)
+                # Render fact line using canonical entity name from resolved ORM object
+                line = self._render_fact_line(canonical_seed_name, result.query_class, entity)
                 if line:
                     facts_lines.append(line)
                     related_count += 1
@@ -497,7 +499,9 @@ def _build_rim_metadata_block_impl(
     seen_rel_types = set()
 
     for seed_name, target, _ in seeds:
-        logger.debug(f"[RIM Metadata] Traversing seed: {seed_name}")
+        # Extract canonical entity name from resolved ORM object
+        canonical_seed_name = target.name if hasattr(target, 'name') else seed_name
+        logger.debug(f"[RIM Metadata] Traversing seed: {canonical_seed_name} (resolved from: {seed_name})")
 
         query_classes_to_traverse = []
 
@@ -541,7 +545,7 @@ def _build_rim_metadata_block_impl(
             try:
                 result = traverser.traverse(intent, target)
             except Exception as e:
-                logger.warning(f"[RIM Metadata] Traversal failed for {seed_name} / {query_class}: {e}")
+                logger.warning(f"[RIM Metadata] Traversal failed for {canonical_seed_name} / {query_class}: {e}")
                 continue
 
             related_count = 0
@@ -549,7 +553,7 @@ def _build_rim_metadata_block_impl(
                 if related_count >= max_related_per_seed:
                     break
 
-                line = _render_fact_line(seed_name, result.query_class, entity)
+                line = _render_fact_line(canonical_seed_name, result.query_class, entity)
                 if line:
                     facts_lines.append(line)
                     related_count += 1
@@ -561,7 +565,7 @@ def _build_rim_metadata_block_impl(
             if not result.related_entities:
                 explanation = result.explanation or "No relationships found"
                 if "No" in explanation or "not" in explanation.lower():
-                    fact_line = f"  {seed_name}: {explanation}"
+                    fact_line = f"  {canonical_seed_name}: {explanation}"
                     facts_lines.append(fact_line)
 
     # 4. Cap by character count
