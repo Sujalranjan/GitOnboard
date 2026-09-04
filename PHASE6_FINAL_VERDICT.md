@@ -289,6 +289,60 @@ Phase 7 verdict status: **CURRENTLY_UNSAFE (unchanged)**
 
 ---
 
+## Phase 7 Investigation Results (2026-09-04)
+
+**ROOT CAUSE IDENTIFIED**: metadata_semantics
+
+### Evidence Summary
+
+**90-run controlled investigation (3 queries × 3 conditions × 10 runs each)**:
+
+| Condition | Verification Rate | Finding |
+|-----------|-------------------|---------|
+| A (Baseline, no RIM) | 36.7% (11/30) | Normal search behavior |
+| B (RIM metadata) | 0.0% (0/30) | **Complete verification collapse** |
+| C (Full RIM + query_rim) | 30.0% (9/30) | Partial recovery |
+
+**By Query Type**:
+- Q_TECH (dependency): 100% → 0% → 90% (highest susceptibility)
+- Q_SYMBOL (code entity): 0% → 0% → 0% (synthesis failure dominates)
+- Q_FEATURE (pattern): 10% → 0% → 0% (metadata eliminates weak baseline)
+
+### Root Cause: Model Metadata Short-Circuit
+
+RIM metadata injection causes the LLM to:
+1. Read metadata facts about the repository
+2. Assume missing facts = feature absence
+3. Answer from context without repository retrieval
+4. Synthesize plausible-sounding but ungrounded responses
+
+**Evidence**: Perfect -36.7% regression A→B with no Pattern1_NoSearch detected (tools are called, but answers come from metadata, not results).
+
+### Mechanism vs. Alternatives
+
+| Hypothesis | Verdict |
+|-----------|---------|
+| metadata_semantics (model treats missing facts as proof of absence) | ✓ **STRONGLY SUPPORTED** |
+| prompt_precedence (search instruction overridden) | ✓ Supported (secondary) |
+| tool_policy (model not required to verify negatives) | ✗ Contradicted (differential query effects) |
+| query_classification (negatives not recognized) | ✗ Contradicted (query-type dependent) |
+| query_rim_semantics (tool conflates not-found) | ✗ Contradicted (tool enables recovery) |
+
+### What This Means for Phase 8
+
+**The fix must address metadata precedence**, not tool semantics or query classification. Intervention strategies:
+
+1. **Context reordering** (likely effective): Search instructions after metadata
+2. **Explicit verification gate** (likely effective): System prompt requires search for absence claims
+3. **Tool policy** (likely effective): Make search_repository mandatory for negatives
+4. **Metadata reframing** (uncertain): Change metadata prefix to clarify that absence ≠ non-existence
+
+**Verdict remains CURRENTLY_UNSAFE** because Phase 7 is investigation only. Only Phase 8 (full 315-query re-benchmark of corrected implementation) can validate whether the fix works.
+
+---
+
+---
+
 ## Evidence
 
 **Raw data preserved in scratchpad**:
