@@ -29,7 +29,7 @@ class DependencyAnalyzer(BaseAnalyzer):
                 type=EntityType.DEPENDENCY,
                 name=dep_name,
                 location=SourceLocation(repository_path=parsed.file_path, start_line=1, end_line=1, language="Unknown"),
-                metadata={"version": version}
+                metadata={"version": version, "file_id": parsed.file_path}
             )
             
         rel_id = generate_relationship_id(RelationshipType.DEPENDS_ON, source_pkg_id, dep_id)

@@ -19,6 +19,7 @@ from backend.intelligence.rim.relationship import Relationship
 from backend.intelligence.rim.enums import EntityType, RelationshipType
 from backend.intelligence.rim.location import SourceLocation
 from backend.intelligence.rim.metadata import RepositoryMetadata
+from backend.intelligence.rim.identity import generate_entity_id
 from backend.intelligence.capabilities.model import Capability, CapabilityCategory
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                 db.query(FactCapability.id).filter(FactCapability.analysis_id == analysis_id)
             )
         ).delete(synchronize_session=False)
-        
+
         db.query(FactEvidence).filter(FactEvidence.analysis_id == analysis_id).delete(synchronize_session=False)
         db.query(FactCapability).filter(FactCapability.analysis_id == analysis_id).delete(synchronize_session=False)
         db.query(FactDatabaseObject).filter(FactDatabaseObject.analysis_id == analysis_id).delete(synchronize_session=False)
@@ -67,7 +68,21 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
         file_records = []
         file_id_map = {}  # repo_path -> file_db_id
 
+        # First, collect all files referenced by any entity that has a repository_path
+        # This ensures symbols can find their parent file even if SymbolAnalyzer didn't create FILE entities
+        implicit_files = set()
+        for entity_id, entity in model.entities.items():
+            if entity.type != EntityType.FILE and entity.location:
+                if entity.location.repository_path:
+                    implicit_files.add(entity.location.repository_path)
+            # Also check metadata.file_id for any hints
+            if entity.metadata and entity.metadata.get("file_id"):
+                file_hint = entity.metadata.get("file_id")
+                if file_hint:
+                    implicit_files.add(file_hint)
+
         # 1. Save File entities first
+        # First, process explicit FILE entities from the RIM
         for entity_id, entity in model.entities.items():
             if entity.type == EntityType.FILE and entity.id not in seen_file_ids:
                 seen_file_ids.add(entity.id)
@@ -130,6 +145,95 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                     file_id_map[entity.name] = db_id
                 file_id_map[entity.id] = db_id
 
+        # Create implicit FILE entities for any file referenced but not explicitly defined
+        # This ensures symbols can find their parent file even if SymbolAnalyzer didn't process that language
+        seen_implicit_files = set()
+        for implicit_file_path in implicit_files:
+            # Skip if already resolved in file_id_map (either explicit FILE entity or already created implicit)
+            if not implicit_file_path or implicit_file_path in file_id_map or implicit_file_path in seen_implicit_files:
+                continue
+
+            seen_implicit_files.add(implicit_file_path)
+            # Generate a pseudo-FILE entity ID
+            file_entity_id = generate_entity_id(EntityType.FILE, implicit_file_path, implicit_file_path)
+            if file_entity_id not in seen_file_ids:
+                    seen_file_ids.add(file_entity_id)
+                    db_id = f"{analysis_id}:{file_entity_id}"
+                    p_lower = implicit_file_path.lower()
+
+                    # Classification signals
+                    is_agent = (
+                        p_lower.endswith("agents.md") or
+                        p_lower.endswith("claude.md") or
+                        p_lower.endswith("agent.md") or
+                        p_lower.endswith("skill.md") or
+                        "copilot-instructions.md" in p_lower or
+                        ".cursor/" in p_lower or
+                        ".agents/" in p_lower
+                    )
+                    is_doc = (
+                        p_lower.endswith((".md", ".rst", ".mmd", ".markdown")) or
+                        p_lower.startswith("docs/") or "/docs/" in p_lower or
+                        p_lower.startswith("doc/") or "/doc/" in p_lower
+                    )
+                    is_test = (
+                        p_lower.startswith(("tests/", "test/", "__tests__/", "spec/")) or
+                        "/tests/" in p_lower or "/test/" in p_lower or
+                        "/__tests__/" in p_lower or "/spec/" in p_lower or
+                        p_lower.split("/")[-1].startswith("test_") or
+                        p_lower.endswith(("_test.py", "_test.js", ".test.ts", ".test.js", ".spec.ts", ".spec.js"))
+                    )
+                    is_gen = (
+                        "dist/" in p_lower or "build/" in p_lower or
+                        "generated/" in p_lower or "out/" in p_lower
+                    )
+                    is_bin = (
+                        p_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".ico", ".wasm", ".pyc", ".so", ".dll", ".exe", ".zip", ".tar", ".gz", ".bin", ".db", ".sqlite"))
+                    )
+
+                    # Infer language from file extension
+                    language = None
+                    if p_lower.endswith(".py"):
+                        language = "Python"
+                    elif p_lower.endswith((".ts", ".tsx")):
+                        language = "TypeScript"
+                    elif p_lower.endswith((".js", ".jsx")):
+                        language = "JavaScript"
+                    elif p_lower.endswith((".json", "package.json", "tsconfig.json")):
+                        language = "JSON"
+                    elif p_lower.endswith((".yaml", ".yml")):
+                        language = "YAML"
+                    elif p_lower.endswith((".toml", "pyproject.toml")):
+                        language = "TOML"
+                    elif p_lower.endswith("dockerfile"):
+                        language = "Dockerfile"
+
+                    file_rec = FactFile(
+                        id=db_id,
+                        analysis_id=analysis_id,
+                        path=implicit_file_path,
+                        language=language,
+                        size=0,  # Unknown for implicit files
+                        content_hash=None,
+                        is_binary=is_bin,
+                        is_generated=is_gen,
+                        is_test=is_test,
+                        is_documentation=is_doc,
+                        is_agent_instruction=is_agent,
+                        blob_name=None,
+                        snapshot_id=None,
+                        content_type=None,
+                    )
+                    file_records.append(file_rec)
+
+                    # Add to file_id_map with all variations
+                    file_id_map[implicit_file_path] = db_id
+                    file_id_map[implicit_file_path.replace("\\", "/").removeprefix("./").lstrip("/")] = db_id
+                    fname = implicit_file_path.split("/")[-1] if "/" in implicit_file_path else implicit_file_path
+                    if fname:
+                        file_id_map[fname] = db_id
+                    file_id_map[file_entity_id] = db_id
+
         if file_records:
             # Log blob verification before committing to database
             blob_count = sum(1 for f in file_records if f.blob_name)
@@ -155,17 +259,48 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                 seen_symbol_ids.add(entity.id)
                 f_id = entity.metadata.get("file_id") if entity.metadata else None
                 f_path = entity.location.repository_path if entity.location else None
-                
-                # Resolve foreign key to FactFile.id
+
+                # Resolve foreign key to FactFile.id with comprehensive fallback logic
                 f_db_id = None
+
+                # Try 1: Direct metadata lookup
                 if f_id and f_id in file_id_map:
                     f_db_id = file_id_map[f_id]
+
+                # Try 2: Direct repository_path lookup
                 elif f_path and f_path in file_id_map:
                     f_db_id = file_id_map[f_path]
+
+                # Try 3: Normalized repository_path
                 elif f_path and f_path.replace("\\", "/").removeprefix("./").lstrip("/") in file_id_map:
                     f_db_id = file_id_map[f_path.replace("\\", "/").removeprefix("./").lstrip("/")]
 
+                # Try 4: If entity.location.repository_path is empty/invalid but metadata has file_id
+                # This handles cases where the symbol's location points to a non-existent file
+                # but metadata correctly identifies the source file
+                elif not f_path and f_id:
+                    # Try normalized version of metadata file_id
+                    normalized_f_id = f_id.replace("\\", "/").removeprefix("./").lstrip("/")
+                    if normalized_f_id in file_id_map:
+                        f_db_id = file_id_map[normalized_f_id]
+
+                # Try 5: Fallback to parent directory if available
+                # This helps symbols defined in __init__ files or missing repository_path
+                if not f_db_id and f_path:
+                    # Check if filename alone is in map (last resort for orphaned symbols)
+                    fname = f_path.split("/")[-1] if "/" in f_path else f_path
+                    if fname in file_id_map:
+                        f_db_id = file_id_map[fname]
+
                 db_id = f"{analysis_id}:{entity.id}"
+
+                # Validate that critical symbol types have file_id
+                if not f_db_id and entity.type not in (EntityType.DEPENDENCY, EntityType.MODULE, EntityType.PACKAGE):
+                    logger.warning(
+                        f"Symbol {entity.name} ({entity.type.value}) has no file_id resolution. "
+                        f"metadata.file_id={f_id}, location.repository_path={f_path}"
+                    )
+
                 symbol_rec = FactSymbol(
                     id=db_id,
                     analysis_id=analysis_id,
@@ -173,8 +308,8 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                     name=entity.name,
                     qualified_name=entity.qualified_name or entity.name,
                     symbol_type=entity.type.value if hasattr(entity.type, "value") else str(entity.type),
-                    line_start=entity.location.start_line,
-                    line_end=entity.location.end_line,
+                    line_start=entity.location.start_line if entity.location else None,
+                    line_end=entity.location.end_line if entity.location else None,
                     signature_hash=entity.metadata.get("signature_hash") if entity.metadata else None,
                     metadata_json=entity.metadata,
                 )

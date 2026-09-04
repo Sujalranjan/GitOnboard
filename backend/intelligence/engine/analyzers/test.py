@@ -25,7 +25,7 @@ class PythonTestVisitor(ast.NodeVisitor):
                 type=EntityType.TEST_CASE,
                 name=node.name,
                 location=SourceLocation(repository_path=self.file_path, start_line=node.lineno, end_line=node.lineno, language="Python"),
-                metadata={}
+                metadata={"file_id": self.file_path}
             ))
             
             # Simple heuristic: if it calls something, it's probably testing it

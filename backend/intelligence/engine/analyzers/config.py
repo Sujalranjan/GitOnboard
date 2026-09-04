@@ -32,7 +32,7 @@ class ConfigAnalyzer(BaseAnalyzer):
                 type=EntityType.PACKAGE,
                 name=pkg_name,
                 location=SourceLocation(repository_path=parsed.file_path, start_line=1, end_line=1, language="JSON"),
-                metadata={"version": data.get("version", ""), "scripts": data.get("scripts", {})}
+                metadata={"version": data.get("version", ""), "scripts": data.get("scripts", {}), "file_id": parsed.file_path}
             )
             
             # Dependencies will be extracted by DependencyAnalyzer
@@ -49,5 +49,5 @@ class ConfigAnalyzer(BaseAnalyzer):
             type=EntityType.DOCKER_SERVICE,
             name=image_name,
             location=SourceLocation(repository_path=parsed.file_path, start_line=1, end_line=1, language="Dockerfile"),
-            metadata={"source": parsed.source}
+            metadata={"source": parsed.source, "file_id": parsed.file_path}
         )

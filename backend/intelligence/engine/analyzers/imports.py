@@ -63,7 +63,7 @@ class ImportAnalyzer(BaseAnalyzer):
                 visitor = PythonImportVisitor(file_path)
                 visitor.visit(parsed.ast)
                 for rel in visitor.relationships:
-                    self._ensure_target(repository, rel, parsed.language)
+                    self._ensure_target(repository, rel, parsed.language, file_path)
                     repository.relationships[rel.id] = rel
             else:
                 # TS/JS/Java providers: get imports from metadata (tree-sitter) or fallback to ast dict
@@ -90,10 +90,10 @@ class ImportAnalyzer(BaseAnalyzer):
                         target_id=mod_id,
                         metadata={"module": module}
                     )
-                    self._ensure_target(repository, rel, parsed.language)
+                    self._ensure_target(repository, rel, parsed.language, file_path)
                     repository.relationships[rel.id] = rel
 
-    def _ensure_target(self, repository: RepositoryModel, rel: Relationship, language: str):
+    def _ensure_target(self, repository: RepositoryModel, rel: Relationship, language: str, source_file_path: str = ""):
         if rel.target_id not in repository.entities:
             from ...rim.entity import Entity
             from ...rim.location import SourceLocation
@@ -101,5 +101,6 @@ class ImportAnalyzer(BaseAnalyzer):
                 id=rel.target_id,
                 type=EntityType.MODULE,
                 name=rel.metadata.get("module", "unknown"),
-                location=SourceLocation(repository_path="external", start_line=1, end_line=1, language=language)
+                location=SourceLocation(repository_path="external", start_line=1, end_line=1, language=language),
+                metadata={"file_id": source_file_path} if source_file_path else {}
             )

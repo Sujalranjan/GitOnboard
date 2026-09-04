@@ -42,13 +42,13 @@ class PythonDatabaseVisitor(ast.NodeVisitor):
                             
         if is_model:
             table_id = generate_entity_id(EntityType.TABLE, "database", table_name)
-            
+
             self.entities.append(Entity(
                 id=table_id,
                 type=EntityType.TABLE,
                 name=table_name,
                 location=SourceLocation(repository_path=self.file_path, start_line=node.lineno, end_line=node.lineno, language="Python"),
-                metadata={"orm_class": node.name}
+                metadata={"orm_class": node.name, "file_id": self.file_path}
             ))
             
             class_qname = self._get_qualified_name(node.name)

@@ -67,7 +67,7 @@ class PythonRouteVisitor(ast.NodeVisitor):
                                 end_line=node.lineno,
                                 language="Python"
                             ),
-                            metadata={"method": method, "path": path, "framework": "FastAPI/Flask"}
+                            metadata={"method": method, "path": path, "framework": "FastAPI/Flask", "file_id": self.file_path}
                         ))
 
                         func_qname = self._get_qualified_name(node.name)
@@ -200,7 +200,8 @@ class RouteAnalyzer(BaseAnalyzer):
                             "path": route_path,
                             "route_type": route_type,
                             "framework": framework,
-                            "file": file_path
+                            "file": file_path,
+                            "file_id": file_path
                         }
                     )
 
