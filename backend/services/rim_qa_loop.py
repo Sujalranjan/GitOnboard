@@ -225,7 +225,26 @@ class RIMQALoop:
 
             # 4. Handle action: tool_call | final_answer | malformed
             if parsed["action"] == "final_answer":
-                result.answer = parsed.get("answer", llm_response.content)
+                answer_candidate = parsed.get("answer", llm_response.content)
+
+                # PHASE 8A VERIFICATION GATE: Enforce retrieval for absence claims
+                if not self._verify_absence_claim(answer_candidate, result):
+                    # Gate violation: absence claim without retrieval
+                    # Force a retrieval attempt
+                    logger.info(f"[VerificationGate] Absence claim rejected; forcing retrieval")
+                    messages.append({
+                        "role": "assistant",
+                        "content": llm_response.content,
+                    })
+                    messages.append({
+                        "role": "user",
+                        "content": "[VERIFICATION REQUIRED] You have claimed repository-wide absence without performing a search. You must search the repository or inspect relevant files before making absence claims. Please perform a search or file inspection to verify your claim.",
+                    })
+                    result.turns.append(turn)
+                    # Continue loop to force retrieval
+                    continue
+
+                result.answer = answer_candidate
                 result.stop_reason = StopReason.COMPLETED_FOR_VERIFICATION
                 result.turns.append(turn)
                 logger.info(f"[RIMQALoop] LLM provided final answer at turn {turn_index}")
@@ -506,6 +525,91 @@ class RIMQALoop:
             }
         else:
             return {"action": "malformed", "error": f"unknown action: {action}"}
+
+    def _has_retrieval_been_performed(self, result: QALoopResult) -> bool:
+        """
+        Check if any repository retrieval has been performed in this execution.
+
+        Verification-gate enforcement: absence claims require actual retrieval evidence.
+
+        Returns True if: search_repository, read_file, or get_symbol was called and succeeded.
+        """
+        retrieval_tools = ["search_repository", "read_file", "get_symbol", "search_code"]
+
+        for turn in result.turns:
+            if turn.tool_call:
+                tool_name = turn.tool_call.get("tool_name", "")
+                if tool_name in retrieval_tools:
+                    # Check if tool call succeeded
+                    if turn.tool_observation and turn.tool_observation.get("success", False):
+                        return True
+
+        return False
+
+    def _is_absence_claim(self, answer: str) -> bool:
+        """
+        Heuristic: detect if answer claims repository-wide absence.
+
+        Looks for patterns like:
+        - "does not", "doesn't", "no ", "not found"
+        - In context of repository/codebase/project
+        """
+        answer_lower = answer.lower()
+
+        absence_patterns = [
+            "does not",
+            "doesn't",
+            "no results",
+            "not found",
+            "no mention",
+            "no evidence",
+            "cannot find",
+            "unable to find",
+            "is not",
+            "isn't",
+            "no instances",
+            "no references",
+        ]
+
+        repo_context_words = [
+            "repository",
+            "codebase",
+            "project",
+            "code",
+            "repo",
+        ]
+
+        # Check if answer contains absence pattern + repository context
+        has_absence = any(p in answer_lower for p in absence_patterns)
+        has_repo_context = any(r in answer_lower for r in repo_context_words)
+
+        # Very strict: only flag if both patterns present
+        # This reduces false positives on legitimate vague answers
+        return has_absence and has_repo_context
+
+    def _verify_absence_claim(self, answer: str, result: QALoopResult) -> bool:
+        """
+        Enforcement gate: absence claims must be backed by retrieval evidence.
+
+        Returns True if:
+        - Answer does NOT claim absence, OR
+        - Answer claims absence AND retrieval has been performed
+
+        Returns False if:
+        - Answer claims absence BUT NO retrieval has been performed
+        """
+        if not self._is_absence_claim(answer):
+            # Not an absence claim, pass through
+            return True
+
+        # This is an absence claim; check if retrieval was done
+        if self._has_retrieval_been_performed(result):
+            # Absence claim is backed by retrieval evidence
+            return True
+
+        # Absence claim WITHOUT retrieval evidence - GATE VIOLATION
+        logger.warning(f"[VerificationGate] Absence claim without retrieval evidence: {answer[:100]}...")
+        return False
 
     def _format_tool_observation(
         self, tool_name: str, observation: ToolObservation, data: Any
