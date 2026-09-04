@@ -7,7 +7,7 @@ through multiple investigation stages.
 
 Key concepts:
 - Scout agents investigate independently
-- Ground-truth is verified before diagnosis
+- Ground-truth is independently verified against repository
 - Findings must have direct evidence
 - Contradictions are actively tested
 - Context is minimized for main agent
@@ -17,6 +17,7 @@ Safety invariants enforced at creation time:
 - Evidence fields are validated
 - Ground-truth requirements are enforced
 - Confirmation readiness checks are comprehensive
+- Ground truth is repository-grounded, never agent-asserted
 """
 
 from backend.investigation.finding import (
@@ -32,6 +33,11 @@ from backend.investigation.evidence import (
     EvidenceType,
     InvalidEvidenceError,
 )
+from backend.investigation.ground_truth import (
+    GroundTruthValidator,
+    GroundTruthResult,
+    VerificationStatus,
+)
 
 __all__ = [
     "Finding",
@@ -43,4 +49,7 @@ __all__ = [
     "Evidence",
     "EvidenceType",
     "InvalidEvidenceError",
+    "GroundTruthValidator",
+    "GroundTruthResult",
+    "VerificationStatus",
 ]
