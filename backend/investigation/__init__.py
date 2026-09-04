@@ -38,6 +38,16 @@ from backend.investigation.ground_truth import (
     GroundTruthResult,
     VerificationStatus,
 )
+from backend.investigation.scout import (
+    ScoutAgent,
+    ScoutHypothesis,
+    ScoutStrategy,
+)
+from backend.investigation.verifier import (
+    VerificationAgent,
+    VerificationContext,
+    VerificationResult,
+)
 
 __all__ = [
     "Finding",
@@ -52,4 +62,10 @@ __all__ = [
     "GroundTruthValidator",
     "GroundTruthResult",
     "VerificationStatus",
+    "ScoutAgent",
+    "ScoutHypothesis",
+    "ScoutStrategy",
+    "VerificationAgent",
+    "VerificationContext",
+    "VerificationResult",
 ]
