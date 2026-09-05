@@ -245,7 +245,7 @@ def stage_5_hybrid_retrieval(retriever):
 
         for query in test_queries:
             try:
-                hits = retriever.search(query, top_k=5)
+                hits = retriever.retrieve(query, top_k=5)
                 result_count = len(hits) if hits else 0
                 results[query] = result_count
                 all_results.extend(hits[:3])
