@@ -217,7 +217,7 @@ class RIMComparisonService:
 
         # 2. Configure agentic loop guardrails
         config = AgentLoopConfig(
-            max_agent_turns=12,
+            max_agent_turns=50,
             max_tool_calls=15,
             max_command_executions=0,
             max_execution_seconds=180,
