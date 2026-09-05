@@ -343,10 +343,11 @@ class BoundedGraphExpander:
                 f"[GraphExpand] Expanding from anchor '{anchor_name}' at depth {current_depth}"
             )
 
-            # Get relationships at this depth
+            # Get relationships at this depth (separate limits for each direction)
             neighbors = self._get_neighbors(current_id, current_depth, anchor_name)
 
-            for neighbor in neighbors[: self.max_nodes_per_hop]:
+            # Process all neighbors returned (directions are independently bounded)
+            for neighbor in neighbors:
                 neighbor_id = neighbor["symbol_id"]
 
                 if neighbor_id in seen_ids or neighbor_id in processed:
@@ -390,16 +391,31 @@ class BoundedGraphExpander:
     def _get_neighbors(
         self, symbol_id: str, depth: int, anchor_name: str
     ) -> List[Dict[str, Any]]:
-        """Get neighboring nodes via direct relationship queries."""
+        """
+        Get neighboring nodes via direct relationship queries.
+
+        Uses separate per-direction limits to preserve both incoming and outgoing
+        relationships rather than truncating one direction to fit within global limit.
+
+        Returns:
+            List of neighbor dicts with direction-aware relationship_role
+        """
         neighbors = []
+        neighbors_outgoing_count = 0
+        neighbors_incoming_count = 0
 
         # Query outgoing relationships (callees, dependencies, imports)
+        # Fetch all, then filter by count to apply separate limit
         outgoing = self.db.query(FactRelationship).filter(
             FactRelationship.analysis_id == self.analysis_id,
             FactRelationship.from_symbol_id == symbol_id
-        ).limit(self.max_nodes_per_hop).all()
+        ).all()
 
         for rel in outgoing:
+            # Respect per-direction limit for outgoing
+            if neighbors_outgoing_count >= self.max_nodes_per_hop:
+                break
+
             target_sym = self.db.query(FactSymbol).filter(
                 FactSymbol.analysis_id == self.analysis_id,
                 FactSymbol.id == rel.to_symbol_id
@@ -418,14 +434,20 @@ class BoundedGraphExpander:
                     "rel_type": rel.rel_type,
                     "data": {"rel_id": rel.id, "evidence_line": rel.evidence_line},
                 })
+                neighbors_outgoing_count += 1
 
         # Query incoming relationships (callers, dependents)
+        # Fetch all, then filter by count to apply separate limit
         incoming = self.db.query(FactRelationship).filter(
             FactRelationship.analysis_id == self.analysis_id,
             FactRelationship.to_symbol_id == symbol_id
-        ).limit(self.max_nodes_per_hop).all()
+        ).all()
 
         for rel in incoming:
+            # Respect per-direction limit for incoming
+            if neighbors_incoming_count >= self.max_nodes_per_hop:
+                break
+
             source_sym = self.db.query(FactSymbol).filter(
                 FactSymbol.analysis_id == self.analysis_id,
                 FactSymbol.id == rel.from_symbol_id
@@ -444,6 +466,7 @@ class BoundedGraphExpander:
                     "rel_type": rel.rel_type,
                     "data": {"rel_id": rel.id, "evidence_line": rel.evidence_line},
                 })
+                neighbors_incoming_count += 1
 
         return neighbors
 
