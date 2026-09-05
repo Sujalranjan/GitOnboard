@@ -1,0 +1,59 @@
+{
+  "status": "success",
+  "timestamp": "2026-09-05T17:31:42.133523",
+  "elapsed_seconds": 87.26671314239502,
+  "entities": 27833,
+  "relationships": 107329,
+  "analyzer_timings": {
+    "ConfigAnalyzer": {
+      "duration_seconds": 0.00041413307189941406,
+      "entities_added": 0,
+      "relationships_added": 0
+    },
+    "DependencyAnalyzer": {
+      "duration_seconds": 0.00024271011352539062,
+      "entities_added": 0,
+      "relationships_added": 0
+    },
+    "SymbolAnalyzer": {
+      "duration_seconds": 2.2012622356414795,
+      "entities_added": 18743,
+      "relationships_added": 17274
+    },
+    "ImportAnalyzer": {
+      "duration_seconds": 1.5947117805480957,
+      "entities_added": 7298,
+      "relationships_added": 7443
+    },
+    "TypeAnalyzer": {
+      "duration_seconds": 1.4017608165740967,
+      "entities_added": 0,
+      "relationships_added": 661
+    },
+    "CallGraphAnalyzer": {
+      "duration_seconds": 31.66610860824585,
+      "entities_added": 0,
+      "relationships_added": 41910
+    },
+    "UsesAnalyzer": {
+      "duration_seconds": 29.35375165939331,
+      "entities_added": 0,
+      "relationships_added": 39793
+    },
+    "RouteAnalyzer": {
+      "duration_seconds": 1.3652141094207764,
+      "entities_added": 196,
+      "relationships_added": 196
+    },
+    "DatabaseAnalyzer": {
+      "duration_seconds": 1.3370819091796875,
+      "entities_added": 26,
+      "relationships_added": 52
+    },
+    "TestAnalyzer": {
+      "duration_seconds": 1.4035954475402832,
+      "entities_added": 1570,
+      "relationships_added": 0
+    }
+  }
+}
