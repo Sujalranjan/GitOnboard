@@ -244,18 +244,20 @@ def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_c
             job = jobs[0] if jobs else None
             if job:
                 job_status = job.status.lower()  # Normalize to lowercase
-                # Calculate progress based on job status
-                # BACKEND PROGRESS MAP (changed for debugging)
-                progress_map = {
-                    "queued": 15,      # Backend: 15
-                    "downloading": 25, # Backend: 25
-                    "analyzing": 55,   # Backend: 55
-                    "saving": 85,      # Backend: 85
-                    "completed": 100,
-                    "failed": 0,
-                    "cancelled": 0
-                }
-                progress = progress_map.get(job_status, 0)
+                # Use real progress from database if available
+                progress = job.progress_percentage or latest.progress_percentage or 0
+                # Fallback to status_map if no real progress data exists
+                if progress == 0:
+                    progress_map = {
+                        "queued": 5,
+                        "downloading": 20,
+                        "analyzing": 50,
+                        "saving": 75,
+                        "completed": 100,
+                        "failed": 0,
+                        "cancelled": 0
+                    }
+                    progress = progress_map.get(job_status, 0)
             else:
                 job_status = latest.status.lower()
         
@@ -286,6 +288,21 @@ def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_c
                 commit = repo_meta.get("commit", "")
                 branch = repo_meta.get("branch", "")
 
+        # Include real progress details from analysis
+        progress_details = {}
+        if latest:
+            if latest.progress_stage:
+                progress_details["stage"] = latest.progress_stage
+                progress_details["substage"] = latest.progress_substage or latest.progress_stage
+                progress_details["processed"] = latest.progress_processed
+                progress_details["total"] = latest.progress_total
+                progress_details["unit"] = latest.progress_unit or "items"
+                # Format message like "Parsing Python files (340 / 1,200 files)"
+                if latest.progress_total > 0:
+                    progress_details["message"] = f"{latest.progress_substage or latest.progress_stage} ({latest.progress_processed:,} / {latest.progress_total:,} {latest.progress_unit or 'items'})"
+                else:
+                    progress_details["message"] = latest.progress_stage
+
         results.append({
             "id": r.id,
             "project_name": repo_name,
@@ -297,7 +314,8 @@ def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_c
             "language": language_str,
             "frameworks": frameworks,
             "commit": commit,
-            "branch": branch
+            "branch": branch,
+            **progress_details  # Spread progress details into response
         })
     return {"repositories": results}
 
