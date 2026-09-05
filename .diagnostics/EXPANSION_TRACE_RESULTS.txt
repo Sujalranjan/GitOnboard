@@ -1,0 +1,110 @@
+====================================================================================================
+RIM GRAPH EXPANSION TRACE - DETAILED INSPECTION
+====================================================================================================
+
+[1/2] Setting up synthetic repository...
+  ✓ Created analysis_id=1
+  ✓ Created 10 symbols
+  ✓ Created 10 relationships
+
+[2/2] Testing BoundedGraphExpander with anchor candidates...
+  ✓ Expander created (depth=2, max_nodes_per_hop=3, max_total=30)
+
+====================================================================================================
+EXPANSION SCENARIOS
+====================================================================================================
+
+Scenario 1: Image prediction: should find callees (preprocess, detect, format)
+
+  Anchor: 'predict_images' (id=2, file=src/image_processor.py)
+
+  Expansion produced 5 results:
+
+  ✓ Anchors (1):
+    - predict_images (file=src/image_processor.py)
+  ✓ Expanded nodes (4):
+    - preprocess_image (CALLS as callee)
+      File: src/preprocessing.py
+      Line: 1-30
+    - load_model (CALLS as callee)
+      File: src/ml/detection.py
+      Line: 1-20
+    - detect_objects (CALLS as callee)
+      File: src/ml/detection.py
+      Line: 25-60
+    - validate_image (CALLS as callee)
+      File: src/utils.py
+      Line: 1-20
+
+  Relevance Analysis:
+    ✓ Found expected: preprocess_image, detect_objects, load_model, validate_image
+
+
+Scenario 2: Main entry: should find predict_images (callee)
+
+  Anchor: 'main' (id=1, file=main.py)
+
+  Expansion produced 5 results:
+
+  ✓ Anchors (1):
+    - main (file=main.py)
+  ✓ Expanded nodes (4):
+    - predict_images (CALLS as callee)
+      File: src/image_processor.py
+      Line: 1-50
+    - preprocess_image (CALLS as callee)
+      File: src/preprocessing.py
+      Line: 1-30
+    - load_model (CALLS as callee)
+      File: src/ml/detection.py
+      Line: 1-20
+    - detect_objects (CALLS as callee)
+      File: src/ml/detection.py
+      Line: 25-60
+
+  Relevance Analysis:
+    ✓ Found expected: predict_images
+    ! Spurious results: preprocess_image, load_model, detect_objects
+
+
+Scenario 3: Reverse CALLS: looking for callers should find predict_route, main
+
+  Anchor: 'predict_images' (id=2, file=src/image_processor.py)
+
+  Expansion produced 5 results:
+
+  ✓ Anchors (1):
+    - predict_images (file=src/image_processor.py)
+  ✓ Expanded nodes (4):
+    - preprocess_image (CALLS as callee)
+      File: src/preprocessing.py
+      Line: 1-30
+    - load_model (CALLS as callee)
+      File: src/ml/detection.py
+      Line: 1-20
+    - detect_objects (CALLS as callee)
+      File: src/ml/detection.py
+      Line: 25-60
+    - validate_image (CALLS as callee)
+      File: src/utils.py
+      Line: 1-20
+
+  Relevance Analysis:
+    ✗ Missed expected: predict_route, main
+    ! Spurious results: preprocess_image, load_model, detect_objects, validate_image
+
+
+====================================================================================================
+RELATIONSHIP VERIFICATION
+====================================================================================================
+
+Manually checking 3 relationships for correctness:
+
+1. predict_images → preprocess_image (CALLS)
+   ✓ Found: preprocessed = preprocess_image(img)
+2. main → predict_images (CALLS)
+   ✓ Found: image_result = predict_images(image_path)
+3. predict_images → validate_image (CALLS)
+   ✓ Found: validate_image(image_path)
+
+====================================================================================================
