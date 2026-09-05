@@ -64,6 +64,7 @@ class ClassifyIntentResponse(BaseModel):
     entities: List[Dict[str, Any]] = Field(default_factory=list)
     plan: Optional[Dict[str, Any]] = None
     evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    rim_trace: Optional[Dict[str, Any]] = Field(default=None, description="RIM metadata: anchors, expanded entities, and relationships")
 
 
 class CreateAgentRunRequest(BaseModel):
@@ -327,6 +328,8 @@ def classify_intent_endpoint(
     entities_list = []
     plan_dict = None
     evidence_list = []
+    rim_trace = None
+    mode_res = {}
     if result.intent == Intent.CHAT:
         mode_res = execute_chat(req.requirement)
         response_text = mode_res.get("response", "Hello! How can I help you today?")
@@ -340,6 +343,7 @@ def classify_intent_endpoint(
         mode_res = execute_explain(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Explanation complete.")
         evidence_list = mode_res.get("evidence", [])
+        rim_trace = mode_res.get("rim_trace")
     elif result.intent == Intent.PLAN:
         mode_res = execute_plan(req.requirement, repository_id=req.repository_id, user_id=current_user.id, db=db)
         response_text = mode_res.get("response", "Plan generation complete.")
@@ -362,6 +366,7 @@ def classify_intent_endpoint(
         entities=entities_list,
         plan=plan_dict,
         evidence=evidence_list,
+        rim_trace=rim_trace,
     )
 
 
@@ -395,6 +400,7 @@ async def stream_classify_intent_endpoint(
                 entities_list = []
                 plan_dict = None
                 evidence_list = []
+                rim_trace = None
 
                 if result.intent == Intent.CHAT:
                     mode_res = await loop.run_in_executor(None, lambda: execute_chat(req.requirement))
@@ -415,6 +421,7 @@ async def stream_classify_intent_endpoint(
                     )
                     response_text = mode_res.get("response", "Explanation complete.")
                     evidence_list = mode_res.get("evidence", [])
+                    rim_trace = mode_res.get("rim_trace")
                 elif result.intent == Intent.PLAN:
                     mode_res = await loop.run_in_executor(
                         None,
@@ -446,6 +453,7 @@ async def stream_classify_intent_endpoint(
                         "entities": entities_list,
                         "plan": plan_dict,
                         "evidence": evidence_list,
+                        "rim_trace": rim_trace,
                     }
                 })
             except Exception as err:

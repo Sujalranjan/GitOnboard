@@ -505,8 +505,53 @@ class PlanningOrchestrator:
         code_context_str = "\n\n".join(inspected_code_snippets) if inspected_code_snippets else "No source snippets available."
 
         # ──────────────────────────────────────────────────────────────────
-        # LLM-Powered Step Synthesis Over Inspected Source Code
+        # LLM-Powered Step Synthesis Over Inspected Source Code + RIM
         # ──────────────────────────────────────────────────────────────────
+        rim_metadata_text = ""
+        if self.llm_service:
+            try:
+                from backend.ai.schemas import LLMRequest, Message, MessageRole
+                from backend.services.rim_metadata import build_rim_metadata_block
+                from backend.intelligence.retrieval.retriever import HybridRetriever
+                import json
+                import asyncio
+
+                # Extract RIM metadata if analysis_id available
+                if analysis_id and db:
+                    try:
+                        retriever = HybridRetriever(
+                            db=db,
+                            analysis_id=analysis_id,
+                            enable_graph_expansion=True,
+                            graph_expansion_depth=2,
+                            graph_expansion_nodes_per_hop=3,
+                            graph_expansion_max_total=30,
+                        )
+
+                        rim_metadata_block = build_rim_metadata_block(
+                            db=db,
+                            analysis_id=analysis_id,
+                            question=raw_req,
+                            retriever=retriever,
+                            max_seed_entities=3,
+                            max_related_per_seed=8,
+                            max_block_chars=2000,
+                        )
+
+                        if rim_metadata_block and rim_metadata_block.text:
+                            rim_metadata_text = f"\n\nREPOSITORY INTELLIGENCE MAPPING (RIM - Architectural Relationships):\n{rim_metadata_block.text}"
+                            logger.info(
+                                f"[PLANNING_RIM] RIM metadata built for planning: "
+                                f"anchors={len(rim_metadata_block.anchor_entities)}, "
+                                f"expanded={len(rim_metadata_block.expanded_entities)}, "
+                                f"relationships={rim_metadata_block.relationship_types_used}"
+                            )
+                    except Exception as err:
+                        logger.warning(f"[PLANNING_RIM] Failed to build RIM metadata for planning: {err}")
+
+            except Exception as err:
+                logger.warning(f"[PLANNING_RIM] RIM extraction setup error: {err}")
+
         if self.llm_service:
             try:
                 from backend.ai.schemas import LLMRequest, Message, MessageRole
@@ -525,9 +570,9 @@ RELEVANT TARGET FILES:
 {', '.join(candidate_files[:6]) if candidate_files else 'None detected'}
 
 INSPECTED SOURCE CODE:
-{code_context_str}
+{code_context_str}{rim_metadata_text}
 
-Generate 2 to 3 concrete sequential plan steps that directly implement the user requirement based on the inspected code.
+Generate 2 to 3 concrete sequential plan steps that directly implement the user requirement based on the inspected code and architectural relationships.
 Return a JSON array of step objects matching this exact structure:
 [
   {{
@@ -540,10 +585,34 @@ Return a JSON array of step objects matching this exact structure:
 ]
 Do NOT hallucinate unrelated files or generic changes. Return ONLY valid JSON array."""
 
+                logger.info(
+                    f"[PLANNING_LLM_REQUEST] LLM prompt length: {len(llm_prompt)} chars\n"
+                    f"[PLANNING_LLM_REQUEST] Contains RIM metadata: {bool(rim_metadata_text)}"
+                )
+
+                from backend.agent.context.rim_guidance import get_rim_guidance_for_system_prompt
+
+                rim_guidance = get_rim_guidance_for_system_prompt(
+                    include_sections=['anchor', 'positive', 'negative', 'priority'],
+                    max_chars=1500
+                )
+
+                planning_system_prompt = (
+                    "You are a precise software planning engine grounded in actual repository architecture. "
+                    "Respond with a JSON array of plan steps. Reference architectural relationships (CALLS, IMPORTS, CONTAINS) where relevant.\n\n"
+                    "CRITICAL PLANNING RULES:\n"
+                    "1. Ground plan steps in actual repository code, not inferred features\n"
+                    "2. For negative queries: only claim absence if explicitly verified; express uncertainty otherwise\n"
+                    "3. Use anchor entities (direct matches) as primary evidence, not expanded context alone\n"
+                    "4. Preserve relationship direction: CALLS(A,B) means A invokes B, not vice versa\n\n"
+                    "REPOSITORY RELATIONSHIP INTERPRETATION:\n"
+                    f"{rim_guidance}"
+                )
+
                 llm_req = LLMRequest(
                     model=settings.model_terminal_plan,
                     messages=[
-                        Message(role=MessageRole.SYSTEM, content="You are a precise software planning engine. Respond with a JSON array of plan steps."),
+                        Message(role=MessageRole.SYSTEM, content=planning_system_prompt),
                         Message(role=MessageRole.USER, content=llm_prompt),
                     ],
                     temperature=0.1,

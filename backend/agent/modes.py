@@ -709,9 +709,66 @@ def execute_explain(
                 "completeness": "INCOMPLETE",
             }
 
-        # 3. Build grounded prompt for LLM with real code
+        # 3. Extract RIM metadata from retriever with graph expansion
+        rim_metadata_block = None
+        rim_trace = {
+            "anchors": [],
+            "expanded_entities": [],
+            "relationships": [],
+            "graph_depth": 0,
+        }
+
+        if analysis_id:
+            try:
+                from backend.services.rim_metadata import build_rim_metadata_block
+                from backend.intelligence.retrieval.retriever import HybridRetriever
+
+                retriever = HybridRetriever(
+                    db=db,
+                    analysis_id=analysis_id,
+                    enable_graph_expansion=True,
+                    graph_expansion_depth=2,
+                    graph_expansion_nodes_per_hop=3,
+                    graph_expansion_max_total=30,
+                )
+
+                rim_metadata_block = build_rim_metadata_block(
+                    db=db,
+                    analysis_id=analysis_id,
+                    question=user_requirement,
+                    retriever=retriever,
+                    max_seed_entities=3,
+                    max_related_per_seed=8,
+                    max_block_chars=2000,
+                )
+
+                if rim_metadata_block:
+                    rim_trace = {
+                        "anchors": rim_metadata_block.anchor_entities,
+                        "expanded_entities": rim_metadata_block.expanded_entities,
+                        "relationships": rim_metadata_block.relationships,
+                        "relationship_types": rim_metadata_block.relationship_types_used,
+                        "graph_depth": rim_metadata_block.expansion_depth,
+                        "total_nodes_expanded": rim_metadata_block.total_nodes_expanded,
+                    }
+
+                    logger.info(
+                        f"[EXPLAIN_RIM] RIM metadata built: "
+                        f"anchors={len(rim_metadata_block.anchor_entities)}, "
+                        f"expanded={len(rim_metadata_block.expanded_entities)}, "
+                        f"relationships={len(rim_metadata_block.relationships)}"
+                    )
+            except Exception as err:
+                logger.warning(f"[EXPLAIN_RIM] Failed to build RIM metadata: {err}", exc_info=True)
+
+        # 4. Build grounded prompt for LLM with real code
         code_context = "\n\n".join(source_code_blocks) if source_code_blocks else "No source code content available."
         total_code_chars = sum(len(b) for b in source_code_blocks)
+
+        # Build RIM metadata block text for injection
+        rim_context = ""
+        if rim_metadata_block and rim_metadata_block.text:
+            rim_context = f"\n--- REPOSITORY INTELLIGENCE MAPPING (RIM) ---\n{rim_metadata_block.text}\n"
 
         logger.info(
             f"\n==================== EXPLAIN CONTEXT DEBUG ====================\n"
@@ -721,26 +778,41 @@ def execute_explain(
             f"Loaded Source Blocks: {len(source_code_blocks)}\n"
             f"Total Source Characters: {total_code_chars}\n"
             f"Estimated Context Tokens: {total_code_chars // 4}\n"
+            f"RIM Metadata Present: {bool(rim_metadata_block and rim_metadata_block.text)}\n"
+            f"RIM Anchors: {len(rim_trace.get('anchors', []))}\n"
+            f"RIM Expanded: {len(rim_trace.get('expanded_entities', []))}\n"
             f"LLM Provider: ollama (model: {settings.model_terminal_explain})\n"
             f"Source Context Present: {bool(source_code_blocks)}\n"
             f"==============================================================="
         )
 
+        from backend.agent.context.rim_guidance import get_rim_guidance_for_system_prompt
+
+        rim_guidance = get_rim_guidance_for_system_prompt(
+            include_sections=['anchor', 'positive', 'negative', 'priority', 'direction'],
+            max_chars=2000
+        )
+
         system_prompt = (
             f"You are the GitOnboard Repository Architecture Explainer for target repository '{repo_name_resolved}'.\n"
-            "Explain the user's question clearly, accurately, and thoroughly based on the actual source code provided below.\n\n"
+            "Explain the user's question clearly, accurately, and thoroughly based on the actual source code and architectural relationships provided below.\n\n"
             "GROUNDING RULES:\n"
-            "1. Base your explanation directly on the actual provided source code, workflows, classes, and functions.\n"
-            "2. Cite key workflow names, triggers (on: push, pull_request), jobs, steps, and commands.\n"
-            "3. Provide a clear overview of the purpose, core components, and logic flow.\n"
-            "4. Keep the explanation structured, clean, and educational."
+            "1. Base your explanation directly on the provided source code, workflows, classes, and functions.\n"
+            "2. If Repository Intelligence Mapping (RIM) relationships are provided, cite them to explain how components interact.\n"
+            "3. Use relationship verbs like CALLS, IMPORTS, CONTAINS, etc. when referencing architectural flow.\n"
+            "4. Provide a clear overview of the purpose, core components, and logic flow.\n"
+            "5. Keep the explanation structured, clean, and educational.\n"
+            "6. For questions about absence or non-existence, be careful: express uncertainty when evidence is incomplete.\n\n"
+            "REPOSITORY RELATIONSHIP INTERPRETATION GUIDE:\n"
+            f"{rim_guidance}"
         )
 
         user_content = (
             f"Target Repository: {repo_name_resolved}\n"
             f"User Question: {user_requirement}\n\n"
             f"--- REPOSITORY SOURCE CODE & WORKFLOWS ---\n"
-            f"{code_context}\n"
+            f"{code_context}"
+            f"{rim_context}\n"
             f"-----------------------------------------"
         )
 
@@ -765,6 +837,13 @@ def execute_explain(
                 }
             })
 
+        # Log final LLM request for verification (RIM metadata injection)
+        logger.info(
+            f"[EXPLAIN_LLM_REQUEST] Final user_content length: {len(user_content)} chars\n"
+            f"[EXPLAIN_LLM_REQUEST] Contains RIM block: {'--- REPOSITORY INTELLIGENCE MAPPING' in user_content}\n"
+            f"[EXPLAIN_LLM_REQUEST] Relationships in metadata: {rim_trace.get('relationship_types', [])}"
+        )
+
         try:
             resp = asyncio.run(service.generate(llm_req))
             response_text = resp.content.strip()
@@ -778,6 +857,7 @@ def execute_explain(
             "model": settings.model_terminal_explain,
             "evidence": actual_read_evidence,
             "completeness": "COMPLETE" if source_code_blocks else "PARTIAL",
+            "rim_trace": rim_trace,
         }
     finally:
         if close_db:
