@@ -136,7 +136,8 @@ class ProgressTracker:
 
         # Calculate overall progress
         # = (sum of completed stages) + (current stage weight * stage progress)
-        overall = completed_weight + (stage_weight * stage_progress * 100)
+        # Note: stage_weight is already a percentage (0-30), stage_progress is 0.0-1.0
+        overall = completed_weight + (stage_weight * stage_progress)
 
         # Clamp to 0-99 (100 should only be set when truly complete)
         overall = max(0, min(99, int(overall)))
