@@ -137,7 +137,7 @@ class RIMQALoop:
                 break
 
             # 2. Call LLM with current conversation
-            logger.info(f"[RIMQALoop] Turn {turn_index}: calling LLM...")
+            logger.debug(f"[RIMQALoop] Turn {turn_index}: calling LLM...")
             turn_start = time.perf_counter()
 
             try:
@@ -208,10 +208,13 @@ class RIMQALoop:
 
             # 3. Parse response: tool_call | final_answer | malformed
             parsed = self._parse_response(llm_response.content)
-            logger.debug(f"[RIMQALoop] Turn {turn_index} parsed response: action={parsed.get('action')}, error={parsed.get('error')}")
+
             if parsed["action"] == "tool_call":
-                logger.debug(f"[RIMQALoop] Turn {turn_index} tool_call: {parsed.get('tool_name')} with args: {parsed.get('arguments')}")
-            logger.debug(f"[RIMQALoop] Turn {turn_index} raw model output: {llm_response.content[:200]}...")
+                logger.info(f"[RIMQALoop] Turn {turn_index}: {parsed.get('tool_name')}")
+            elif parsed["action"] == "final_answer":
+                logger.info(f"[RIMQALoop] Turn {turn_index}: FINAL_ANSWER")
+            else:
+                logger.warning(f"[RIMQALoop] Turn {turn_index}: MALFORMED - {parsed.get('error')} | {llm_response.content[:100]}...")
 
             turn = QALoopTurn(
                 turn_index=turn_index,
@@ -277,7 +280,7 @@ class RIMQALoop:
                     break
 
                 # 6. Execute tool
-                logger.info(f"[RIMQALoop] Turn {turn_index}: executing tool '{tool_name}'")
+                logger.debug(f"[RIMQALoop] Turn {turn_index}: executing tool '{tool_name}'")
                 tool_start = time.perf_counter()
 
                 try:
@@ -380,7 +383,7 @@ class RIMQALoop:
                 }
                 result.turns.append(turn)
                 result.tool_call_count += 1
-                logger.info(f"[RIMQALoop] Turn {turn_index}: {tool_name} executed in {tool_elapsed*1000:.0f}ms")
+                logger.debug(f"[RIMQALoop] Turn {turn_index}: {tool_name} executed in {tool_elapsed*1000:.0f}ms")
 
             else:  # malformed
                 logger.warning(f"[RIMQALoop] Malformed response: {parsed.get('error', 'unknown')}")
@@ -403,12 +406,19 @@ class RIMQALoop:
             "tool_total": tool_total_ms,
         }
 
-        logger.info(
+        # Log completion and warn if no tool calls were made
+        log_func = logger.warning if result.tool_call_count == 0 else logger.info
+        log_func(
             f"[RIMQALoop] Complete: {len(result.turns)} turns, "
             f"{result.tool_call_count} tool calls, "
             f"stop_reason={result.stop_reason}, "
             f"latency={loop_elapsed*1000:.0f}ms"
         )
+
+        if result.tool_call_count == 0:
+            logger.error("[RIMQALoop] ERROR: No tool calls made! LLM did not retrieve any code. "
+                        "Check if LLM is generating malformed JSON or ignoring protocol.")
+
         return result
 
     async def _do_final_answer_turn(
