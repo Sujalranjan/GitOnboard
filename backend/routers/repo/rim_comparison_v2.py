@@ -88,7 +88,21 @@ class ContextDiffResponse(BaseModel):
 
 
 class RIMTraceResponse(BaseModel):
-    """Execution trace with RIM metadata and query_rim call log (separate provenance)."""
+    """Comprehensive RIM execution trace showing navigation flow."""
+    enabled: bool = False
+    query: str = ""
+    anchor_count: int = 0
+    anchors: List[Dict[str, Any]] = []
+    expansion_count: int = 0
+    expanded_entities: List[Dict[str, Any]] = []
+    graph_depth: int = 0
+    total_nodes_expanded: int = 0
+    relationships: List[Dict[str, Any]] = []
+    relationship_types: List[str] = []
+    selected_files: List[str] = []
+    selected_symbols: List[Dict[str, Any]] = []
+    source_locations: List[Dict[str, Any]] = []
+    # Legacy fields for backward compatibility
     rim_metadata_seed_entities: List[Dict[str, Any]] = []
     rim_metadata_relationships: List[Dict[str, Any]] = []
     query_rim_call_log: List[Dict[str, Any]] = []
@@ -250,6 +264,19 @@ async def compare_rim(
             files_only_with_rim=result.context_diff.files_only_with_rim
         ),
         trace=RIMTraceResponse(
+            enabled=result.trace.enabled,
+            query=result.trace.query,
+            anchor_count=result.trace.anchor_count,
+            anchors=result.trace.anchors,
+            expansion_count=result.trace.expansion_count,
+            expanded_entities=result.trace.expanded_entities,
+            graph_depth=result.trace.graph_depth,
+            total_nodes_expanded=result.trace.total_nodes_expanded,
+            relationships=result.trace.relationships,
+            relationship_types=result.trace.relationship_types,
+            selected_files=result.trace.selected_files,
+            selected_symbols=result.trace.selected_symbols,
+            source_locations=result.trace.source_locations,
             rim_metadata_seed_entities=result.trace.rim_metadata_seed_entities,
             rim_metadata_relationships=result.trace.rim_metadata_relationships,
             query_rim_call_log=result.trace.query_rim_call_log

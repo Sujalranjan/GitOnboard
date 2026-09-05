@@ -1,0 +1,80 @@
+{
+  "phase": "8A.11",
+  "title": "Verified-Existing Symbol Retrieval Validation",
+  "timestamp": "2026-09-04T19:13:37.448247",
+  "api_url": "http://localhost:8000",
+  "repository": "Deep-Guard-Frontend",
+  "endpoint": "/api/repos/{repo}/search",
+  "ground_truth_source": "Phase 8A.10 audit (verified existing)",
+  "test_results": [
+    {
+      "symbol": "resetModal",
+      "type": "function",
+      "source_verified": true,
+      "source_location": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+      "retrieval_test": {
+        "endpoint": "/api/repos/Deep-Guard-Frontend/search",
+        "query_parameter": "q=resetModal",
+        "status_code": 200,
+        "success": true,
+        "found": true,
+        "result_count": 1,
+        "results": [
+          {
+            "file_path": "src/components/ForgetPasswordModal.tsx",
+            "match_reasons": [
+              "Matches function: resetModal"
+            ]
+          }
+        ]
+      },
+      "classification": {
+        "true_positive": true,
+        "false_negative": false,
+        "explanation": "Symbol exists in source AND is found by search \u2192 retrieval working correctly"
+      }
+    },
+    {
+      "symbol": "ForgotPasswordModal",
+      "type": "class",
+      "source_verified": true,
+      "source_location": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+      "retrieval_test": {
+        "endpoint": "/api/repos/Deep-Guard-Frontend/search",
+        "query_parameter": "q=ForgotPasswordModal",
+        "status_code": 200,
+        "success": true,
+        "found": true,
+        "result_count": 1,
+        "results": [
+          {
+            "file_path": "src/components/ForgetPasswordModal.tsx",
+            "match_reasons": [
+              "Matches function: ForgotPasswordModal"
+            ]
+          }
+        ]
+      },
+      "classification": {
+        "true_positive": true,
+        "false_negative": false,
+        "explanation": "Symbol exists in source AND is found by search \u2192 retrieval working correctly"
+      }
+    }
+  ],
+  "summary": {
+    "symbols_tested": 2,
+    "symbols_verified_in_source": 2,
+    "symbols_found_by_search": 2,
+    "retrieval_recall": "100%",
+    "false_negative_rate": "0%",
+    "all_tests_successful": true
+  },
+  "conclusion": {
+    "retrieval_status": "WORKING \u2713",
+    "phase_8a_6_finding_valid": false,
+    "phase_8a_6_explanation": "Phase 8A.6 reported 50% false-negative rate, but tested 3 non-existent symbols. For verified-existing symbols, recall is 100%.",
+    "parser_is_bottleneck": false,
+    "next_phase": "NO FURTHER INVESTIGATION NEEDED FOR THESE SYMBOLS"
+  }
+}

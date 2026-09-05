@@ -1,0 +1,673 @@
+{
+  "audit_version": "1.0",
+  "overall_score": 23,
+  "summary": {
+    "nodes": {
+      "total": 10,
+      "status_counts": {
+        "MISSING": 9,
+        "PARTIAL": 1
+      }
+    },
+    "relationships": {
+      "total": 11,
+      "status_counts": {
+        "PARTIAL": 11
+      }
+    },
+    "query_operations": {
+      "total": 11,
+      "status_counts": {
+        "MISSING": 8,
+        "PARTIAL": 3
+      }
+    },
+    "gaps_found": 3
+  },
+  "capabilities": [
+    {
+      "name": "Repository",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [
+        "tests/unit/test_semantic_repository_exploration.py",
+        "tests/unit/test_repository_context.py",
+        "tests/unit/test_repository_context_isolation.py",
+        "tests/unit/test_blob_repository_tools.py",
+        "tests/unit/test_repository_tools.py",
+        "tests/unit/test_repository_intelligence_correctness.py",
+        "tests/unit/test_repository_investigation_planning.py",
+        "tests/services/test_rim_formatter_search_repository.py"
+      ],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "name": "File",
+      "status": "PARTIAL",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactFile"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": "QueryLayer.get_file",
+      "consumer_modules": [],
+      "tests": [
+        "tests/unit/test_worktree_dotfile_consistency.py"
+      ],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "name": "Directory",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "name": "Module",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "name": "Class",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactSymbol"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": "QueryLayer.get_class",
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "name": "Function",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactSymbol"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": "QueryLayer.find_function",
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "name": "Route",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactRoute"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [
+        "tests/unit/test_intent_router.py"
+      ],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "name": "DatabaseObject",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactDatabaseObject"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "name": "Capability",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactCapability"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "name": "Package",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    }
+  ],
+  "nodes": [
+    {
+      "type": "Repository",
+      "name": "Repository",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [
+        "tests/unit/test_semantic_repository_exploration.py",
+        "tests/unit/test_repository_context.py",
+        "tests/unit/test_repository_context_isolation.py",
+        "tests/unit/test_blob_repository_tools.py",
+        "tests/unit/test_repository_tools.py",
+        "tests/unit/test_repository_intelligence_correctness.py",
+        "tests/unit/test_repository_investigation_planning.py",
+        "tests/services/test_rim_formatter_search_repository.py"
+      ],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "type": "File",
+      "name": "File",
+      "status": "PARTIAL",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactFile"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": "QueryLayer.get_file",
+      "consumer_modules": [],
+      "tests": [
+        "tests/unit/test_worktree_dotfile_consistency.py"
+      ],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "type": "Directory",
+      "name": "Directory",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "type": "Module",
+      "name": "Module",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "type": "Class",
+      "name": "Class",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactSymbol"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": "QueryLayer.get_class",
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "type": "Function",
+      "name": "Function",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactSymbol"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": "QueryLayer.find_function",
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "type": "Route",
+      "name": "Route",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactRoute"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [
+        "tests/unit/test_intent_router.py"
+      ],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "type": "DatabaseObject",
+      "name": "DatabaseObject",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactDatabaseObject"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "type": "Capability",
+      "name": "Capability",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [
+        "FactCapability"
+      ],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "type": "Package",
+      "name": "Package",
+      "status": "MISSING",
+      "definition_file": "intelligence/rim/entity.py",
+      "storage_models": [],
+      "creation_pipeline": [],
+      "retrieval_api": null,
+      "consumer_modules": [],
+      "tests": [],
+      "evidence": [],
+      "notes": ""
+    }
+  ],
+  "relationships": [
+    {
+      "relationship": "CONTAINS",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "relationship": "DEFINED_IN",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "relationship": "IMPORTS",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "relationship": "CALLS",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "relationship": "CALLED_BY",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "relationship": "READS",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "relationship": "WRITES",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "relationship": "ROUTES_TO",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "relationship": "DEPENDS_ON",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "relationship": "USES",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "relationship": "INHERITS",
+      "represented": true,
+      "extracted": false,
+      "persisted": true,
+      "queryable": true,
+      "reverse_queryable": false,
+      "tested": true,
+      "real_data_verified": false,
+      "status": "PARTIAL",
+      "evidence": [],
+      "notes": ""
+    }
+  ],
+  "navigation": [
+    {
+      "operation": "find_symbol",
+      "actual_method": "find_symbol",
+      "status": "MISSING",
+      "implemented_in": "backend/intelligence/query_layer.py",
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "operation": "get_entity",
+      "actual_method": "get_file",
+      "status": "PARTIAL",
+      "implemented_in": "backend/intelligence/query_layer.py",
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "operation": "get_callers",
+      "actual_method": null,
+      "status": "MISSING",
+      "implemented_in": null,
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "operation": "get_callees",
+      "actual_method": "get_calls",
+      "status": "PARTIAL",
+      "implemented_in": "backend/intelligence/query_layer.py",
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "operation": "get_imports",
+      "actual_method": null,
+      "status": "MISSING",
+      "implemented_in": null,
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "operation": "get_dependents",
+      "actual_method": null,
+      "status": "MISSING",
+      "implemented_in": null,
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "operation": "get_dependencies",
+      "actual_method": "get_dependencies",
+      "status": "PARTIAL",
+      "implemented_in": "backend/intelligence/query_layer.py",
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "operation": "get_related_files",
+      "actual_method": null,
+      "status": "MISSING",
+      "implemented_in": null,
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "operation": "get_related_symbols",
+      "actual_method": null,
+      "status": "MISSING",
+      "implemented_in": null,
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "operation": "get_routes",
+      "actual_method": null,
+      "status": "MISSING",
+      "implemented_in": null,
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "operation": "trace",
+      "actual_method": null,
+      "status": "MISSING",
+      "implemented_in": null,
+      "tested": false,
+      "verified_on_real_data": false,
+      "evidence": [],
+      "notes": ""
+    }
+  ],
+  "retrieval": [],
+  "context_assembly": [],
+  "source_code_bridge": [],
+  "execution_paths": [
+    {
+      "path": "Retrieval Pipeline",
+      "stages": {
+        "exact_search": true,
+        "lexical_search": true,
+        "semantic_search": true,
+        "fusion": true,
+        "expansion": true
+      },
+      "main_method": "retrieve",
+      "file": "intelligence/retrieval/retriever.py"
+    },
+    {
+      "path": "Context Assembly",
+      "has_assembler": true,
+      "uses_retriever": true,
+      "uses_fact_store": true,
+      "uses_source_reader": false,
+      "passes_rim_to_llm": false,
+      "file": "agent/context/assembler.py"
+    },
+    {
+      "path": "LLM Integration",
+      "system_prompt_files": 13,
+      "has_context_injection": true,
+      "evidence_files": [
+        "services/rim_comparison_service_v2.py",
+        "services/rim_metadata.py",
+        "services/rim_qa_loop.py"
+      ]
+    },
+    {
+      "path": "Source Code Bridge",
+      "can_resolve_file": true,
+      "can_resolve_symbol": false,
+      "can_resolve_location": true,
+      "can_read_snippet": true,
+      "file": "intelligence/retrieval/source_reader.py"
+    },
+    {
+      "path": "Graph Traversal",
+      "traversal_methods": [
+        "__init__",
+        "traverse",
+        "_traverse_containment",
+        "_traverse_imports_forward",
+        "_traverse_imports_reverse",
+        "_traverse_calls_forward",
+        "_traverse_calls_reverse",
+        "_traverse_inherits_forward",
+        "_traverse_inherits_reverse",
+        "_traverse_route_handler",
+        "_traverse_database_access",
+        "_traverse_generic_lookup"
+      ],
+      "file": "intelligence/retrieval/graph_traverser.py"
+    }
+  ],
+  "gaps": [
+    {
+      "priority": "P1",
+      "title": "Relationship Extraction Missing",
+      "description": "No evidence of automatic relationship extraction from source code",
+      "impact": "RIM graph has no edges; cannot traverse or reason about code structure",
+      "location": "backend/intelligence/"
+    },
+    {
+      "priority": "P1",
+      "title": "Incomplete Source Code Resolution",
+      "description": "Cannot reliably resolve RIM entities to exact source locations",
+      "impact": "Cannot retrieve bounded source snippets; LLM gets incomplete or wrong code",
+      "location": "backend/intelligence/retrieval/source_reader.py"
+    },
+    {
+      "priority": "P2",
+      "title": "Reverse Relationship Queries Not Supported",
+      "description": "Can find what a function calls, but not what calls it (or vice versa)",
+      "impact": "RIM cannot answer key questions like 'what uses this service?'",
+      "location": "backend/intelligence/query_layer.py"
+    }
+  ]
+}

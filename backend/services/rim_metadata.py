@@ -25,6 +25,11 @@ class RimMetadataBlock:
     seed_entities: List[Dict[str, Any]] = field(default_factory=list)
     relationships: List[Dict[str, Any]] = field(default_factory=list)
     relationship_types_used: List[str] = field(default_factory=list)
+    # Graph expansion tracking
+    anchor_entities: List[Dict[str, Any]] = field(default_factory=list)  # Original anchors
+    expanded_entities: List[Dict[str, Any]] = field(default_factory=list)  # Graph-expanded
+    expansion_depth: int = 0  # Max depth of graph traversal
+    total_nodes_expanded: int = 0  # Total nodes discovered through expansion
 
 
 class TargetEntityResolver:
@@ -199,10 +204,41 @@ def build_rim_metadata_block(
     resolver = TargetEntityResolver(db, analysis_id)
     traverser = FactStoreGraphTraverser(db, analysis_id)
 
-    # 1. Seed identification (HybridRetriever, NO expansion)
+    # 1. Seed identification (HybridRetriever with graph expansion)
     try:
-        candidates = retriever.retrieve(question, top_k=5, expand_with_fact_store=False)
+        candidates = retriever.retrieve(question, top_k=5, expand_with_fact_store=False, enable_graph_expansion=True)
         logger.debug(f"[RIM Metadata] Retrieved {len(candidates)} seed candidates")
+
+        # Classify candidates into anchors vs. expanded entities
+        anchor_entities = []
+        expanded_entities = []
+        for cand in candidates:
+            cand_dict = cand if isinstance(cand, dict) else (cand.__dict__ if hasattr(cand, '__dict__') else {})
+            # Check if this candidate was added by graph expansion
+            if cand_dict.get("expansion_source") or cand_dict.get("score_type") == "expanded_graph":
+                expanded_entities.append({
+                    "name": cand_dict.get("name", ""),
+                    "file": cand_dict.get("file_path", ""),
+                    "type": cand_dict.get("type", ""),
+                    "distance": cand_dict.get("expansion_distance", 0),
+                    "rel_type": cand_dict.get("rel_type", "")
+                })
+            else:
+                anchor_entities.append({
+                    "name": cand_dict.get("name", ""),
+                    "file": cand_dict.get("file_path", ""),
+                    "type": cand_dict.get("type", "")
+                })
+
+        block.anchor_entities = anchor_entities
+        block.expanded_entities = expanded_entities
+        block.total_nodes_expanded = len(expanded_entities)
+
+        if expanded_entities:
+            logger.info(f"[RIM Metadata] Graph expansion: {len(anchor_entities)} anchors, {len(expanded_entities)} expanded")
+        else:
+            logger.info(f"[RIM Metadata] No graph expansion: {len(anchor_entities)} anchors only")
+
     except Exception as e:
         logger.warning(f"[RIM Metadata] Seed retrieval failed: {e}")
         candidates = []
@@ -442,10 +478,41 @@ def _build_rim_metadata_block_impl(
     resolver = TargetEntityResolver(db, analysis_id)
     traverser = FactStoreGraphTraverser(db, analysis_id)
 
-    # 1. Seed identification (HybridRetriever, NO expansion)
+    # 1. Seed identification (HybridRetriever with graph expansion)
     try:
-        candidates = retriever.retrieve(question, top_k=5, expand_with_fact_store=False)
+        candidates = retriever.retrieve(question, top_k=5, expand_with_fact_store=False, enable_graph_expansion=True)
         logger.debug(f"[RIM Metadata] Retrieved {len(candidates)} seed candidates")
+
+        # Classify candidates into anchors vs. expanded entities
+        anchor_entities = []
+        expanded_entities = []
+        for cand in candidates:
+            cand_dict = cand if isinstance(cand, dict) else (cand.__dict__ if hasattr(cand, '__dict__') else {})
+            # Check if this candidate was added by graph expansion
+            if cand_dict.get("expansion_source") or cand_dict.get("score_type") == "expanded_graph":
+                expanded_entities.append({
+                    "name": cand_dict.get("name", ""),
+                    "file": cand_dict.get("file_path", ""),
+                    "type": cand_dict.get("type", ""),
+                    "distance": cand_dict.get("expansion_distance", 0),
+                    "rel_type": cand_dict.get("rel_type", "")
+                })
+            else:
+                anchor_entities.append({
+                    "name": cand_dict.get("name", ""),
+                    "file": cand_dict.get("file_path", ""),
+                    "type": cand_dict.get("type", "")
+                })
+
+        block.anchor_entities = anchor_entities
+        block.expanded_entities = expanded_entities
+        block.total_nodes_expanded = len(expanded_entities)
+
+        if expanded_entities:
+            logger.info(f"[RIM Metadata] Graph expansion: {len(anchor_entities)} anchors, {len(expanded_entities)} expanded")
+        else:
+            logger.info(f"[RIM Metadata] No graph expansion: {len(anchor_entities)} anchors only")
+
     except Exception as e:
         logger.warning(f"[RIM Metadata] Seed retrieval failed: {e}")
         candidates = []

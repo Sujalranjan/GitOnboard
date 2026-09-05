@@ -263,7 +263,14 @@ class ContextAssembler:
 
         if db and request.analysis_id:
             try:
-                retriever = HybridRetriever(db=db, analysis_id=request.analysis_id)
+                retriever = HybridRetriever(
+                    db=db,
+                    analysis_id=request.analysis_id,
+                    enable_graph_expansion=True,
+                    graph_expansion_depth=2,
+                    graph_expansion_nodes_per_hop=3,
+                    graph_expansion_max_total=30,
+                )
 
                 # Skip matching client-side state files for server infrastructure or external messaging requests
                 skip_client_state = (arch_layer in ["SERVER_INFRA", "EXTERNAL_COMMUNICATIONS"] and is_frontend and not is_backend)

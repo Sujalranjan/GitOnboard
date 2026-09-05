@@ -28,6 +28,9 @@ from backend.services.rim_qa_protocol import QAProtocolAdapter
 from backend.services.rim_tool_dispatch import ToolDispatchTable, TargetEntityResolver
 from backend.services.rim_metadata import build_rim_metadata_block
 from backend.logging import StructuredLogger
+from backend.agent.context.assembler import ContextAssembler
+from backend.agent.context.contracts import ContextAssemblyRequest
+from backend.agent.context.formatter import RepositoryContextFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +91,32 @@ class ComparisonSide:
 
 @dataclass
 class RIMTrace:
-    """Execution trace: RIM metadata and query_rim call log."""
+    """Comprehensive RIM execution trace showing navigation flow."""
+    enabled: bool = False
+    query: str = ""
+
+    # Initial retrieval anchors
+    anchors: List[Dict[str, Any]] = field(default_factory=list)
+    anchor_count: int = 0
+
+    # Graph expansion
+    expanded_entities: List[Dict[str, Any]] = field(default_factory=list)
+    expansion_count: int = 0
+    graph_depth: int = 0
+    total_nodes_expanded: int = 0
+
+    # Relationships discovered during expansion
+    relationships: List[Dict[str, Any]] = field(default_factory=list)
+    relationship_types: List[str] = field(default_factory=list)
+
+    # Selected context
+    selected_files: List[str] = field(default_factory=list)
+    selected_symbols: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Source locations resolved
+    source_locations: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Legacy fields (preserved for backward compatibility)
     rim_metadata_seed_entities: List[Dict[str, Any]] = field(default_factory=list)
     rim_metadata_relationships: List[Dict[str, Any]] = field(default_factory=list)
     query_rim_call_log: List[Dict[str, Any]] = field(default_factory=list)
@@ -161,11 +189,16 @@ class RIMComparisonService:
             logger.debug(f"Chroma collection not available: {e}")
 
         # Initialize retriever (shared between both runs, seed identification only)
+        # Enable graph expansion for RIM to find connected repository entities
         retriever = HybridRetriever(
             db=self.db,
             analysis_id=analysis_id,
             chroma_collection=chroma_collection,
-            rrf_k=60
+            rrf_k=60,
+            enable_graph_expansion=True,
+            graph_expansion_depth=2,
+            graph_expansion_nodes_per_hop=3,
+            graph_expansion_max_total=30,
         )
 
         # Initialize repository tool layer (shared)
@@ -192,13 +225,39 @@ class RIMComparisonService:
             max_repeated_tool_calls=3
         )
 
-        # 3. RUN BASELINE — no RIM metadata, no query_rim tool
+        # 2b. Assemble repository context using ContextAssembler
+        logger.info(f"[RIM Comparison] Assembling repository context for: {question}")
+        t0_ctx = time.perf_counter()
+        assembler = ContextAssembler()
+        context_request = ContextAssemblyRequest(
+            repository_id=self.repo_name,
+            requirement=question,
+            analysis_id=analysis_id,
+            worktree_path=repo_root,
+        )
+        repository_context = assembler.assemble(context_request, db=self.db)
+        context_elapsed_ms = (time.perf_counter() - t0_ctx) * 1000
+        logger.info(
+            f"[RIM Comparison] Repository context assembled in {context_elapsed_ms:.1f}ms: "
+            f"{len(repository_context.evidence)} evidence items, "
+            f"completeness={repository_context.contract.completeness.value}"
+        )
+
+        # Format context for system prompt injection
+        formatter = RepositoryContextFormatter()
+        repository_context_block = formatter.format_to_system_prompt_block(
+            repository_context,
+            max_chars=6000,
+            include_evidence_provenance=False,
+        )
+
+        # 3. RUN BASELINE — with repository context (no RIM relationships)
         logger.info(f"[RIM Comparison] Running baseline (no RIM) for: {question}")
         baseline_dispatch = ToolDispatchTable(tool_layer)  # No RIM tools
         baseline_protocol = QAProtocolAdapter()
         baseline_prompt_parts = baseline_protocol.build_system_prompt(
             tool_specs=baseline_dispatch.specs(include_rim=False),
-            rim_metadata_block=None
+            rim_metadata_block=repository_context_block  # Inject formatted context
         )
         baseline_loop = RIMQALoop(
             llm_service=self.llm_service,
@@ -221,7 +280,7 @@ class RIMComparisonService:
             f"stop_reason={baseline_result.stop_reason}"
         )
 
-        # 4. RUN RIM — with metadata block + query_rim tool
+        # 4. RUN RIM — with repository context + RIM relationships + query_rim tool
         logger.info(f"[RIM Comparison] Building RIM metadata block...")
         t0_meta = time.perf_counter()
         rim_metadata = build_rim_metadata_block(
@@ -231,6 +290,9 @@ class RIMComparisonService:
         metadata_elapsed_ms = (time.perf_counter() - t0_meta) * 1000
         logger.info(f"[RIM Comparison] RIM metadata built in {metadata_elapsed_ms:.1f}ms")
 
+        # Combine repository context with RIM metadata for RIM side
+        combined_rim_block = self._combine_context_blocks(repository_context_block, rim_metadata.text)
+
         logger.info(f"[RIM Comparison] Running RIM comparison for: {question}")
         graph_traverser = FactStoreGraphTraverser(self.db, analysis_id)
         target_resolver = TargetEntityResolver(self.db, analysis_id)
@@ -238,7 +300,7 @@ class RIMComparisonService:
         rim_protocol = QAProtocolAdapter()
         rim_prompt_parts = rim_protocol.build_system_prompt(
             tool_specs=rim_dispatch.specs(include_rim=True),
-            rim_metadata_block=rim_metadata.text
+            rim_metadata_block=combined_rim_block
         )
         rim_loop = RIMQALoop(
             llm_service=self.llm_service,
@@ -266,17 +328,40 @@ class RIMComparisonService:
 
         baseline_side = await self._assemble_comparison_side(
             question, baseline_result, baseline_prompt_parts, baseline_elapsed_ms,
+            rim_metadata_block=repository_context_block,
             retriever=retriever
         )
         rim_side = await self._assemble_comparison_side(
             question, rim_result, rim_prompt_parts, rim_elapsed_ms,
-            rim_metadata_block=rim_metadata.text,
+            rim_metadata_block=combined_rim_block,
             retriever=retriever
         )
 
         # 6. Build result
         all_baseline_files = set(baseline_result.files_read)
         all_rim_files = set(rim_result.files_read)
+
+        # Build comprehensive RIM trace showing navigation flow
+        # Populate from rim_metadata which now includes graph expansion tracking
+        rim_trace = RIMTrace(
+            enabled=True,
+            query=question,
+            anchor_count=len(rim_metadata.anchor_entities),
+            anchors=rim_metadata.anchor_entities,
+            expansion_count=rim_metadata.total_nodes_expanded,
+            expanded_entities=rim_metadata.expanded_entities,
+            graph_depth=rim_metadata.expansion_depth,
+            total_nodes_expanded=rim_metadata.total_nodes_expanded,
+            relationship_types=list(set(r.get("type", "") for r in rim_metadata.relationships if r.get("type"))),
+            relationships=rim_metadata.relationships,
+            selected_files=[],  # Will be populated from context assembly
+            selected_symbols=[],  # Will be populated from context assembly
+            source_locations=[],  # Will be populated from source reader
+            # Legacy fields (preserved for backward compatibility)
+            rim_metadata_seed_entities=rim_metadata.seed_entities,
+            rim_metadata_relationships=rim_metadata.relationships,
+            query_rim_call_log=rim_result.rim_entities_accessed
+        )
 
         result = RIMComparisonResult(
             without_rim=baseline_side,
@@ -290,11 +375,7 @@ class RIMComparisonService:
                 shared_files=sorted(list(all_baseline_files & all_rim_files)),
                 files_only_with_rim=sorted(list(all_rim_files - all_baseline_files))
             ),
-            trace=RIMTrace(
-                rim_metadata_seed_entities=rim_metadata.seed_entities,
-                rim_metadata_relationships=rim_metadata.relationships,
-                query_rim_call_log=rim_result.rim_entities_accessed
-            )
+            trace=rim_trace
         )
 
         # Log metrics before returning
@@ -443,3 +524,33 @@ class RIMComparisonService:
             tool_call_transcript=tool_call_transcript,
             stop_reason=loop_result.stop_reason.value if loop_result.stop_reason else "unknown"
         )
+
+    @staticmethod
+    def _combine_context_blocks(repository_context_block: str, rim_metadata_block: str) -> str:
+        """
+        Combine repository context and RIM metadata blocks for RIM side.
+
+        Args:
+            repository_context_block: Formatted repository context from ContextAssembler
+            rim_metadata_block: RIM relationship facts from graph traversal
+
+        Returns:
+            Combined block with both context types
+        """
+        if not repository_context_block and not rim_metadata_block:
+            return ""
+
+        combined = []
+
+        # Add repository context first
+        if repository_context_block:
+            combined.append(repository_context_block)
+
+        # Add RIM metadata second
+        if rim_metadata_block:
+            combined.append("")
+            combined.append("### RIM_RELATIONSHIPS")
+            combined.append("")
+            combined.append(rim_metadata_block)
+
+        return "\n".join(combined)

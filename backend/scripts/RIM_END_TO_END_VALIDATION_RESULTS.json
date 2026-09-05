@@ -1,0 +1,64 @@
+{
+  "timestamp": "2026-09-05T07:41:51.902533",
+  "environment": {
+    "api_base_url": "http://localhost:8000/api",
+    "backend_running": true,
+    "repositories_available": [
+      {
+        "name": "Deep-Guard-Frontend",
+        "language": "TypeScript"
+      },
+      {
+        "name": "Deep-Guard-Backend",
+        "language": "JavaScript"
+      },
+      {
+        "name": "Deep-Guard-ML-Engine",
+        "language": "Python"
+      }
+    ]
+  },
+  "test_queries": [
+    {
+      "name": "QueryB_ReverseNavigation",
+      "query": "What calls the main function?",
+      "trace_validation": {
+        "trace_enabled": true,
+        "has_anchors": false,
+        "has_expanded_entities": false,
+        "has_relationships": false,
+        "has_selected_files": false,
+        "has_selected_symbols": false,
+        "graph_depth": 0,
+        "total_nodes_expanded": 0,
+        "anchor_count": 0,
+        "expansion_count": 0,
+        "graph_expansion_occurred": false
+      }
+    },
+    {
+      "name": "QueryC_SourceBridge",
+      "query": "Show me the entry point",
+      "selected_symbols_count": 0
+    },
+    {
+      "name": "QueryF_NegativeQuery",
+      "query": "Where is QuantumAuthenticationManager implemented?",
+      "has_fabricated_entities": false
+    }
+  ],
+  "summary": {
+    "graph_expansion_enabled": false,
+    "real_repository_tested": true,
+    "holistic_retrieval": false,
+    "rim_anchors": false,
+    "connected_graph_expansion": false,
+    "reverse_navigation": false,
+    "source_bridge": false,
+    "context_assembler": true,
+    "llm_receives_rim": true,
+    "negative_query_safety": true,
+    "production_execution_path": false,
+    "overall": "FAIL"
+  }
+}

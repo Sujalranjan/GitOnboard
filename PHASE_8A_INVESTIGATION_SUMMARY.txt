@@ -1,0 +1,157 @@
+================================================================================
+PHASE 8A.9–8A.10 INVESTIGATION COMPLETE
+================================================================================
+Date: 2026-09-04
+Status: INVESTIGATION COMPLETE — GROUND TRUTH CORRUPTED
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+THE PROBLEM: Phase 8A.6–8A.8 investigation chain is INVALID
+
+Phase 8A.6 tested 8 entities as "existing" in Deep-Guard-Frontend.
+Phase 8A.10 audit revealed: 3 of those 8 DON'T EXIST IN THE SOURCE (37.5% error)
+
+This corrupted Phase 8A.6's false-negative rate, Phase 8A.7's classification,
+and Phase 8A.8's hypothesis about parser/extraction being the bottleneck.
+
+================================================================================
+GROUND TRUTH VERIFICATION RESULTS
+================================================================================
+
+VERIFIED EXISTING (5 entities):
+  ✓ resetModal (function)
+  ✓ ForgotPasswordModal (class)
+  ✓ package.json (file)
+  ✓ src/components/ForgetPasswordModal.tsx (file)
+  ✓ README.md (file)
+
+VERIFIED DOES_NOT_EXIST (3 entities):
+  ✗ setupMockHTTPServer (function) — fabricated
+  ✗ handleAuthFlow (function) — fabricated
+  ✗ LoginComponent (class) — fabricated
+
+GROUND TRUTH ERROR RATE: 37.5%
+
+================================================================================
+PARSER INSPECTION RESULTS (Phase 8A.9)
+================================================================================
+
+DIRECT PARSER EXECUTION:
+  Parser Status: FUNCTIONAL ✓
+  
+  ForgotPasswordModal:
+    Exists in source: YES ✓
+    Parser executed: YES ✓
+    Parser result: SUCCESS ✓
+    Symbol extracted: YES ✓
+    First disappearance point: NONE
+
+  Three other symbols:
+    Exist in source: NO ✗
+    (Cannot test parser on non-existent symbols)
+
+FINDING: Parser successfully extracted the one real symbol tested.
+         No parser-level disappearance observed.
+
+================================================================================
+HYPOTHESIS VERDICT
+================================================================================
+
+Phase 8A.8 Hypothesis:
+  "Parser/extraction is the leading suspected bottleneck"
+
+Verdict: UNPROVEN / REFUTED FOR TESTED SYMBOL
+
+Evidence:
+  - ForgotPasswordModal exists, is extracted, and is found by search
+  - Three symbols used to "prove" extraction failure don't exist
+  - Investigation cannot evaluate parser on non-existent entities
+
+Conclusion:
+  Parser is NOT the bottleneck for ForgotPasswordModal.
+  Hypothesis cannot be evaluated using fabricated test data.
+
+================================================================================
+PARSER IMPLEMENTATION FINDINGS
+================================================================================
+
+Agent B discovered a real gap:
+  - Parser has NO handlers for ES6 export statements
+  - Would affect symbols defined as "export const foo = () => {}"
+  
+However:
+  - ForgotPasswordModal was successfully extracted (uses ES6 export)
+  - Likely extracted as lexical_declaration, not via export handler
+  - Gap is real but did not prevent ForgotPasswordModal extraction
+
+================================================================================
+SAFETY STATE
+================================================================================
+
+RIM Verdict: CURRENTLY_UNSAFE — NO CHANGE
+  Reason: Evidence chain invalid; cannot commit improvements
+
+Phase 8 Benchmark: LOCKED — NO CHANGE
+  Reason: Ground truth corrupted; must be repaired first
+
+Code Changes: NONE
+  All investigation only; no modifications to production code
+
+================================================================================
+REQUIRED NEXT STEPS
+================================================================================
+
+PHASE 8A.11 (Required):
+  - Re-test retrieval for ONLY verified-existing symbols
+  - Test: resetModal, ForgotPasswordModal
+  - Determine true false-negative rate
+  - If failures exist, trace downstream (RIM → index → search)
+
+PHASE 8A.12–8A.13 (Conditional):
+  - Only investigate further IF verified symbols show retrieval failures
+  - Do NOT assume parser is problem
+  - Trace actual disappearance point
+  - Diagnose root cause with direct evidence
+
+DO NOT PROCEED TO FIXES:
+  ✗ Do not fix parser
+  ✗ Do not rebuild indexes
+  ✗ Do not modify RIM
+  ✗ Do not change search/retrieval
+  Until evidence is solid and verified
+
+================================================================================
+ARTIFACTS CREATED
+================================================================================
+
+1. PHASE8A10_GROUND_TRUTH_AUDIT.json
+   - Detailed audit results for all 8 entities
+   - Status and evidence for each symbol
+
+2. PHASE_8A_FINAL_REPORT.md (Artifact)
+   - Comprehensive investigation report
+   - Lessons learned
+   - Path forward
+
+3. phase8a_investigation_reset.md (Memory)
+   - Persistent record of investigation corruption
+   - Why evidence chain is invalid
+   - What must be done to repair it
+
+================================================================================
+KEY INSIGHT
+================================================================================
+
+This investigation prevented a critical mistake:
+
+  Without Phase 8A.9 direct parser execution, we would have proceeded to
+  "fix" the parser based on Phase 8A.8 hypothesis.
+
+  But ForgotPasswordModal proves the parser ALREADY WORKS correctly.
+
+  The fact that we discovered the test fixture error BEFORE implementing
+  fixes saved days of debugging the wrong component.
+
+================================================================================

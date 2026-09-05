@@ -5,6 +5,7 @@ from backend.models.user import User
 from backend.intelligence.retrieval.lexical import BM25Index, CodeTokenizer
 from backend.intelligence.retrieval.fusion import reciprocal_rank_fusion
 from backend.intelligence.retrieval.expansion import FactStoreExpander
+from backend.intelligence.retrieval.bounded_graph_expander import BoundedGraphExpander
 from backend.intelligence.retrieval.schema import (
     RetrieverResult,
     convert_lexical_result_to_schema,
@@ -47,6 +48,10 @@ class HybridRetriever:
         lexical_weight: float = 1.0,
         semantic_weight: float = 1.0,
         exact_weight: float = 1.2,
+        enable_graph_expansion: bool = False,
+        graph_expansion_depth: int = 2,
+        graph_expansion_nodes_per_hop: int = 3,
+        graph_expansion_max_total: int = 30,
     ):
         self.db = db
         self.analysis_id = analysis_id
@@ -55,6 +60,10 @@ class HybridRetriever:
         self.lexical_weight = lexical_weight
         self.semantic_weight = semantic_weight
         self.exact_weight = exact_weight
+        self.enable_graph_expansion = enable_graph_expansion
+        self.graph_expansion_depth = graph_expansion_depth
+        self.graph_expansion_nodes_per_hop = graph_expansion_nodes_per_hop
+        self.graph_expansion_max_total = graph_expansion_max_total
         self.bm25_index: Optional[BM25Index] = None
         self.semantic_degradation: Optional[str] = None  # Track why semantic search failed
         self._load_or_build_lexical_index()
@@ -522,6 +531,7 @@ class HybridRetriever:
         query: str,
         top_k: int = 15,
         expand_with_fact_store: bool = True,
+        enable_graph_expansion: Optional[bool] = None,
         enable_fallback: bool = True
     ) -> List[RetrieverResult]:
         """
@@ -542,7 +552,8 @@ class HybridRetriever:
         Args:
             query: User query
             top_k: Number of results to return
-            expand_with_fact_store: Whether to expand with graph relationships
+            expand_with_fact_store: Whether to expand with basic fact store expansion
+            enable_graph_expansion: Whether to use bounded graph expansion (overrides instance default)
             enable_fallback: Whether to auto-fallback when primary strategies fail (default: True)
         """
         if not query or not query.strip():
@@ -550,8 +561,14 @@ class HybridRetriever:
 
         q = query.strip()
 
+        # Use instance default if not specified
+        if enable_graph_expansion is None:
+            enable_graph_expansion = self.enable_graph_expansion
+
         # Try primary retrieval
-        results = self._retrieve_primary(q, top_k, expand_with_fact_store)
+        results = self._retrieve_primary(
+            q, top_k, expand_with_fact_store, enable_graph_expansion
+        )
 
         if results:
             return results
@@ -559,7 +576,9 @@ class HybridRetriever:
         # If primary returned empty and fallback enabled, try alternatives
         if enable_fallback:
             logger.info(f"[Retrieval] Primary strategies found nothing for '{q}', attempting fallback...")
-            results = self._retrieve_with_fallback(q, top_k, expand_with_fact_store)
+            results = self._retrieve_with_fallback(
+                q, top_k, expand_with_fact_store, enable_graph_expansion
+            )
 
         return results
 
@@ -567,7 +586,8 @@ class HybridRetriever:
         self,
         query: str,
         top_k: int,
-        expand_with_fact_store: bool
+        expand_with_fact_store: bool,
+        enable_graph_expansion: bool = False
     ) -> List[RetrieverResult]:
         """
         Primary retrieval strategy (exact query on all channels).
@@ -606,8 +626,21 @@ class HybridRetriever:
             top_k=top_k * 2
         )
 
-        # Step 5: Fact Store expansion
-        if expand_with_fact_store and self.analysis_id:
+        # Step 5: Expansion strategy
+        if enable_graph_expansion and self.analysis_id:
+            # Use bounded graph expansion for connected subgraphs
+            logger.info(f"[Retrieval] Using bounded graph expansion for query: {query[:50]}...")
+            graph_expander = BoundedGraphExpander(
+                self.db,
+                self.analysis_id,
+                max_depth=self.graph_expansion_depth,
+                max_nodes_per_hop=self.graph_expansion_nodes_per_hop,
+                max_total_nodes=self.graph_expansion_max_total,
+            )
+            fused = graph_expander.expand_candidates(fused)
+        elif expand_with_fact_store and self.analysis_id:
+            # Use traditional fact store expansion for backward compatibility
+            logger.info(f"[Retrieval] Using traditional fact store expansion for query: {query[:50]}...")
             expander = FactStoreExpander(self.db, self.analysis_id, max_expansions_per_seed=2, max_total_context=top_k)
             fused = expander.expand_candidates(fused)
 
@@ -618,7 +651,8 @@ class HybridRetriever:
         self,
         query: str,
         top_k: int,
-        expand_with_fact_store: bool
+        expand_with_fact_store: bool,
+        enable_graph_expansion: bool = False
     ) -> List[RetrieverResult]:
         """
         Fallback retrieval when primary returns empty.
@@ -635,7 +669,9 @@ class HybridRetriever:
         # Try key terms individually
         all_results = {}
         for term in primary_terms:
-            term_results = self._retrieve_primary(term, top_k, expand_with_fact_store=False)
+            term_results = self._retrieve_primary(
+                term, top_k, expand_with_fact_store=False, enable_graph_expansion=False
+            )
             for r in term_results:
                 rid = r.id
                 if rid not in all_results:
@@ -647,7 +683,9 @@ class HybridRetriever:
 
         # Try substrings
         for term in fallback_terms:
-            term_results = self._retrieve_primary(term, top_k, expand_with_fact_store=False)
+            term_results = self._retrieve_primary(
+                term, top_k, expand_with_fact_store=False, enable_graph_expansion=False
+            )
             for r in term_results:
                 rid = r.id
                 if rid not in all_results:

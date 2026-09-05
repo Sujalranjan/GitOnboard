@@ -1,0 +1,93 @@
+{
+  "timestamp": "/home/dheeraj/repository_intelligence_platform",
+  "ground_truth_source": "Phase 8A.6 (run_phase8a6_retrieval_adequacy.py)",
+  "repository": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend",
+  "audit_results": {
+    "function": [
+      {
+        "symbol": "resetModal",
+        "type": "function",
+        "status": "EXISTS",
+        "evidence": [
+          "Grep match (pattern 'const resetModal'): /home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx:  const resetMod"
+        ],
+        "notes": ""
+      },
+      {
+        "symbol": "setupMockHTTPServer",
+        "type": "function",
+        "status": "DOES_NOT_EXIST",
+        "evidence": [
+          "No grep matches found for patterns: function setupMockHTTPServer, const setupMockHTTPServer, class setupMockHTTPServer, export.*setupMockHTTPServer"
+        ],
+        "notes": ""
+      },
+      {
+        "symbol": "handleAuthFlow",
+        "type": "function",
+        "status": "DOES_NOT_EXIST",
+        "evidence": [
+          "No grep matches found for patterns: function handleAuthFlow, const handleAuthFlow, class handleAuthFlow, export.*handleAuthFlow"
+        ],
+        "notes": ""
+      }
+    ],
+    "class": [
+      {
+        "symbol": "ForgotPasswordModal",
+        "type": "class",
+        "status": "EXISTS",
+        "evidence": [
+          "Grep match (pattern 'const ForgotPasswordModal'): /home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx:const ForgotPass"
+        ],
+        "notes": ""
+      },
+      {
+        "symbol": "LoginComponent",
+        "type": "class",
+        "status": "DOES_NOT_EXIST",
+        "evidence": [
+          "No grep matches found for patterns: function LoginComponent, const LoginComponent, class LoginComponent, export.*LoginComponent"
+        ],
+        "notes": ""
+      }
+    ],
+    "file": [
+      {
+        "symbol": "package.json",
+        "type": "file",
+        "status": "EXISTS",
+        "evidence": [
+          "File found: /home/dheeraj/Deep-Guard/Deep-Guard-Frontend/package.json"
+        ],
+        "notes": ""
+      },
+      {
+        "symbol": "src/components/ForgetPasswordModal.tsx",
+        "type": "file",
+        "status": "EXISTS",
+        "evidence": [
+          "File found: /home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx"
+        ],
+        "notes": ""
+      },
+      {
+        "symbol": "README.md",
+        "type": "file",
+        "status": "EXISTS",
+        "evidence": [
+          "File found: /home/dheeraj/Deep-Guard/Deep-Guard-Frontend/README.md"
+        ],
+        "notes": ""
+      }
+    ]
+  },
+  "summary": {
+    "total_entities": 8,
+    "exists": 5,
+    "does_not_exist": 3,
+    "error": 0,
+    "error_rate": "0.0%",
+    "ground_truth_error_rate": "37.5%"
+  }
+}

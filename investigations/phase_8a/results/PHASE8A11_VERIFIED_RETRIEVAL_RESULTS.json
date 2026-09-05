@@ -1,0 +1,51 @@
+{
+  "timestamp": "2026-09-04T19:12:36.336089",
+  "repository": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend",
+  "ground_truth_source": "Phase 8A.10 audit",
+  "verified_symbols": {
+    "function": [
+      "resetModal"
+    ],
+    "class": [
+      "ForgotPasswordModal"
+    ]
+  },
+  "test_results": {
+    "source_verification": [
+      {
+        "symbol": "resetModal",
+        "type": "function",
+        "source_verified": true,
+        "source_location": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx:57:  const resetModal = () => {",
+        "error": null
+      },
+      {
+        "symbol": "ForgotPasswordModal",
+        "type": "class",
+        "source_verified": true,
+        "source_location": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx:13:const ForgotPasswordModal: FC<ForgotPasswordModalProps> = ({",
+        "error": null
+      }
+    ],
+    "retrieval_tests": [
+      {
+        "symbol": "resetModal",
+        "type": "function",
+        "search_executed": false,
+        "search_found": false,
+        "search_result": null,
+        "error": null,
+        "note": "TODO: Implement HTTP call to /api/repos/Deep-Guard-Frontend/search with query={symbol_name}, entity_type={entity_type}"
+      },
+      {
+        "symbol": "ForgotPasswordModal",
+        "type": "class",
+        "search_executed": false,
+        "search_found": false,
+        "search_result": null,
+        "error": null,
+        "note": "TODO: Implement HTTP call to /api/repos/Deep-Guard-Frontend/search with query={symbol_name}, entity_type={entity_type}"
+      }
+    ]
+  }
+}

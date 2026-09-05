@@ -1,0 +1,17 @@
+[
+  {
+    "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ImageAnalysisSection.tsx",
+    "parser_error": "TypeScriptProvider.parse() missing 1 required positional argument: 'source'",
+    "success": false
+  },
+  {
+    "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/AccountDataManagement.tsx",
+    "parser_error": "TypeScriptProvider.parse() missing 1 required positional argument: 'source'",
+    "success": false
+  },
+  {
+    "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/lib/auth.ts",
+    "parser_error": "TypeScriptProvider.parse() missing 1 required positional argument: 'source'",
+    "success": false
+  }
+]

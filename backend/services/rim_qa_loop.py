@@ -546,69 +546,214 @@ class RIMQALoop:
 
         return False
 
+    def _retrieval_evidence_supports_absence(self, result: QALoopResult) -> bool:
+        """
+        Check if the actual retrieval result data supports an absence claim.
+
+        An absence claim is supported by retrieval evidence only if:
+        - Retrieval tools were executed
+        - AND all retrieval results were empty/not-found
+        - AND no positive evidence of the claimed absence entity was discovered
+
+        Returns True if absence is justified by the retrieval evidence.
+        Returns False if retrieval found relevant results (contradicting absence).
+        """
+        retrieval_tools = ["search_repository", "read_file", "get_symbol", "search_code"]
+        found_any_relevant_result = False
+        checked_any_retrieval = False
+
+        for turn in result.turns:
+            if not turn.tool_call or not turn.tool_observation:
+                continue
+
+            tool_name = turn.tool_call.get("tool_name", "")
+            if tool_name not in retrieval_tools:
+                continue
+
+            # Check if retrieval succeeded
+            if not turn.tool_observation.get("success", False):
+                # Failed retrieval doesn't prove absence
+                continue
+
+            checked_any_retrieval = True
+            result_data = turn.tool_observation.get("data", None)
+
+            # Analyze result based on tool type
+            if tool_name == "search_repository":
+                # search_repository returns list of matches
+                if isinstance(result_data, list) and len(result_data) > 0:
+                    # Found relevant results - contradicts absence
+                    found_any_relevant_result = True
+                    break
+
+            elif tool_name == "search_code":
+                # search_code returns list of matches
+                if isinstance(result_data, list) and len(result_data) > 0:
+                    found_any_relevant_result = True
+                    break
+
+            elif tool_name == "get_symbol":
+                # get_symbol returns symbol data or None
+                if result_data is not None and result_data:
+                    # Symbol found - contradicts absence
+                    found_any_relevant_result = True
+                    break
+
+            elif tool_name == "read_file":
+                # read_file returns file content or None
+                if result_data is not None and result_data:
+                    # File found - contradicts absence
+                    found_any_relevant_result = True
+                    break
+
+        # Evidence supports absence only if:
+        # 1. We actually performed retrieval
+        # 2. We found no relevant results
+        if checked_any_retrieval and not found_any_relevant_result:
+            return True
+
+        # If no retrieval was performed, or retrieval found results
+        return False
+
     def _is_absence_claim(self, answer: str) -> bool:
         """
-        Heuristic: detect if answer claims repository-wide absence.
+        Improved heuristic: detect if answer claims repository-wide absence.
 
-        Looks for patterns like:
-        - "does not", "doesn't", "no ", "not found"
-        - In context of repository/codebase/project
+        Handles multiple formulations:
+        - Direct negation: "does not X", "there is no X"
+        - Soft negation: "doesn't appear", "seems not to"
+        - Search-qualified: "found no X", "no results"
+        - Question-response: "Is there X?" answered with "No"
         """
         answer_lower = answer.lower()
 
-        absence_patterns = [
+        # Direct negation patterns (primary)
+        direct_negation = [
             "does not",
             "doesn't",
-            "no results",
-            "not found",
-            "no mention",
-            "no evidence",
-            "cannot find",
-            "unable to find",
+            "do not",
+            "don't",
             "is not",
             "isn't",
-            "no instances",
-            "no references",
+            "was not",
+            "wasn't",
+            "are not",
+            "aren't",
+            "no function",
+            "no module",
+            "no package",
+            "no component",
+            "no service",
+            "no feature",
+            "no implementation",
+            "no code",
+            "there is no",
+            "there are no",
+            "there's no",
         ]
 
-        repo_context_words = [
+        # Soft/qualified negation (secondary)
+        soft_negation = [
+            "does not appear",
+            "doesn't appear",
+            "appears not",
+            "appears to not",
+            "doesn't seem",
+            "does not seem",
+            "seems not",
+            "unable to find",
+            "cannot find",
+            "could not find",
+            "couldn't find",
+            "found no",
+            "no evidence",
+            "no mention",
+            "no instances",
+            "no references",
+            "not found",
+            "not present",
+            "not implemented",
+            "not detected",
+            "no results",
+        ]
+
+        # Entity context (broadened)
+        entity_context = [
+            "function",
+            "module",
+            "package",
+            "library",
+            "component",
+            "service",
+            "feature",
+            "class",
+            "interface",
+            "method",
+            "implementation",
+            "pattern",
+            "dependency",
+            "tool",
+            "framework",
+            "redis",
+            "database",
+            "cache",
+            "authentication",
+            "reset",
+            "recovery",
+        ]
+
+        repo_context = [
             "repository",
             "codebase",
             "project",
             "code",
             "repo",
+            "repository",
+            "this repo",
+            "this project",
         ]
 
-        # Check if answer contains absence pattern + repository context
-        has_absence = any(p in answer_lower for p in absence_patterns)
-        has_repo_context = any(r in answer_lower for r in repo_context_words)
+        # Strategy: Detect absence if:
+        # 1. Direct negation is present
+        # 2. OR soft negation + entity/repo context
+        # This catches most natural absence formulations
 
-        # Very strict: only flag if both patterns present
-        # This reduces false positives on legitimate vague answers
-        return has_absence and has_repo_context
+        has_direct = any(p in answer_lower for p in direct_negation)
+
+        has_soft = any(p in answer_lower for p in soft_negation)
+        has_context = (
+            any(e in answer_lower for e in entity_context) or
+            any(r in answer_lower for r in repo_context)
+        )
+
+        # Direct negation alone is usually sufficient
+        # OR soft negation WITH entity/repo context
+        return has_direct or (has_soft and has_context)
 
     def _verify_absence_claim(self, answer: str, result: QALoopResult) -> bool:
         """
-        Enforcement gate: absence claims must be backed by retrieval evidence.
+        Enforcement gate: absence claims must be backed by actual retrieval evidence.
 
         Returns True if:
         - Answer does NOT claim absence, OR
-        - Answer claims absence AND retrieval has been performed
+        - Answer claims absence AND retrieval result data genuinely supports it
 
         Returns False if:
-        - Answer claims absence BUT NO retrieval has been performed
+        - Answer claims absence but retrieval found contradicting evidence, OR
+        - Answer claims absence but no retrieval was performed, OR
+        - Answer claims absence but retrieval result data contradicts the claim
         """
         if not self._is_absence_claim(answer):
             # Not an absence claim, pass through
             return True
 
-        # This is an absence claim; check if retrieval was done
-        if self._has_retrieval_been_performed(result):
-            # Absence claim is backed by retrieval evidence
+        # This is an absence claim; validate with retrieval evidence
+        if self._retrieval_evidence_supports_absence(result):
+            # Absence claim is backed by actual retrieval evidence (results were empty)
             return True
 
-        # Absence claim WITHOUT retrieval evidence - GATE VIOLATION
-        logger.warning(f"[VerificationGate] Absence claim without retrieval evidence: {answer[:100]}...")
+        # Absence claim NOT supported by evidence
+        logger.warning(f"[VerificationGate] Absence claim without supporting retrieval evidence: {answer[:100]}...")
         return False
 
     def _format_tool_observation(
