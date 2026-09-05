@@ -75,3 +75,4 @@ logs/*
 *_profile_results.json
 *.db
 *.log
+.phase*.json
