@@ -1,5 +1,7 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 import logging
+import time
+import json
 from ..scanner.scanner import RepositoryScanner
 from ..parser.manager import ASTParserManager
 from ..analyzers.registry import AnalyzerRegistry
@@ -100,15 +102,45 @@ class AnalysisEngine:
         # Analyzers should ideally be topologically sorted based on dependencies.
         # For now, we assume the registry order is safe (e.g., SymbolAnalyzer first).
         analyzers = self.registry.get_all()
+        analyzer_timings: Dict[str, Dict] = {}
+
         for idx, analyzer in enumerate(analyzers):
-            analyzer.analyze(model, asts)
+            analyzer_name = analyzer.__class__.__name__
+
+            # Record state before analyzer
+            entities_before = len(model.entities)
+            relationships_before = len(model.relationships)
+
+            # Time the analyzer
+            start_time = time.time()
+            try:
+                analyzer.analyze(model, asts)
+            except Exception as e:
+                logger.error(f"[PROFILE] Analyzer {analyzer_name} failed: {e}")
+                raise
+            duration = time.time() - start_time
+
+            # Record state after analyzer
+            entities_after = len(model.entities)
+            relationships_after = len(model.relationships)
+
+            # Store timing data
+            analyzer_timings[analyzer_name] = {
+                "duration_seconds": duration,
+                "entities_added": entities_after - entities_before,
+                "relationships_added": relationships_after - relationships_before,
+                "total_entities": entities_after,
+                "total_relationships": relationships_after
+            }
+
+            logger.info(f"[PROFILE] {analyzer_name}: {duration:.2f}s (entities: +{entities_after - entities_before}, rels: +{relationships_after - relationships_before})")
 
             # Update progress during analyzer execution
             if progress:
                 entity_count = len(model.entities)
                 progress.update(
                     "Symbol extraction",
-                    f"Extracting symbols ({analyzer.__class__.__name__})",
+                    f"Extracting symbols ({analyzer_name})",
                     entity_count,
                     max(1, entity_count),  # Use entity count as work done
                     "symbols"
@@ -139,5 +171,22 @@ class AnalysisEngine:
             diag.print_summary()
             logger.info(f"[PIPELINE] Diagnostic files saved: {report_file}, {actions_file}")
 
+        # Save timing profile
+        timing_file = Path(self.target_dir) / ".phase2h_profile.json"
+        with open(timing_file, "w") as f:
+            json.dump({
+                "repository": repo_name,
+                "file_count": len(manifest.files),
+                "ast_count": len(asts),
+                "analyzers": analyzer_timings,
+                "total_entities": len(model.entities),
+                "total_relationships": len(model.relationships)
+            }, f, indent=2)
+
         logger.info(f"[PIPELINE] Analysis complete: {len(model.entities)} entities, {len(model.relationships)} relationships")
+        logger.info(f"[PIPELINE] Profile saved to {timing_file}")
+
+        # Store timings in model for retrieval
+        model._analyzer_timings = analyzer_timings
+
         return model
