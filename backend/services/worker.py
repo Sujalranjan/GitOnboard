@@ -144,60 +144,60 @@ class AnalysisWorker(WorkerInterface):
                     for file_idx, full_p in enumerate(all_files):
                         rel_p = str(full_p.relative_to(target_dir)).replace("\\", "/").removeprefix("./").lstrip("/")
                         try:
-                                blob_key = build_blob_key(repo_id, snapshot_id, rel_p)
-                                content_type, _ = mimetypes.guess_type(str(full_p))
-                                content_type = content_type or "text/plain"
-                                file_size = full_p.stat().st_size
+                            blob_key = build_blob_key(repo_id, snapshot_id, rel_p)
+                            content_type, _ = mimetypes.guess_type(str(full_p))
+                            content_type = content_type or "text/plain"
+                            file_size = full_p.stat().st_size
 
-                                # Upload to Azure blob storage
-                                with open(full_p, "rb") as fh:
-                                    logger.info(f"[BLOB_UPLOAD] Uploading {rel_p} to blob: {blob_key}")
-                                    storage.put_object(blob_key, fh, content_type=content_type)
+                            # Upload to Azure blob storage
+                            with open(full_p, "rb") as fh:
+                                logger.info(f"[BLOB_UPLOAD] Uploading {rel_p} to blob: {blob_key}")
+                                storage.put_object(blob_key, fh, content_type=content_type)
 
-                                # Verify blob exists in storage before recording in database
-                                logger.info(f"[BLOB_VERIFY] Verifying blob exists: {blob_key}")
-                                if not storage.object_exists(blob_key):
-                                    raise FileNotFoundError(f"Blob upload succeeded but verification failed: {blob_key} not found in storage")
-                                logger.info(f"[BLOB_VERIFY] Blob verified: {blob_key} exists in storage")
+                            # Verify blob exists in storage before recording in database
+                            logger.info(f"[BLOB_VERIFY] Verifying blob exists: {blob_key}")
+                            if not storage.object_exists(blob_key):
+                                raise FileNotFoundError(f"Blob upload succeeded but verification failed: {blob_key} not found in storage")
+                            logger.info(f"[BLOB_VERIFY] Blob verified: {blob_key} exists in storage")
 
-                                # Create or update file entity
-                                f_ent = file_entities_by_path.get(rel_p)
-                                if not f_ent:
-                                    f_id = generate_entity_id(EntityType.FILE, rel_p, rel_p)
-                                    f_ent = Entity(
-                                        id=f_id,
-                                        type=EntityType.FILE,
-                                        name=full_p.name,
-                                        qualified_name=rel_p,
-                                        location=SourceLocation(
-                                            repository_path=rel_p,
-                                            start_line=1,
-                                            end_line=1,
-                                            language=""
-                                        ),
-                                        metadata={}
-                                    )
-                                    model.entities[f_id] = f_ent
-                                    file_entities_by_path[rel_p] = f_ent
+                            # Create or update file entity
+                            f_ent = file_entities_by_path.get(rel_p)
+                            if not f_ent:
+                                f_id = generate_entity_id(EntityType.FILE, rel_p, rel_p)
+                                f_ent = Entity(
+                                    id=f_id,
+                                    type=EntityType.FILE,
+                                    name=full_p.name,
+                                    qualified_name=rel_p,
+                                    location=SourceLocation(
+                                        repository_path=rel_p,
+                                        start_line=1,
+                                        end_line=1,
+                                        language=""
+                                    ),
+                                    metadata={}
+                                )
+                                model.entities[f_id] = f_ent
+                                file_entities_by_path[rel_p] = f_ent
 
-                                # Only record blob_name after successful upload AND verification
-                                f_ent.metadata["blob_name"] = blob_key
-                                f_ent.metadata["snapshot_id"] = snapshot_id
-                                f_ent.metadata["content_type"] = content_type
-                                f_ent.metadata["size"] = file_size
-                                logger.info(f"[BLOB_RECORD] Recorded blob_name in metadata: {blob_key}")
+                            # Only record blob_name after successful upload AND verification
+                            f_ent.metadata["blob_name"] = blob_key
+                            f_ent.metadata["snapshot_id"] = snapshot_id
+                            f_ent.metadata["content_type"] = content_type
+                            f_ent.metadata["size"] = file_size
+                            logger.info(f"[BLOB_RECORD] Recorded blob_name in metadata: {blob_key}")
 
-                                # Update progress every ~10 files or at end
-                                if file_idx % 10 == 0 or file_idx == total_files - 1:
-                                    progress.update(
-                                        "Persisting facts",
-                                        f"Uploading repository files",
-                                        file_idx + 1,
-                                        total_files,
-                                        "files"
-                                    )
-                            except Exception as up_err:
-                                logger.error(f"[BLOB_FAILED] Failed to upload blob for {rel_p}: {type(up_err).__name__}: {up_err}")
+                            # Update progress every ~10 files or at end
+                            if file_idx % 10 == 0 or file_idx == total_files - 1:
+                                progress.update(
+                                    "Persisting facts",
+                                    f"Uploading repository files",
+                                    file_idx + 1,
+                                    total_files,
+                                    "files"
+                                )
+                        except Exception as up_err:
+                            logger.error(f"[BLOB_FAILED] Failed to upload blob for {rel_p}: {type(up_err).__name__}: {up_err}")
 
                     # Run Capability Engine
                     capability_engine = CapabilityBuilderEngine()
