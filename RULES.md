@@ -113,5 +113,16 @@ If a script needs to stay in root (e.g., primary validation harness), document i
 
 ---
 
+## Approved Exceptions (Root Files)
+
+These files stay in root because they're essential:
+
+- `phase2k_complete_e2e_validation.py` — Primary E2E validation harness (Phase 2K integration testing)
+- `phase2k2_full_e2e_validation.py` — Extended E2E validation (stages 6-8, future use)
+
+All other investigation/temporary scripts go to `investigations/`.
+
+---
+
 **Last Updated:** 2026-09-06  
 **Enforced by:** Manual code review + this document
