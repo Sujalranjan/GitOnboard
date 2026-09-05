@@ -209,12 +209,13 @@ class RIMQALoop:
             # 3. Parse response: tool_call | final_answer | malformed
             parsed = self._parse_response(llm_response.content)
 
+            # Log all details to debug for troubleshooting
             if parsed["action"] == "tool_call":
-                logger.info(f"[RIMQALoop] Turn {turn_index}: {parsed.get('tool_name')}")
+                logger.debug(f"[RIMQALoop] Turn {turn_index}: tool={parsed.get('tool_name')}")
             elif parsed["action"] == "final_answer":
-                logger.info(f"[RIMQALoop] Turn {turn_index}: FINAL_ANSWER")
+                logger.debug(f"[RIMQALoop] Turn {turn_index}: FINAL_ANSWER")
             else:
-                logger.warning(f"[RIMQALoop] Turn {turn_index}: MALFORMED - {parsed.get('error')} | {llm_response.content[:100]}...")
+                logger.debug(f"[RIMQALoop] Turn {turn_index}: MALFORMED - {parsed.get('error')} | {llm_response.content[:100]}...")
 
             turn = QALoopTurn(
                 turn_index=turn_index,
@@ -406,18 +407,15 @@ class RIMQALoop:
             "tool_total": tool_total_ms,
         }
 
-        # Log completion and warn if no tool calls were made
-        log_func = logger.warning if result.tool_call_count == 0 else logger.info
-        log_func(
-            f"[RIMQALoop] Complete: {len(result.turns)} turns, "
-            f"{result.tool_call_count} tool calls, "
-            f"stop_reason={result.stop_reason}, "
-            f"latency={loop_elapsed*1000:.0f}ms"
-        )
+        # Log completion - show critical summary
+        log_message = (f"[RIMQALoop] Completed {len(result.turns)} turns | "
+                      f"{result.tool_call_count} tool calls | "
+                      f"{result.stop_reason}")
 
         if result.tool_call_count == 0:
-            logger.error("[RIMQALoop] ERROR: No tool calls made! LLM did not retrieve any code. "
-                        "Check if LLM is generating malformed JSON or ignoring protocol.")
+            logger.error(f"{log_message} | ❌ ERROR: No tools called - malformed JSON or protocol failure")
+        else:
+            logger.info(log_message)
 
         return result
 
