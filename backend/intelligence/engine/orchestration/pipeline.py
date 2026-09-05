@@ -20,7 +20,7 @@ class AnalysisEngine:
         self.target_dir = str(Path(target_dir).resolve())
         self.registry = registry
 
-    def run(self, repo_name: str, commit_info: Optional[dict] = None, analysis_id: Optional[int] = None, db: Optional[Session] = None) -> RepositoryModel:
+    def run(self, repo_name: str, commit_info: Optional[dict] = None, analysis_id: Optional[int] = None, db: Optional[Session] = None, skip_validation: bool = False) -> RepositoryModel:
         # Initialize diagnostic logger
         if analysis_id:
             diag = init_diagnostic_logger(analysis_id, repo_name)
@@ -124,11 +124,12 @@ class AnalysisEngine:
                 "relationships"
             )
             
-        # 4. Validate RIM
-        validator = RIMValidator(model)
-        if not validator.validate():
-            # In production, we'd log warnings or raise an error
-            pass
+        # 4. Validate RIM (optional, can be skipped for performance on large repos)
+        if not skip_validation:
+            validator = RIMValidator(model)
+            if not validator.validate():
+                # In production, we'd log warnings or raise an error
+                pass
 
         # 5. Save diagnostic report
         if diag:
