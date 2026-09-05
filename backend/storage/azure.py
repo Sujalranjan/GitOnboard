@@ -111,7 +111,7 @@ class AzureBlobStorage(ObjectStorage):
             payload = data
 
         try:
-            logger.info(f"[AZURE_STORAGE] put_object starting for key: {key}")
+            logger.debug(f"[AZURE_STORAGE] put_object starting for key: {key}")
             start = time.time()
             blob_client.upload_blob(
                 payload,
@@ -121,7 +121,7 @@ class AzureBlobStorage(ObjectStorage):
                 timeout=30.0,
             )
             elapsed = time.time() - start
-            logger.info(f"[AZURE_STORAGE] put_object succeeded in {elapsed:.2f}s for {key}")
+            logger.debug(f"[AZURE_STORAGE] put_object succeeded in {elapsed:.2f}s for {key}")
         except Exception as e:
             logger.error(f"[AZURE_STORAGE] put_object failed for {key}: {type(e).__name__}: {e}", exc_info=True)
             raise
@@ -130,16 +130,16 @@ class AzureBlobStorage(ObjectStorage):
 
     def get_object(self, key: str) -> bytes:
         import time
-        logger.info(f"[AZURE_STORAGE] get_object called with key: {key}")
+        logger.debug(f"[AZURE_STORAGE] get_object called with key: {key}")
         self.ensure_container_exists()
         blob_client = self.container_client.get_blob_client(key)
         try:
-            logger.info(f"[AZURE_STORAGE] Attempting download_blob for {key}")
+            logger.debug(f"[AZURE_STORAGE] Attempting download_blob for {key}")
             start = time.time()
             stream = blob_client.download_blob(timeout=30.0)
             data = stream.readall()
             elapsed = time.time() - start
-            logger.info(f"[AZURE_STORAGE] download_blob successful in {elapsed:.2f}s, got {len(data)} bytes")
+            logger.debug(f"[AZURE_STORAGE] download_blob successful in {elapsed:.2f}s, got {len(data)} bytes")
             return data
         except ResourceNotFoundError as e:
             logger.warning(f"[AZURE_STORAGE] ResourceNotFoundError for {key}: {e}")
@@ -149,12 +149,12 @@ class AzureBlobStorage(ObjectStorage):
             raise
 
     def get_object_text(self, key: str, encoding: str = "utf-8") -> str:
-        logger.info(f"[AZURE_STORAGE] get_object_text called with key: {key}")
+        logger.debug(f"[AZURE_STORAGE] get_object_text called with key: {key}")
         try:
             raw_bytes = self.get_object(key)
-            logger.info(f"[AZURE_STORAGE] get_object returned {len(raw_bytes)} bytes")
+            logger.debug(f"[AZURE_STORAGE] get_object returned {len(raw_bytes)} bytes")
             result = raw_bytes.decode(encoding, errors="replace")
-            logger.info(f"[AZURE_STORAGE] Decoded to {len(result)} chars")
+            logger.debug(f"[AZURE_STORAGE] Decoded to {len(result)} chars")
             return result
         except Exception as e:
             logger.error(f"[AZURE_STORAGE] Exception in get_object_text: {type(e).__name__}: {e}", exc_info=True)
