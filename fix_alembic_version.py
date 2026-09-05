@@ -3,7 +3,7 @@
 import sqlite3
 from pathlib import Path
 
-db_path = Path("gitonboard.db").resolve()
+db_path = Path("data/local.db").resolve()
 print(f"Database: {db_path}")
 
 if not db_path.exists():
