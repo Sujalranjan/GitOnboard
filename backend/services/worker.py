@@ -97,10 +97,11 @@ class AnalysisWorker(WorkerInterface):
                     from backend.intelligence.capabilities.engine import CapabilityBuilderEngine
                     from backend.intelligence.features.engine import FeatureReconstructionEngine
                     from backend.intelligence.rim.serialization import serialize_rim
-                    
-                    # Run Static Analysis Pipeline
+                    from backend.services.progress_tracker import ProgressTracker
+
+                    # Run Static Analysis Pipeline with progress tracking
                     engine = AnalysisEngine(str(target_dir), get_default_registry())
-                    model = engine.run(repo_name, commit_info=commit_info)
+                    model = engine.run(repo_name, commit_info=commit_info, analysis_id=analysis.id, db=db)
 
                     # Upload all repository files to Azure Blob Storage / Azurite
                     from backend.storage import get_storage, build_blob_key
@@ -127,14 +128,22 @@ class AnalysisWorker(WorkerInterface):
 
                     ignored_dirs = {".git", "node_modules", ".venv", "venv", "__pycache__", ".idea", ".vscode"}
 
+                    # Count total files for progress tracking
+                    all_files = []
                     for root, dirs, files in os.walk(target_dir):
                         dirs[:] = [d for d in dirs if d not in ignored_dirs]
                         for f in files:
                             full_p = Path(root) / f
-                            if not full_p.is_file():
-                                continue
-                            rel_p = str(full_p.relative_to(target_dir)).replace("\\", "/").removeprefix("./").lstrip("/")
-                            try:
+                            if full_p.is_file():
+                                all_files.append(full_p)
+
+                    progress = ProgressTracker(db, analysis.id)
+                    total_files = len(all_files)
+
+                    # Upload files with progress tracking
+                    for file_idx, full_p in enumerate(all_files):
+                        rel_p = str(full_p.relative_to(target_dir)).replace("\\", "/").removeprefix("./").lstrip("/")
+                        try:
                                 blob_key = build_blob_key(repo_id, snapshot_id, rel_p)
                                 content_type, _ = mimetypes.guess_type(str(full_p))
                                 content_type = content_type or "text/plain"
@@ -177,6 +186,16 @@ class AnalysisWorker(WorkerInterface):
                                 f_ent.metadata["content_type"] = content_type
                                 f_ent.metadata["size"] = file_size
                                 logger.info(f"[BLOB_RECORD] Recorded blob_name in metadata: {blob_key}")
+
+                                # Update progress every ~10 files or at end
+                                if file_idx % 10 == 0 or file_idx == total_files - 1:
+                                    progress.update(
+                                        "Persisting facts",
+                                        f"Uploading repository files",
+                                        file_idx + 1,
+                                        total_files,
+                                        "files"
+                                    )
                             except Exception as up_err:
                                 logger.error(f"[BLOB_FAILED] Failed to upload blob for {rel_p}: {type(up_err).__name__}: {up_err}")
 
@@ -279,6 +298,10 @@ class AnalysisWorker(WorkerInterface):
                 logger.info("Saving artifacts and canonical Fact Store tables...")
                 rim_model = results.pop("rim_model", None)
 
+                # Initialize progress tracker for persistence phase
+                from backend.services.progress_tracker import ProgressTracker
+                progress = ProgressTracker(db, analysis.id)
+
                 # Track indexing health
                 from backend.intelligence.retrieval.indexing_health import (
                     IndexStatus, OverallIndexingStatus, IndexFailureCode,
@@ -294,8 +317,18 @@ class AnalysisWorker(WorkerInterface):
                     try:
                         from backend.intelligence.store.fact_store import save_rim_to_fact_store
                         save_rim_to_fact_store(db, analysis.id, rim_model)
-                        logger.info(f"Saved {len(rim_model.entities)} entities to Fact Store")
+                        entity_count = len(rim_model.entities)
+                        logger.info(f"Saved {entity_count} entities to Fact Store")
                         exact_ok = True  # Exact search depends on FactStore
+
+                        # Update progress after persistence
+                        progress.update(
+                            "Persisting facts",
+                            f"Saved {entity_count} entities to database",
+                            entity_count,
+                            entity_count,
+                            "entities"
+                        )
                     except Exception as e:
                         db.rollback()
                         logger.error(f"Error persisting facts to Fact Store: {e}")
@@ -334,6 +367,15 @@ class AnalysisWorker(WorkerInterface):
                                 }
                                 results["bm25_index"] = bm25_data
                                 logger.info(f"BM25 index ready with {bm25_doc_count} documents (version={analysis.fact_store_version[:8]}...)")
+
+                                # Update progress for BM25 indexing
+                                progress.update(
+                                    "Building indexes",
+                                    f"Built BM25 index with {bm25_doc_count} documents",
+                                    bm25_doc_count,
+                                    bm25_doc_count,
+                                    "documents"
+                                )
                                 bm25_ok = True
                             else:
                                 if not rim_model.entities:
@@ -356,6 +398,15 @@ class AnalysisWorker(WorkerInterface):
                                 results["semantic_index_db"] = chroma_bytes
                                 semantic_doc_count = len(rim_model.entities)  # Approximate
                                 logger.info(f"Semantic index ready: {len(chroma_bytes)} bytes with ~{semantic_doc_count} entities")
+
+                                # Update progress for semantic indexing
+                                progress.update(
+                                    "Building indexes",
+                                    f"Built semantic index with {semantic_doc_count} entities",
+                                    semantic_doc_count,
+                                    semantic_doc_count,
+                                    "entities"
+                                )
                                 semantic_ok = True
                             else:
                                 # Check if it's due to chromadb unavailable or empty entities
@@ -436,6 +487,10 @@ class AnalysisWorker(WorkerInterface):
 
                 job.status = "Completed"
                 job.completed_at = datetime.now(timezone.utc)
+
+                # Mark progress as 100% complete
+                progress.mark_complete()
+
                 db.commit()
                 logger.info(f"Job {job_id}: status → Completed")
                 logger.info(f"Job {job_id} completed successfully.")

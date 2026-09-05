@@ -321,31 +321,29 @@ function DashboardContent() {
                     console.log(`[Progress] Repo: ${repo.project_name}, status="${repo.status}", job_status="${repo.job_status}", statusLower="${statusLower}", jobStatusLower="${jobStatusLower}", isActive=${isActive}, progress=${repo.progress}`);
 
                     if (isActive) {
-                      // Use real-time progress from API if available
-                      const progress = repo.progress ?? (() => {
-                        const statusMap: Record<string, number> = {
-                          "queued": 11,      // Changed from 10 to identify which mapping
-                          "downloading": 31, // Changed from 30
-                          "analyzing": 61,   // Changed from 60
-                          "saving": 91,      // Changed from 90
-                          "completed": 100,
-                          "failed": 0
-                        };
-                        const currentStatus = (repo.job_status || "Queued").toLowerCase();
-                        return statusMap[currentStatus] || 11;
+                      // Use real work-based progress from API
+                      const progress = repo.progress ?? 0;
+                      const progressMessage = (repo as any).message || (repo as any).substage || repo.job_status || "Queued";
+                      const workMetrics = (() => {
+                        const processed = (repo as any).processed;
+                        const total = (repo as any).total;
+                        const unit = (repo as any).unit || "items";
+                        if (processed !== undefined && total !== undefined && total > 0) {
+                          return ` (${processed.toLocaleString()} / ${total.toLocaleString()} ${unit})`;
+                        }
+                        return "";
                       })();
-                      const currentStatus = repo.job_status || "Queued";
 
-                      console.log(`[Progress] Showing progress bar: ${repo.project_name}, progress=${progress}%, status="${currentStatus}"`);
+                      console.log(`[Progress] Real-based progress: ${repo.project_name}, progress=${progress}%, message="${progressMessage}"${workMetrics}`);
 
                       return (
                         <div className="mt-4">
                           <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                            <span>{currentStatus}...</span>
+                            <span className="max-w-xs truncate">{progressMessage}{workMetrics}</span>
                             <span>{progress}%</span>
                           </div>
                           <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                            <div className="bg-blue-500 dark:bg-blue-500 h-2 rounded-full transition-all duration-1000 ease-in-out relative" style={{ width: `${progress}%` }}>
+                            <div className="bg-blue-500 dark:bg-blue-500 h-2 rounded-full transition-all duration-500 ease-in-out relative" style={{ width: `${progress}%` }}>
                               <div className="absolute top-0 left-0 right-0 bottom-0 bg-white/20 animate-[shimmer_1s_infinite]"></div>
                             </div>
                           </div>

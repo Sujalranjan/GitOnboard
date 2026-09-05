@@ -18,7 +18,7 @@ core_router = APIRouter(tags=["repositories"])
 
 @core_router.get("/{repo_name}/job-progress", include_in_schema=False)
 def get_job_progress(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Return current job progress with percentage."""
+    """Return current job progress with real work-based metrics."""
     try:
         repo, analysis = get_latest_analysis(repo_name, db, current_user)
         job = db.query(AnalysisJob).filter(AnalysisJob.analysis_id == analysis.id).first()
@@ -26,29 +26,63 @@ def get_job_progress(repo_name: str, db: Session = Depends(get_db), current_user
         if not job:
             return {"status": "no_job", "progress": 0}
 
-        # Map status to progress percentage
-        status_map = {
-            "Queued": 5,
-            "Downloading": 20,
-            "Analyzing": 50,
-            "Saving": 75,
-            "Completed": 100,
-            "Failed": 0,
-            "Cancelled": 0,
-        }
+        # Use real work-based progress from database
+        # Fallback to status_map for jobs that haven't been updated with new progress fields
+        progress_pct = job.progress_percentage or analysis.progress_percentage or 0
 
-        progress = status_map.get(job.status, 0)
+        # If no real progress data, use legacy status-based fallback
+        if progress_pct == 0:
+            status_map = {
+                "Queued": 5,
+                "Downloading": 20,
+                "Analyzing": 50,
+                "Saving": 75,
+                "Completed": 100,
+                "Failed": 0,
+                "Cancelled": 0,
+            }
+            progress_pct = status_map.get(job.status, 0)
 
-        return {
+        # Build response with real progress data
+        response = {
             "job_id": job.id,
             "status": job.status.lower(),  # Lowercase for frontend consistency
-            "progress": progress,
+            "progress": progress_pct,
             "started_at": job.started_at.isoformat() if job.started_at else None,
             "completed_at": job.completed_at.isoformat() if job.completed_at else None,
             "error": job.error,
         }
+
+        # Add detailed progress information from analysis record
+        if analysis.progress_stage:
+            response["stage"] = analysis.progress_stage
+            response["substage"] = analysis.progress_substage or analysis.progress_stage
+            response["processed"] = analysis.progress_processed
+            response["total"] = analysis.progress_total
+            response["unit"] = analysis.progress_unit or "items"
+            response["message"] = _format_progress_message(
+                analysis.progress_substage or analysis.progress_stage,
+                analysis.progress_processed,
+                analysis.progress_total,
+                analysis.progress_unit or "items"
+            )
+
+        # Alternative: use job's denormalized progress details
+        elif job.progress_details:
+            response.update(job.progress_details)
+            response["message"] = job.progress_details.get("message", "")
+
+        return response
     except HTTPException:
         return {"status": "no_analysis", "progress": 0}
+
+
+def _format_progress_message(substage: str, processed: int, total: int, unit: str) -> str:
+    """Format human-readable progress message."""
+    if total > 0:
+        return f"{substage} ({processed:,} / {total:,} {unit})"
+    else:
+        return substage
 
 @import_router.post("")
 async def import_repo(req: ImportRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

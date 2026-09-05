@@ -37,6 +37,14 @@ class Analysis(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     indexed_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Real work-based progress tracking
+    progress_stage = Column(String, nullable=True)  # "Downloading", "Parsing", "Symbol extraction", etc.
+    progress_substage = Column(String, nullable=True)  # "Parsing Python files", "Extracting function symbols", etc.
+    progress_percentage = Column(Integer, default=0)  # 0-100, derived from actual completed work
+    progress_processed = Column(Integer, default=0)  # Work units completed (files parsed, entities saved, etc.)
+    progress_total = Column(Integer, default=0)  # Total work units (0 if unknown)
+    progress_unit = Column(String, nullable=True)  # "files", "symbols", "entities", "documents"
+
     repository = relationship("Repository", back_populates="analyses")
     artifacts = relationship("AnalysisArtifact", back_populates="analysis", cascade="all, delete-orphan")
     jobs = relationship("AnalysisJob", back_populates="analysis", cascade="all, delete-orphan")
@@ -54,14 +62,18 @@ class AnalysisArtifact(Base):
 
 class AnalysisJob(Base):
     __tablename__ = "analysis_jobs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     analysis_id = Column(Integer, ForeignKey("analyses.id"), nullable=False)
     status = Column(String, nullable=False, default="Queued") # Queued, Downloading, Analyzing, Saving, Completed, Failed, Cancelled
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     error = Column(String, nullable=True)
-    
+
+    # Denormalized progress for fast polling (mirrors Analysis progress fields)
+    progress_percentage = Column(Integer, default=0)  # 0-100
+    progress_details = Column(JSONType, nullable=True)  # {stage, substage, processed, total, unit}
+
     analysis = relationship("Analysis", back_populates="jobs")
 
 class TaskStatus(Base):
