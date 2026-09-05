@@ -45,30 +45,32 @@ class RepositoryScanner:
 
     def __init__(self, target_dir: str):
         self.target_dir = Path(target_dir).resolve()
+        # Convert to string for subprocess (handles Windows paths correctly)
+        self.target_dir_str = str(self.target_dir)
         
     def _get_git_metadata(self) -> RepositoryMetadata:
         metadata = RepositoryMetadata()
         try:
             # Check if it's a git repo
-            subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=self.target_dir, check=True, capture_output=True)
+            subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=self.target_dir_str, check=True, capture_output=True)
             
             # Get commit hash
-            commit_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.target_dir, capture_output=True, text=True)
+            commit_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.target_dir_str, capture_output=True, text=True)
             if commit_res.returncode == 0:
                 metadata.commit_hash = commit_res.stdout.strip()
                 
             # Get commit timestamp
-            time_res = subprocess.run(["git", "log", "-1", "--format=%cI"], cwd=self.target_dir, capture_output=True, text=True)
+            time_res = subprocess.run(["git", "log", "-1", "--format=%cI"], cwd=self.target_dir_str, capture_output=True, text=True)
             if time_res.returncode == 0:
                 metadata.commit_timestamp = time_res.stdout.strip()
                 
             # Get branch
-            branch_res = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.target_dir, capture_output=True, text=True)
+            branch_res = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.target_dir_str, capture_output=True, text=True)
             if branch_res.returncode == 0:
                 metadata.branch = branch_res.stdout.strip()
                 
             # Get remote URL
-            remote_res = subprocess.run(["git", "config", "--get", "remote.origin.url"], cwd=self.target_dir, capture_output=True, text=True)
+            remote_res = subprocess.run(["git", "config", "--get", "remote.origin.url"], cwd=self.target_dir_str, capture_output=True, text=True)
             if remote_res.returncode == 0:
                 metadata.remote_url = remote_res.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
