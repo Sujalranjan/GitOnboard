@@ -77,6 +77,11 @@ def stage_2_factstore_persistence(model):
         from backend.models.user import User
         from backend.models.repository import Repository, Analysis
         from backend.intelligence.store.fact_store import save_rim_to_fact_store
+        from pathlib import Path
+
+        # Ensure data/ directory exists (required for sqlite:///data/local.db)
+        data_dir = Path("data")
+        data_dir.mkdir(exist_ok=True, parents=True)
 
         # Ensure tables exist
         Base.metadata.create_all(bind=engine)
