@@ -100,7 +100,7 @@ def run_full_8_stage_validation():
             db.add(analysis)
             db.flush()
 
-            save_rim_to_fact_store(model, analysis.id, db)
+            save_rim_to_fact_store(db, analysis.id, model)
             db.commit()
 
             stage2_time = time.time() - stage2_start
