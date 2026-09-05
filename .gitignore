@@ -68,3 +68,10 @@ logs/*
 *.log
 *.log.*
 
+
+# Generated validation results and data
+*_validation_results.json
+*_benchmark.json
+*_profile_results.json
+*.db
+*.log
