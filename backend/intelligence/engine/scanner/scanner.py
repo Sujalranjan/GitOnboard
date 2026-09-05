@@ -51,31 +51,40 @@ class RepositoryScanner:
     def _get_git_metadata(self) -> RepositoryMetadata:
         metadata = RepositoryMetadata()
         try:
-            # Check if it's a git repo
-            subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=self.target_dir_str, check=True, capture_output=True)
-            
+            # Check if directory exists first
+            if not self.target_dir.exists():
+                return metadata
+
+            # Try to check if it's a git repo (fail silently if git unavailable)
+            try:
+                subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=self.target_dir_str, check=True, capture_output=True, timeout=5)
+            except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+                # Git not available or not a git repo - return minimal metadata
+                return metadata
+
             # Get commit hash
-            commit_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.target_dir_str, capture_output=True, text=True)
+            commit_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.target_dir_str, capture_output=True, text=True, timeout=5)
             if commit_res.returncode == 0:
                 metadata.commit_hash = commit_res.stdout.strip()
-                
+
             # Get commit timestamp
-            time_res = subprocess.run(["git", "log", "-1", "--format=%cI"], cwd=self.target_dir_str, capture_output=True, text=True)
+            time_res = subprocess.run(["git", "log", "-1", "--format=%cI"], cwd=self.target_dir_str, capture_output=True, text=True, timeout=5)
             if time_res.returncode == 0:
                 metadata.commit_timestamp = time_res.stdout.strip()
-                
+
             # Get branch
-            branch_res = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.target_dir_str, capture_output=True, text=True)
+            branch_res = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.target_dir_str, capture_output=True, text=True, timeout=5)
             if branch_res.returncode == 0:
                 metadata.branch = branch_res.stdout.strip()
-                
+
             # Get remote URL
-            remote_res = subprocess.run(["git", "config", "--get", "remote.origin.url"], cwd=self.target_dir_str, capture_output=True, text=True)
+            remote_res = subprocess.run(["git", "config", "--get", "remote.origin.url"], cwd=self.target_dir_str, capture_output=True, text=True, timeout=5)
             if remote_res.returncode == 0:
                 metadata.remote_url = remote_res.stdout.strip()
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except Exception:
+            # Silently fail - git metadata is optional
             pass
-            
+
         return metadata
 
     def scan(self) -> RepositoryManifest:
