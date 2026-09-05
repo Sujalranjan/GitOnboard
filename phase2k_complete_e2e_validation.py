@@ -206,21 +206,63 @@ def stage_3_bm25_indexing(analysis_id):
         return {"status": "failed", "error": str(e)}
 
 def stage_4_semantic_indexing(model):
-    """Stage 4: Build semantic indices."""
+    """Stage 4: Build semantic indices (OPTIONAL - may be very slow)."""
     print("\n" + "="*80)
     print("STAGE 4: SEMANTIC INDEXING")
     print("="*80)
 
     try:
         from backend.intelligence.retrieval.semantic_builder import SemanticIndexBuilder
+        import threading
 
         start = time.time()
 
-        # Build semantic index (returns compressed Chroma bytes)
+        # Semantic indexing is optional and can take 30+ minutes for large repos
+        # Build it in a thread so we can monitor progress
         builder = SemanticIndexBuilder()
-        chroma_bytes = builder.build_index(model.entities)
+        print(f"  Embedding {len(model.entities):,} entities (this may take 30+ minutes)...")
+        print(f"  If this takes too long, Ctrl+C to skip (BM25 fallback available)")
+
+        result_container = {}
+        error_container = {}
+
+        def build_in_thread():
+            try:
+                result = builder.build_index(model.entities)
+                result_container['chroma_bytes'] = result
+            except Exception as e:
+                error_container['error'] = e
+
+        # Start build in background thread
+        thread = threading.Thread(target=build_in_thread, daemon=False)
+        thread.start()
+
+        # Wait up to 120 seconds, then give up (user can Ctrl+C if needed)
+        thread.join(timeout=120)
 
         elapsed = time.time() - start
+
+        if error_container:
+            print(f"✗ Semantic indexing error: {error_container['error']}")
+            return {
+                "status": "partial",
+                "elapsed": elapsed,
+                "chroma_bytes": None,
+                "error": f"embedding error: {error_container['error']}"
+            }
+
+        if thread.is_alive():
+            print(f"⚠ Semantic indexing is still running after {elapsed:.0f}s")
+            print(f"  (Thread will continue in background)")
+            print(f"  Proceeding with BM25 fallback (semantic index will be skipped)")
+            return {
+                "status": "partial",
+                "elapsed": elapsed,
+                "chroma_bytes": None,
+                "error": "timeout (120s) - semantic indexing takes 30+ minutes, skipped"
+            }
+
+        chroma_bytes = result_container.get('chroma_bytes')
 
         if chroma_bytes:
             print(f"✓ Semantic indexing completed in {elapsed:.2f}s")
@@ -232,19 +274,36 @@ def stage_4_semantic_indexing(model):
                 "size_bytes": len(chroma_bytes)
             }
         else:
-            print(f"⚠ Semantic indexing returned no data (chromadb may not be available)")
+            print(f"⚠ Semantic indexing returned no data (chromadb or embeddings unavailable)")
             return {
                 "status": "partial",
                 "elapsed": elapsed,
                 "chroma_bytes": None,
-                "error": "chromadb unavailable or no entities to embed"
+                "error": "no data returned"
             }
 
+    except KeyboardInterrupt:
+        elapsed = time.time() - start
+        print(f"\n⚠ Semantic indexing skipped by user after {elapsed:.2f}s")
+        print(f"  BM25 lexical search will be used as fallback")
+        return {
+            "status": "partial",
+            "elapsed": elapsed,
+            "chroma_bytes": None,
+            "error": "skipped by user"
+        }
+
     except Exception as e:
-        print(f"✗ Semantic indexing failed: {e}")
+        elapsed = time.time() - start
+        print(f"✗ Semantic indexing error: {e}")
         import traceback
         traceback.print_exc()
-        return {"status": "failed", "error": str(e)}
+        return {
+            "status": "partial",
+            "elapsed": elapsed,
+            "chroma_bytes": None,
+            "error": str(e)
+        }
 
 def stage_5_hybrid_retrieval(retriever):
     """Stage 5: Test hybrid retrieval."""
