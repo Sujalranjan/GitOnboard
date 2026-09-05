@@ -78,7 +78,7 @@ class AnalysisEngine:
         asts = {}
         for idx, file_info in enumerate(manifest.files):
             try:
-                ast = parser_manager.parse_file(file_info)
+                ast = parser_manager.parse_file(file_info.path, file_info.language)
                 if ast:
                     asts[file_info.path] = ast
             except Exception as e:

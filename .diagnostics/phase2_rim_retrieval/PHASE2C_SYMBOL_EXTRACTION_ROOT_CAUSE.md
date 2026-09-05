@@ -240,21 +240,47 @@ save_rim_to_fact_store()
 
 ## Findings Summary
 
-**To be completed as investigation proceeds**
-
 ### Root Cause Statement
-[NOT YET DETERMINED]
+
+**CRITICAL BUG FOUND:** AnalysisEngine calls `parser_manager.parse_file(file_info)` with a single RepositoryFile object, but the method signature requires TWO separate arguments: `parse_file(rel_path: str, language: str)`. This causes the parser to receive an unexpected argument type, fail silently (caught by try/except at line 84), and return None. The ASTs dictionary remains empty, so SymbolAnalyzer has no parsed code to extract symbols from.
 
 ### Evidence
+
 - ✓ Phase 2B: Confirmed FactStore has 0 symbols
-- ✓ Phase 2A: Confirmed retrieval returns 0 BM25 results
-- ✗ Not yet: Why AnalysisEngine produces 0 symbols
+- ✓ Phase 2A: Confirmed retrieval returns 0 BM25 results  
+- ✓ **Phase 2C (CONFIRMED):** AnalysisEngine signature mismatch bug found
+
+**Root Cause Location:**
+- File: `backend/intelligence/engine/orchestration/pipeline.py`
+- Line: 81
+- Bug: `ast = parser_manager.parse_file(file_info)` 
+- Fix: `ast = parser_manager.parse_file(file_info.path, file_info.language)`
+
+**Why This Was Hidden:**
+- The exception is caught silently at line 84: `except Exception as e:`
+- Only a debug log is written: `logger.debug(f"Failed to parse {file_info.path}: {e}")`
+- This was not visible in the console logs shown to user
+- Result: 0 ASTs parsed → 0 symbols extracted → 0 relationships
 
 ### Affected Component
-[INVESTIGATING]
 
-### Fix Approach
-[PENDING]
+- **AnalysisEngine.run()** at line 81
+- Called by: worker.py line 104
+- Affects: Entire symbol extraction pipeline
+
+### Fix Applied
+
+Changed line 81 from:
+```python
+ast = parser_manager.parse_file(file_info)
+```
+
+To:
+```python
+ast = parser_manager.parse_file(file_info.path, file_info.language)
+```
+
+**Impact:** With this fix, parser_manager will now receive correct arguments and parse files successfully, allowing SymbolAnalyzer to extract functions, classes, and methods from the parsed ASTs.
 
 ---
 
