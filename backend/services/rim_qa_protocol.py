@@ -41,14 +41,23 @@ YOUR TASK:
 3. Query relationships using available tools (query_rim if available)
 4. Based on what you find, provide your answer
 
-RESPONSE FORMAT (MANDATORY):
-Each turn, respond with EXACTLY ONE of these JSON objects:
-- To search/read: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "..."}}
-- To read a file: {"action": "tool_call", "tool_name": "read_file", "arguments": {"path": "...", "start_line": 1, "end_line": 100}}
-- To look up a symbol: {"action": "tool_call", "tool_name": "get_symbol", "arguments": {"name": "..."}}
-- To find callers: {"action": "tool_call", "tool_name": "get_callers", "arguments": {"symbol_name": "..."}}
-- To find callees: {"action": "tool_call", "tool_name": "get_callees", "arguments": {"symbol_name": "..."}}
-- When done: {"action": "final_answer", "answer": "Your comprehensive answer based on tools"}
+RESPONSE FORMAT (MANDATORY - STRICT JSON ONLY):
+Each turn, output EXACTLY ONE complete JSON object with NO extra text:
+
+For tool calls, ALWAYS use this structure:
+{"action": "tool_call", "tool_name": "<TOOL_NAME>", "arguments": {<ARGUMENTS>}}
+
+Valid tool_name values: search_repository, read_file, get_symbol, get_callers, get_callees, query_rim, find_files
+
+Examples:
+{"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "..."}}
+{"action": "tool_call", "tool_name": "read_file", "arguments": {"path": "...", "start_line": 1, "end_line": 100}}
+{"action": "tool_call", "tool_name": "query_rim", "arguments": {"entity_name": "...", "relationship_type": "CALLS"}}
+
+When done analyzing:
+{"action": "final_answer", "answer": "Your comprehensive answer based on tools"}
+
+CRITICAL: The "action" field MUST be either "tool_call" or "final_answer" - NEVER set it to a tool name!
 
 RULES:
 1. ALWAYS start with a search_repository or find_files tool call to identify relevant code
@@ -57,6 +66,8 @@ RULES:
 4. NEVER provide an answer without first using tools to examine the code
 5. Only claim to have read code you actually examined with tools
 6. Base your answer ONLY on information from tools, NEVER on general knowledge
+7. JSON ONLY: Output ONLY the JSON object, with NO text before or after it
+8. NO EXPLANATIONS: Do not add "Let me search..." or "I found..." - just output the JSON
 
 Example flow:
 Turn 0: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "login authentication"}}
