@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-09-05T17:22:03.660609",
+  "methodology": "Direct AnalysisEngine on real repository subsets",
+  "source_repository": "/home/dheeraj/repository_intelligence_platform",
+  "optimization_type": "Pre-computed imports_by_file and symbols_by_module indices",
+  "tests": {
+    "optimized_50": {
+      "status": "success",
+      "requested_limit": 50,
+      "actual_files": 50,
+      "total_bytes": 73817,
+      "elapsed": 86.81994962692261,
+      "entities": 27824,
+      "relationships": 107307,
+      "callgraph_time": 31.187458038330078,
+      "uses_time": 28.819963693618774,
+      "other_time": 26.812527894973755
+    },
+    "optimized_100": {
+      "status": "success",
+      "requested_limit": 100,
+      "actual_files": 100,
+      "total_bytes": 346781,
+      "elapsed": 87.72370672225952,
+      "entities": 27824,
+      "relationships": 107307,
+      "callgraph_time": 32.71954369544983,
+      "uses_time": 26.26192593574524,
+      "other_time": 28.742237091064453
+    },
+    "optimized_250": {
+      "status": "success",
+      "requested_limit": 250,
+      "actual_files": 250,
+      "total_bytes": 1271749,
+      "elapsed": 83.84194755554199,
+      "entities": 27824,
+      "relationships": 107307,
+      "callgraph_time": 31.983649492263794,
+      "uses_time": 29.804067134857178,
+      "other_time": 22.05423092842102
+    },
+    "optimized_500": {
+      "status": "success",
+      "requested_limit": 500,
+      "actual_files": 500,
+      "total_bytes": 3219375,
+      "elapsed": 87.97336435317993,
+      "entities": 27824,
+      "relationships": 107307,
+      "callgraph_time": 32.638927936553955,
+      "uses_time": 29.49644637107849,
+      "other_time": 25.837990045547485
+    }
+  }
+}

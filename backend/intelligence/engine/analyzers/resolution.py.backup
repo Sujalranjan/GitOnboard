@@ -20,8 +20,6 @@ class SymbolIndex:
         self.symbols_by_file: Dict[str, List[str]] = {}  # file_path → [entity_ids]
         self.file_by_path: Dict[str, str] = {}  # file_path → entity_id
         self.modules_by_name: Dict[str, str] = {}  # "module.name" → entity_id
-        self.imports_by_file: Dict[str, List[str]] = {}  # file_id → [module_ids] (OPTIMIZED)
-        self.symbols_by_module: Dict[str, Dict[str, List[str]]] = {}  # module_path → {name → [entity_ids]} (OPTIMIZED)
         self.build()
 
     def build(self):
@@ -35,14 +33,6 @@ class SymbolIndex:
                 name = entity.qualified_name
                 self.modules_by_name[name] = entity_id
 
-        # Build imports_by_file index (OPTIMIZED)
-        for rel_id, rel in self.repo.relationships.items():
-            if rel.type == RelationshipType.IMPORTS:
-                source_file = rel.source_id
-                if source_file not in self.imports_by_file:
-                    self.imports_by_file[source_file] = []
-                self.imports_by_file[source_file].append(rel.target_id)
-
         for entity_id, entity in self.repo.entities.items():
             if entity.type not in (EntityType.FILE, EntityType.MODULE, EntityType.DIRECTORY):
                 # Add to file index
@@ -54,14 +44,6 @@ class SymbolIndex:
                 if entity.name not in self.symbols_by_name:
                     self.symbols_by_name[entity.name] = []
                 self.symbols_by_name[entity.name].append(entity_id)
-
-                # Add to symbols_by_module index (OPTIMIZED)
-                if file_path:
-                    if file_path not in self.symbols_by_module:
-                        self.symbols_by_module[file_path] = {}
-                    if entity.name not in self.symbols_by_module[file_path]:
-                        self.symbols_by_module[file_path][entity.name] = []
-                    self.symbols_by_module[file_path][entity.name].append(entity_id)
 
     def lookup_symbol(self, file_path: str, name: str) -> Optional[str]:
         """Look up a symbol by name in the context of a file.
@@ -195,17 +177,20 @@ def resolve_reference(
             if entity and entity.name == name:
                 return entity_id
 
-    # Strategy 3: Check imports (OPTIMIZED - use precomputed imports index)
+    # Strategy 3: Check imports
     file_id = index.file_by_path.get(file_path)
     if file_id:
-        for module_id in index.imports_by_file.get(file_id, []):
-            module = repository.entities.get(module_id)
-            if module:
-                # Use precomputed symbols_by_module index instead of scanning all entities
-                module_symbols = index.symbols_by_module.get(module.qualified_name, {})
-                candidates = module_symbols.get(name, [])
-                if candidates:
-                    return candidates[0]
+        for rel_id, rel in repository.relationships.items():
+            if rel.source_id == file_id and rel.type == RelationshipType.IMPORTS:
+                # This file imports module X. Check if X exports the symbol
+                module_id = rel.target_id
+                module = repository.entities.get(module_id)
+                if module:
+                    # Look for exports from this module
+                    for cand_id, cand in repository.entities.items():
+                        if (cand.name == name and
+                            cand.metadata.get("file_id") == module.qualified_name):
+                            return cand_id
 
     # Strategy 4: Global scope
     for entity_id in index.symbols_by_name.get(name, []):
