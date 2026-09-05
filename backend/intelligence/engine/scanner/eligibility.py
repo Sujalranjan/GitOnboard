@@ -82,6 +82,42 @@ class FileEligibility:
     }
 
     # ====================
+    # TIER 1.5: INCLUSION LIST (defensive - only analyze these extensions)
+    # ====================
+    # If a file matches one of these extensions, it WILL be analyzed
+    # even if other heuristics fail. This is a safety net to ensure
+    # we don't accidentally analyze .db, .log, .pyc, etc.
+    INCLUSION_EXTENSIONS: Set[str] = {
+        # Python (primary)
+        ".py", ".pyi",
+
+        # TypeScript/JavaScript (primary)
+        ".ts", ".tsx", ".mts", ".cts",  # TypeScript
+        ".js", ".jsx", ".mjs", ".cjs",   # JavaScript
+
+        # Important formats for RIM analysis
+        ".md",      # Markdown documentation
+        ".mmd",     # Mermaid diagrams
+        ".json",    # Configuration & data schemas
+        ".yml",     # YAML configs
+        ".yaml",
+        ".toml",    # TOML configs
+        ".xml",     # XML configs
+
+        # Other source languages (secondary)
+        ".go", ".rs", ".java", ".cs", ".php", ".rb",
+        ".c", ".cpp", ".h", ".hpp", ".cxx", ".cc",
+        ".swift", ".kt", ".scala", ".groovy",
+        ".r", ".R",
+
+        # Web templates & styles
+        ".html", ".htm", ".css", ".scss", ".sass", ".less",
+
+        # Shell scripts
+        ".sh", ".bash", ".zsh", ".fish",
+    }
+
+    # ====================
     # TIER 2: GENERATED FILE PATTERNS
     # ====================
     GENERATED_PATTERNS: Set[str] = {
@@ -235,7 +271,21 @@ class FileEligibility:
         Determine if a file should be parsed/analyzed as source code.
 
         Returns True only for SOURCE, CONFIG, and TEST files in non-ignored directories.
+
+        Defensive check: also verifies file extension is in INCLUSION_EXTENSIONS
+        to prevent accidentally analyzing .db, .log, .pyc, or other non-source files.
         """
+        path = Path(rel_path)
+        suffix = path.suffix.lower()
+
+        # Defensive: check inclusion list first
+        # If file extension is not explicitly allowed, reject it
+        if suffix not in cls.INCLUSION_EXTENSIONS:
+            # Exception: config files by exact name are always allowed
+            if path.name not in cls.CONFIG_FILES:
+                return False
+
+        # Then check classification
         category = cls.classify_file(rel_path)
         return category in {FileCategory.SOURCE, FileCategory.CONFIG, FileCategory.TEST}
 
