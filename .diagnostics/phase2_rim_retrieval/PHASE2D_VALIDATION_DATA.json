@@ -1,0 +1,212 @@
+{
+  "timestamp": "2026-09-05T14:24:04.652984",
+  "repository_type": "local_test",
+  "analysis_status": "COMPLETE",
+  "entity_counts": {
+    "EntityType.FILE": 5,
+    "EntityType.FUNCTION": 6,
+    "EntityType.CLASS": 5,
+    "EntityType.METHOD": 13
+  },
+  "relationship_counts": {
+    "RelationshipType.DECLARES": 24,
+    "RelationshipType.CALLS": 4,
+    "RelationshipType.USES": 1
+  },
+  "total_entities": 29,
+  "total_relationships": 29,
+  "sample_symbols": [
+    {
+      "name": "auth.py",
+      "type": "EntityType.FILE",
+      "qualified_name": "auth.py",
+      "file": "auth.py",
+      "line": 1
+    },
+    {
+      "name": "authenticate_token",
+      "type": "EntityType.FUNCTION",
+      "qualified_name": "auth.authenticate_token",
+      "file": "auth.py",
+      "line": 2
+    },
+    {
+      "name": "validate_credentials",
+      "type": "EntityType.FUNCTION",
+      "qualified_name": "auth.validate_credentials",
+      "file": "auth.py",
+      "line": 6
+    },
+    {
+      "name": "AuthService",
+      "type": "EntityType.CLASS",
+      "qualified_name": "auth.AuthService",
+      "file": "auth.py",
+      "line": 12
+    },
+    {
+      "name": "__init__",
+      "type": "EntityType.METHOD",
+      "qualified_name": "auth.AuthService.__init__",
+      "file": "auth.py",
+      "line": 15
+    },
+    {
+      "name": "login",
+      "type": "EntityType.METHOD",
+      "qualified_name": "auth.AuthService.login",
+      "file": "auth.py",
+      "line": 18
+    },
+    {
+      "name": "logout",
+      "type": "EntityType.METHOD",
+      "qualified_name": "auth.AuthService.logout",
+      "file": "auth.py",
+      "line": 25
+    },
+    {
+      "name": "User",
+      "type": "EntityType.CLASS",
+      "qualified_name": "auth.User",
+      "file": "auth.py",
+      "line": 29
+    },
+    {
+      "name": "__init__",
+      "type": "EntityType.METHOD",
+      "qualified_name": "auth.User.__init__",
+      "file": "auth.py",
+      "line": 31
+    },
+    {
+      "name": "api.js",
+      "type": "EntityType.FILE",
+      "qualified_name": "api.js",
+      "file": "api.js",
+      "line": 1
+    },
+    {
+      "name": "authenticateUser",
+      "type": "EntityType.FUNCTION",
+      "qualified_name": "api.authenticateUser",
+      "file": "api.js",
+      "line": 2
+    },
+    {
+      "name": "generateToken",
+      "type": "EntityType.FUNCTION",
+      "qualified_name": "api.generateToken",
+      "file": "api.js",
+      "line": 10
+    },
+    {
+      "name": "APIServer",
+      "type": "EntityType.CLASS",
+      "qualified_name": "api.APIServer",
+      "file": "api.js",
+      "line": 15
+    },
+    {
+      "name": "constructor",
+      "type": "EntityType.METHOD",
+      "qualified_name": "api.APIServer.constructor",
+      "file": "api.js",
+      "line": 16
+    },
+    {
+      "name": "start",
+      "type": "EntityType.METHOD",
+      "qualified_name": "api.APIServer.start",
+      "file": "api.js",
+      "line": 20
+    },
+    {
+      "name": "stop",
+      "type": "EntityType.METHOD",
+      "qualified_name": "api.APIServer.stop",
+      "file": "api.js",
+      "line": 24
+    },
+    {
+      "name": "database.py",
+      "type": "EntityType.FILE",
+      "qualified_name": "database.py",
+      "file": "database.py",
+      "line": 1
+    },
+    {
+      "name": "Database",
+      "type": "EntityType.CLASS",
+      "qualified_name": "database.Database",
+      "file": "database.py",
+      "line": 2
+    },
+    {
+      "name": "__init__",
+      "type": "EntityType.METHOD",
+      "qualified_name": "database.Database.__init__",
+      "file": "database.py",
+      "line": 5
+    },
+    {
+      "name": "find_user",
+      "type": "EntityType.METHOD",
+      "qualified_name": "database.Database.find_user",
+      "file": "database.py",
+      "line": 8
+    }
+  ],
+  "sample_relationships": [
+    {
+      "type": "RelationshipType.DECLARES",
+      "source": "auth.py",
+      "target": "authenticate_token"
+    },
+    {
+      "type": "RelationshipType.DECLARES",
+      "source": "auth.py",
+      "target": "validate_credentials"
+    },
+    {
+      "type": "RelationshipType.DECLARES",
+      "source": "auth.py",
+      "target": "AuthService"
+    },
+    {
+      "type": "RelationshipType.DECLARES",
+      "source": "AuthService",
+      "target": "__init__"
+    },
+    {
+      "type": "RelationshipType.DECLARES",
+      "source": "AuthService",
+      "target": "login"
+    },
+    {
+      "type": "RelationshipType.DECLARES",
+      "source": "AuthService",
+      "target": "logout"
+    },
+    {
+      "type": "RelationshipType.DECLARES",
+      "source": "auth.py",
+      "target": "User"
+    },
+    {
+      "type": "RelationshipType.DECLARES",
+      "source": "User",
+      "target": "__init__"
+    },
+    {
+      "type": "RelationshipType.DECLARES",
+      "source": "api.js",
+      "target": "authenticateUser"
+    },
+    {
+      "type": "RelationshipType.DECLARES",
+      "source": "api.js",
+      "target": "generateToken"
+    }
+  ]
+}
