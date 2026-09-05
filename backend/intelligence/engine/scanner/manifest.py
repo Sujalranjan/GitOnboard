@@ -13,6 +13,7 @@ class RepositoryFile(BaseModel):
     extension: str = Field(..., description="The file extension (e.g. '.py', '.ts').")
     size: int = Field(..., description="The size of the file in bytes.")
     language: str = Field("Unknown", description="The detected programming language.")
+    category: str = Field("unsupported", description="File category: source, config, test, generated, dependency, build, cache, vcs, ide, ignored, unsupported.")
 
 class Package(BaseModel):
     path: str = Field(..., description="The directory path containing the package.")
