@@ -5,7 +5,7 @@ Formats assembled repository evidence into bounded text suitable for injection
 into LLM system prompts or context windows.
 """
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Callable
 from backend.agent.context.contracts import RepositoryContext, ContextEvidence
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ class RepositoryContextFormatter:
         context: RepositoryContext,
         max_chars: int = 8000,
         include_evidence_provenance: bool = True,
+        file_reader: Optional[Callable[[str], Optional[str]]] = None,
     ) -> str:
         """
         Format RepositoryContext into a system prompt block.
@@ -26,7 +27,7 @@ class RepositoryContextFormatter:
         Includes:
         - Repository understanding contract status
         - Key capabilities discovered
-        - Relevant files and symbols
+        - Relevant files and symbols (with source code if file_reader provided)
         - Architectural constraints
         - Known unknowns
 
@@ -34,6 +35,8 @@ class RepositoryContextFormatter:
             context: RepositoryContext object
             max_chars: Maximum character length of output (default 8000)
             include_evidence_provenance: Include source provenance (default True)
+            file_reader: Optional callable(file_path) -> source_code_str | None
+                        If provided, reads and includes source code snippets
 
         Returns:
             Formatted text block ready for LLM system prompt injection
@@ -60,14 +63,57 @@ class RepositoryContextFormatter:
                 lines.append(f"  - {cap_name} ({cap_type})")
             lines.append("")
 
-        # 4. Relevant files
+        # 4. Relevant files (with source code if reader available)
         if context.relevant_files:
             lines.append(f"Relevant Files ({len(context.relevant_files)}):")
-            for file_path in context.relevant_files[:10]:  # Top 10
+            files_to_show = context.relevant_files[:10]
+            for file_path in files_to_show:
                 lines.append(f"  - {file_path}")
             if len(context.relevant_files) > 10:
                 lines.append(f"  ... and {len(context.relevant_files) - 10} more")
             lines.append("")
+
+            # If file_reader provided, include source code snippets for top files
+            if file_reader:
+                lines.append("### SOURCE CODE SNIPPETS")
+                lines.append("")
+                current_char_count = sum(len(line) + 1 for line in lines)
+
+                for file_path in files_to_show[:5]:  # Top 5 files only
+                    # Stop adding source if we're getting close to limit
+                    if current_char_count > max_chars * 0.75:
+                        break
+
+                    try:
+                        source_code = file_reader(file_path)
+                        if source_code:
+                            file_header = f"File: {file_path}"
+                            # Limit lines to avoid context explosion
+                            code_lines = source_code.split('\n')[:100]
+                            code_snippet = '\n'.join(code_lines)
+
+                            # Determine language for syntax highlighting
+                            if file_path.endswith('.py'):
+                                lang = 'python'
+                            elif file_path.endswith(('.js', '.jsx')):
+                                lang = 'javascript'
+                            elif file_path.endswith(('.ts', '.tsx')):
+                                lang = 'typescript'
+                            else:
+                                lang = 'text'
+
+                            # Estimate char count for this snippet
+                            snippet_chars = len(file_header) + len(f"```{lang}") + len(code_snippet) + 20
+                            if current_char_count + snippet_chars < max_chars * 0.85:
+                                lines.append(file_header)
+                                lines.append(f"```{lang}")
+                                lines.append(code_snippet)
+                                lines.append("```")
+                                lines.append("")
+                                current_char_count += snippet_chars
+                    except Exception as e:
+                        logger.debug(f"Failed to read source for {file_path}: {e}")
+                        continue
 
         # 5. Relevant symbols
         if context.relevant_symbols:

@@ -245,10 +245,25 @@ class RIMComparisonService:
 
         # Format context for system prompt injection
         formatter = RepositoryContextFormatter()
+
+        # Create file reader that uses RepositoryToolLayer to read source code
+        def file_reader(file_path: str) -> Optional[str]:
+            try:
+                result = tool_layer.read_file(file_path)
+                if result and isinstance(result, dict):
+                    return result.get('raw_text') or result.get('content')
+                elif isinstance(result, str):
+                    return result
+                return None
+            except Exception as e:
+                logger.debug(f"Failed to read {file_path}: {e}")
+                return None
+
         repository_context_block = formatter.format_to_system_prompt_block(
             repository_context,
             max_chars=6000,
             include_evidence_provenance=False,
+            file_reader=file_reader,
         )
 
         # 3. RUN BASELINE — with repository context (no RIM relationships)
