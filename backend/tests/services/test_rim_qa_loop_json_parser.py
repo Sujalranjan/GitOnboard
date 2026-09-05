@@ -54,7 +54,7 @@ class TestJSONParserNestedObjects:
     """Test parsing of nested JSON objects (CRITICAL FIX)."""
 
     def test_parse_read_file_with_nested_args(self, dummy_loop):
-        """Parse read_file tool call with nested arguments.
+        r"""Parse read_file tool call with nested arguments.
 
         This is the critical test case that was failing with the old regex parser.
         The old regex r'\{[^{}]*\}' couldn't match this because it forbids
