@@ -27,7 +27,7 @@ from backend.database import Base, SessionLocal
 from backend.models.repository import Repository, Analysis
 from backend.intelligence.engine.scanner.scanner import RepositoryScanner
 from backend.intelligence.engine.orchestration.pipeline import AnalysisEngine
-from backend.intelligence.engine.retrieval.hybrid import HybridRetriever
+from backend.intelligence.retrieval.retriever import HybridRetriever
 from backend.intelligence.engine.orchestration.stage6_graph_navigation import GraphNavigator
 from backend.intelligence.engine.orchestration.stage7_context_assembly import ContextAssembler7
 from backend.intelligence.engine.orchestration.stage8_grounding import stage8_sync_wrapper
