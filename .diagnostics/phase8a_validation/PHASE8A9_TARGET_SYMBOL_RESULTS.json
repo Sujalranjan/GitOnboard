@@ -1,0 +1,192 @@
+{
+  "target_symbols": {
+    "setupMockHTTPServer": {
+      "found": false,
+      "files_checked": [
+        "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/lib/auth.ts",
+        "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/lib/test-utils.ts"
+      ]
+    },
+    "handleAuthFlow": {
+      "found": false,
+      "files_checked": [
+        "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/lib/auth.ts",
+        "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/Login.tsx"
+      ]
+    },
+    "ForgotPasswordModal": {
+      "found": true,
+      "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+      "type": "function",
+      "expected_type": "class",
+      "symbol_data": {
+        "name": "ForgotPasswordModal",
+        "type": "function",
+        "line": 13,
+        "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+        "start_line": 13,
+        "end_line": 351
+      }
+    },
+    "LoginComponent": {
+      "found": false,
+      "files_checked": [
+        "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/Login.tsx"
+      ]
+    }
+  },
+  "file_parse_results": {
+    "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/lib/auth.ts": {
+      "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/lib/auth.ts",
+      "exists": true,
+      "parse_success": true,
+      "parser_error": null,
+      "extracted_symbols": [
+        {
+          "name": "performLogout",
+          "type": "function",
+          "line": 2,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/lib/auth.ts",
+          "start_line": 2,
+          "end_line": 37
+        }
+      ],
+      "source_size": 1263,
+      "source_lines": 37,
+      "symbol_count": 1
+    },
+    "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx": {
+      "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+      "exists": true,
+      "parse_success": true,
+      "parser_error": null,
+      "extracted_symbols": [
+        {
+          "name": "ForgotPasswordModal",
+          "type": "function",
+          "line": 13,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+          "start_line": 13,
+          "end_line": 351
+        },
+        {
+          "name": "handleInputChange",
+          "type": "function",
+          "line": 52,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+          "start_line": 52,
+          "end_line": 55
+        },
+        {
+          "name": "resetModal",
+          "type": "function",
+          "line": 57,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+          "start_line": 57,
+          "end_line": 69
+        },
+        {
+          "name": "handleClose",
+          "type": "function",
+          "line": 71,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+          "start_line": 71,
+          "end_line": 74
+        },
+        {
+          "name": "handleSendOtp",
+          "type": "function",
+          "line": 76,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+          "start_line": 76,
+          "end_line": 108
+        },
+        {
+          "name": "handleResetPassword",
+          "type": "function",
+          "line": 110,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+          "start_line": 110,
+          "end_line": 155
+        },
+        {
+          "name": "resendOtp",
+          "type": "function",
+          "line": 157,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/ForgetPasswordModal.tsx",
+          "start_line": 157,
+          "end_line": 181
+        }
+      ],
+      "source_size": 10949,
+      "source_lines": 353,
+      "symbol_count": 7
+    },
+    "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/Login.tsx": {
+      "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/Login.tsx",
+      "exists": true,
+      "parse_success": true,
+      "parser_error": null,
+      "extracted_symbols": [
+        {
+          "name": "AuthInput",
+          "type": "function",
+          "line": 30,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/Login.tsx",
+          "start_line": 30,
+          "end_line": 73
+        },
+        {
+          "name": "toggleVisibility",
+          "type": "function",
+          "line": 43,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/Login.tsx",
+          "start_line": 43,
+          "end_line": 45
+        },
+        {
+          "name": "Login",
+          "type": "function",
+          "line": 75,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/Login.tsx",
+          "start_line": 75,
+          "end_line": 285
+        },
+        {
+          "name": "handleInputChange",
+          "type": "function",
+          "line": 115,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/Login.tsx",
+          "start_line": 115,
+          "end_line": 122
+        },
+        {
+          "name": "validateSignin",
+          "type": "function",
+          "line": 124,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/Login.tsx",
+          "start_line": 124,
+          "end_line": 130
+        },
+        {
+          "name": "handleSubmit",
+          "type": "function",
+          "line": 132,
+          "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/components/Login.tsx",
+          "start_line": 132,
+          "end_line": 172
+        }
+      ],
+      "source_size": 9550,
+      "source_lines": 287,
+      "symbol_count": 6
+    },
+    "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/lib/test-utils.ts": {
+      "file": "/home/dheeraj/Deep-Guard/Deep-Guard-Frontend/src/lib/test-utils.ts",
+      "exists": false,
+      "parse_success": false,
+      "parser_error": "File not found",
+      "extracted_symbols": []
+    }
+  }
+}

@@ -1,0 +1,225 @@
+[
+  {
+    "run_id": "TEST1_VERIFIED-1",
+    "case_name": "TEST1_VERIFIED",
+    "query": "Does this repo use Redis for authentication?",
+    "condition": "B",
+    "run_number": 1,
+    "execution": {
+      "tool_count": 1,
+      "tools_used": [
+        "search_repository"
+      ],
+      "search_performed": true,
+      "latency_ms": 24475.98785000082
+    },
+    "gate_analysis": {
+      "is_absence_claim": true,
+      "has_evidence_language": true,
+      "detector_would_pass": true
+    },
+    "answer_released": true,
+    "answer_preview": "No, the repository does not use Redis for authentication based on the search results.",
+    "answer_full": "No, the repository does not use Redis for authentication based on the search results.",
+    "timestamp": "2026-09-04T18:02:23.572113"
+  },
+  {
+    "run_id": "TEST1_VERIFIED-2",
+    "case_name": "TEST1_VERIFIED",
+    "query": "Does this repo use Redis for authentication?",
+    "condition": "B",
+    "run_number": 2,
+    "execution": {
+      "tool_count": 1,
+      "tools_used": [
+        "search_repository"
+      ],
+      "search_performed": true,
+      "latency_ms": 3132.3204430009355
+    },
+    "gate_analysis": {
+      "is_absence_claim": true,
+      "has_evidence_language": true,
+      "detector_would_pass": true
+    },
+    "answer_released": true,
+    "answer_preview": "No, the repository does not use Redis for authentication based on the search results.",
+    "answer_full": "No, the repository does not use Redis for authentication based on the search results.",
+    "timestamp": "2026-09-04T18:02:31.287882"
+  },
+  {
+    "run_id": "TEST1_VERIFIED-3",
+    "case_name": "TEST1_VERIFIED",
+    "query": "Does this repo use Redis for authentication?",
+    "condition": "B",
+    "run_number": 3,
+    "execution": {
+      "tool_count": 1,
+      "tools_used": [
+        "search_repository"
+      ],
+      "search_performed": true,
+      "latency_ms": 2867.7076880012464
+    },
+    "gate_analysis": {
+      "is_absence_claim": true,
+      "has_evidence_language": true,
+      "detector_would_pass": true
+    },
+    "answer_released": true,
+    "answer_preview": "No, the repository does not use Redis for authentication based on the search results.",
+    "answer_full": "No, the repository does not use Redis for authentication based on the search results.",
+    "timestamp": "2026-09-04T18:02:37.130521"
+  },
+  {
+    "run_id": "TEST2_SYMBOL-1",
+    "case_name": "TEST2_SYMBOL",
+    "query": "Is there a function called fooBar?",
+    "condition": "B",
+    "run_number": 1,
+    "execution": {
+      "tool_count": 1,
+      "tools_used": [
+        "search_repository"
+      ],
+      "search_performed": true,
+      "latency_ms": 3059.5767669983616
+    },
+    "gate_analysis": {
+      "is_absence_claim": false,
+      "has_evidence_language": true,
+      "detector_would_pass": false
+    },
+    "answer_released": true,
+    "answer_preview": "No, there is no function called fooBar in the repository based on the search results.",
+    "answer_full": "No, there is no function called fooBar in the repository based on the search results.",
+    "timestamp": "2026-09-04T18:02:43.082663"
+  },
+  {
+    "run_id": "TEST2_SYMBOL-2",
+    "case_name": "TEST2_SYMBOL",
+    "query": "Is there a function called fooBar?",
+    "condition": "B",
+    "run_number": 2,
+    "execution": {
+      "tool_count": 1,
+      "tools_used": [
+        "search_repository"
+      ],
+      "search_performed": true,
+      "latency_ms": 2955.1121880031133
+    },
+    "gate_analysis": {
+      "is_absence_claim": false,
+      "has_evidence_language": true,
+      "detector_would_pass": false
+    },
+    "answer_released": true,
+    "answer_preview": "No, there is no function called fooBar in the repository based on the search results.",
+    "answer_full": "No, there is no function called fooBar in the repository based on the search results.",
+    "timestamp": "2026-09-04T18:02:48.697721"
+  },
+  {
+    "run_id": "TEST2_SYMBOL-3",
+    "case_name": "TEST2_SYMBOL",
+    "query": "Is there a function called fooBar?",
+    "condition": "B",
+    "run_number": 3,
+    "execution": {
+      "tool_count": 1,
+      "tools_used": [
+        "search_repository"
+      ],
+      "search_performed": true,
+      "latency_ms": 3110.060042999976
+    },
+    "gate_analysis": {
+      "is_absence_claim": false,
+      "has_evidence_language": true,
+      "detector_would_pass": false
+    },
+    "answer_released": true,
+    "answer_preview": "No, there is no function called fooBar in the repository based on the search results.",
+    "answer_full": "No, there is no function called fooBar in the repository based on the search results.",
+    "timestamp": "2026-09-04T18:02:57.299860"
+  },
+  {
+    "run_id": "TEST3_FEATURE-1",
+    "case_name": "TEST3_FEATURE",
+    "query": "Does this repo implement password reset?",
+    "condition": "B",
+    "run_number": 1,
+    "execution": {
+      "tool_count": 4,
+      "tools_used": [
+        "search_repository",
+        "get_symbol",
+        "get_callers",
+        "get_callees"
+      ],
+      "search_performed": true,
+      "latency_ms": 7786.723240998981
+    },
+    "gate_analysis": {
+      "is_absence_claim": false,
+      "has_evidence_language": false,
+      "detector_would_pass": false
+    },
+    "answer_released": true,
+    "answer_preview": "Yes, the repository implements password reset. The presence of the function `resetModal` and its being called by `ForgotPasswordModal` indicates a pas",
+    "answer_full": "Yes, the repository implements password reset. The presence of the function `resetModal` and its being called by `ForgotPasswordModal` indicates a password reset feature. This function is part of the `ForgotPasswordModal` component, which suggests that the application includes a mechanism for users to reset their passwords.",
+    "timestamp": "2026-09-04T18:03:08.110342"
+  },
+  {
+    "run_id": "TEST3_FEATURE-2",
+    "case_name": "TEST3_FEATURE",
+    "query": "Does this repo implement password reset?",
+    "condition": "B",
+    "run_number": 2,
+    "execution": {
+      "tool_count": 3,
+      "tools_used": [
+        "search_repository",
+        "get_symbol",
+        "get_callers"
+      ],
+      "search_performed": true,
+      "latency_ms": 5607.347858996945
+    },
+    "gate_analysis": {
+      "is_absence_claim": false,
+      "has_evidence_language": false,
+      "detector_would_pass": false
+    },
+    "answer_released": true,
+    "answer_preview": "Yes, the repository implements password reset. The presence of the function `resetModal` and its being called by `ForgotPasswordModal` indicates that ",
+    "answer_full": "Yes, the repository implements password reset. The presence of the function `resetModal` and its being called by `ForgotPasswordModal` indicates that there is a password reset functionality in the codebase.",
+    "timestamp": "2026-09-04T18:03:16.618032"
+  },
+  {
+    "run_id": "TEST3_FEATURE-3",
+    "case_name": "TEST3_FEATURE",
+    "query": "Does this repo implement password reset?",
+    "condition": "B",
+    "run_number": 3,
+    "execution": {
+      "tool_count": 3,
+      "tools_used": [
+        "search_repository",
+        "get_symbol",
+        "get_callers"
+      ],
+      "search_performed": true,
+      "latency_ms": 5567.278704998898
+    },
+    "gate_analysis": {
+      "is_absence_claim": false,
+      "has_evidence_language": false,
+      "detector_would_pass": false
+    },
+    "answer_released": true,
+    "answer_preview": "Yes, the repository implements password reset. The presence of the function `resetModal` and its being called by `ForgotPasswordModal` indicates that ",
+    "answer_full": "Yes, the repository implements password reset. The presence of the function `resetModal` and its being called by `ForgotPasswordModal` indicates that there is a password reset functionality in the codebase.",
+    "timestamp": "2026-09-04T18:03:27.632974"
+  }
+]
