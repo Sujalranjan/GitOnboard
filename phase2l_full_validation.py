@@ -27,7 +27,7 @@ from backend.database import Base
 from backend.models.user import User
 from backend.models.repository import Repository, Analysis
 from backend.intelligence.engine.scanner.scanner import RepositoryScanner
-from backend.intelligence.engine.orchestration.pipeline import AnalysisPipeline
+from backend.intelligence.engine.orchestration.pipeline import AnalysisEngine
 from backend.intelligence.engine.analyzers.index_manager import IndexManager
 from backend.intelligence.engine.retrieval.hybrid import HybridRetriever
 from backend.intelligence.engine.orchestration.stage6_graph_navigation import GraphNavigator
@@ -159,12 +159,12 @@ class Phase2LValidator:
             self.session.add(analysis)
             self.session.commit()
 
-            pipeline = AnalysisPipeline(
+            engine = AnalysisEngine(
                 manifest=self.manifest,
                 analysis_id=analysis.id,
                 db=self.session
             )
-            pipeline.run()
+            engine.run()
 
             self.analysis = analysis
             self.session.refresh(analysis)
