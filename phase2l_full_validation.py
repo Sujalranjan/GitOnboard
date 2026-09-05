@@ -23,12 +23,10 @@ from sqlalchemy import create_engine
 PROJECT_ROOT = Path(__file__).parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.database import Base
-from backend.models.user import User
+from backend.database import Base, SessionLocal
 from backend.models.repository import Repository, Analysis
 from backend.intelligence.engine.scanner.scanner import RepositoryScanner
 from backend.intelligence.engine.orchestration.pipeline import AnalysisEngine
-from backend.intelligence.engine.analyzers.index_manager import IndexManager
 from backend.intelligence.engine.retrieval.hybrid import HybridRetriever
 from backend.intelligence.engine.orchestration.stage6_graph_navigation import GraphNavigator
 from backend.intelligence.engine.orchestration.stage7_context_assembly import ContextAssembler7
@@ -57,17 +55,15 @@ TEST_QUERIES = [
 class Phase2LValidator:
     """Execute all 8 validation stages."""
 
-    def __init__(self, repo_path: str, db_url: str):
+    def __init__(self, repo_path: str):
         self.repo_path = Path(repo_path).resolve()
-        self.db_url = db_url
-        self.engine = create_engine(db_url)
-        self.session = None
+        self.session = SessionLocal()
         self.manifest = None
         self.analysis = None
-        self.index_manager = None
         self.retriever = None
         self.graph_navigator = None
         self.context_assembler = None
+        self.repository_model = None
 
         self.results = {
             "stage_1": None,
@@ -81,9 +77,8 @@ class Phase2LValidator:
         }
 
     def setup(self):
-        """Initialize database and components."""
-        Base.metadata.create_all(self.engine)
-        self.session = Session(self.engine)
+        """Initialize repository reference."""
+        pass  # Use existing SessionLocal
 
         # Create test user and repository
         user = self.session.query(User).first()
