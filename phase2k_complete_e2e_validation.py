@@ -345,7 +345,13 @@ def stage_5_hybrid_retrieval(retriever):
         # Remove duplicates from all results
         unique_results = {}
         for r in all_results:
-            key = r.get("qualified_name") or r.get("name") or r.get("id")
+            # Handle both dict and RetrieverResult objects
+            if isinstance(r, dict):
+                key = r.get("qualified_name") or r.get("name") or r.get("id")
+            else:
+                # RetrieverResult object - use getattr
+                key = getattr(r, "qualified_name", None) or getattr(r, "name", None) or getattr(r, "id", None)
+
             if key and key not in unique_results:
                 unique_results[key] = r
 
