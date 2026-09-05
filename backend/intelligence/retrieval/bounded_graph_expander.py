@@ -74,6 +74,9 @@ class BoundedGraphExpander:
         """
         Expands retrieval candidates via bounded graph traversal.
 
+        Resolves Files and Directories to contained Symbols for graph traversal,
+        while preserving original retrieval results.
+
         Args:
             candidates: Initial retrieval results (anchor nodes)
 
@@ -90,17 +93,29 @@ class BoundedGraphExpander:
 
         logger.info(
             f"[GraphExpand] Starting expansion of {len(candidates)} anchor nodes "
-            f"(max_depth={self.max_depth}, max_nodes_per_hop={self.max_nodes_per_hop})"
+            f"(analysis_id={self.analysis_id}, max_depth={self.max_depth}, max_nodes_per_hop={self.max_nodes_per_hop})"
         )
+
+        # Log candidate types for debugging
+        candidate_types = {}
+        for cand in candidates:
+            ctype = cand.get("entity_type") or cand.get("type", "unknown")
+            candidate_types[ctype] = candidate_types.get(ctype, 0) + 1
+
+        logger.info(f"[GraphExpand] Candidate types: {candidate_types}")
 
         # Step 1: Process anchors and resolve to symbols
         for cand in candidates:
             anchor_node = self._process_anchor(cand)
             if anchor_node:
-                anchor_nodes[anchor_node["symbol_id"]] = anchor_node
-                seen_ids.add(anchor_node["symbol_id"])
+                anchor_nodes[anchor_node.get("symbol_id") or anchor_node.get("id")] = anchor_node
+                sym_id = anchor_node.get("symbol_id") or anchor_node.get("id")
+                if sym_id:
+                    seen_ids.add(sym_id)
 
-        logger.info(f"[GraphExpand] Processed {len(anchor_nodes)} anchor nodes")
+        logger.info(
+            f"[GraphExpand] Processed {len(anchor_nodes)} anchor nodes from {len(candidates)} candidates"
+        )
 
         # Step 2: Expand from each anchor with bounded BFS
         for anchor_id, anchor_dict in anchor_nodes.items():
@@ -130,8 +145,92 @@ class BoundedGraphExpander:
 
         return results
 
+    def _resolve_graph_anchors(self, candidate: Dict[str, Any]) -> List[FactSymbol]:
+        """
+        Resolve a retrieval candidate to graph-compatible FactSymbol anchors.
+
+        Handles:
+        - Direct Symbol candidates → return as-is
+        - File candidates → extract contained symbols
+        - Directory candidates → extract symbols from files in directory (limited)
+        - External candidates → return empty (no graph anchor)
+
+        Returns list of FactSymbols that can be used for graph traversal.
+        """
+        candidate_type = (candidate.get("entity_type") or candidate.get("type", "")).upper()
+        candidate_id = candidate.get("id") or candidate.get("symbol_id")
+
+        # Case A: Direct Symbol candidate
+        if "SYMBOL" in candidate_type or "FUNCTION" in candidate_type or "CLASS" in candidate_type or "METHOD" in candidate_type:
+            if candidate.get("symbol_id"):
+                sym = self.db.query(FactSymbol).filter(
+                    FactSymbol.analysis_id == self.analysis_id,
+                    FactSymbol.id == candidate.get("symbol_id")
+                ).first()
+                if sym:
+                    return [sym]
+            elif candidate_id and ":" in str(candidate_id):
+                sym = self.db.query(FactSymbol).filter(
+                    FactSymbol.analysis_id == self.analysis_id,
+                    FactSymbol.id == candidate_id
+                ).first()
+                if sym:
+                    return [sym]
+            return []
+
+        # Case B: File candidate → extract contained symbols
+        if "FILE" in candidate_type:
+            file_path = candidate.get("file_path")
+            if file_path:
+                file_obj = self.db.query(FactFile).filter(
+                    FactFile.analysis_id == self.analysis_id,
+                    FactFile.path == file_path
+                ).first()
+                if file_obj:
+                    if file_obj.symbols:
+                        logger.debug(
+                            f"[GraphExpand] File '{file_path}' contains {len(file_obj.symbols)} symbols"
+                        )
+                        # Return all symbols in the file (limited by max_nodes_per_hop during expansion)
+                        return file_obj.symbols[:self.max_nodes_per_hop]
+                    else:
+                        logger.debug(f"[GraphExpand] File '{file_path}' has no symbols")
+                else:
+                    logger.debug(
+                        f"[GraphExpand] File '{file_path}' not found in analysis {self.analysis_id}"
+                    )
+            return []
+
+        # Case C: Directory candidate → limit expansion
+        if "DIRECTORY" in candidate_type:
+            directory_path = candidate.get("file_path")
+            if directory_path:
+                # Get files in this directory (not recursive)
+                files = self.db.query(FactFile).filter(
+                    FactFile.analysis_id == self.analysis_id,
+                    FactFile.path.like(f"{directory_path}/%"),
+                    ~FactFile.path.like(f"{directory_path}/%/%")  # Not recursive
+                ).limit(3).all()  # Limit to 3 files
+
+                symbols = []
+                for file_obj in files:
+                    if file_obj.symbols:
+                        symbols.extend(file_obj.symbols[:2])  # Max 2 symbols per file
+                        if len(symbols) >= self.max_nodes_per_hop:
+                            break
+                return symbols[:self.max_nodes_per_hop]
+            return []
+
+        # Case D: External or other types → no graph anchor
+        return []
+
     def _process_anchor(self, candidate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Process and resolve an anchor node to a FactSymbol."""
+        """
+        Process and resolve an anchor node to a FactSymbol.
+
+        Uses the new graph anchor resolution to handle Files, Directories, etc.
+        Preserves original retrieval metadata.
+        """
         cand_id = candidate.get("id") or candidate.get("symbol_id")
         cand_name = candidate.get("name") or candidate.get("match_name")
         cand_file = candidate.get("file_path")
@@ -179,12 +278,23 @@ class BoundedGraphExpander:
                 resolution_method = "name_only"
 
         if not sym_rec:
-            logger.debug(
-                f"[GraphExpand] Failed to resolve anchor: name={cand_name}, "
-                f"file={cand_file}, type={candidate.get('type')}"
-            )
-            # Return unresolved anchor as-is
-            return dict(candidate)
+            # Try the new anchor resolution for Files, Directories, etc.
+            graph_anchors = self._resolve_graph_anchors(candidate)
+
+            if graph_anchors:
+                # Use the first resolved symbol as the primary anchor
+                sym_rec = graph_anchors[0]
+                logger.debug(
+                    f"[GraphExpand] Anchor '{cand_name}': Resolved via graph_anchor_resolution "
+                    f"to {sym_rec.id} (found {len(graph_anchors)} symbols)"
+                )
+            else:
+                logger.debug(
+                    f"[GraphExpand] Failed to resolve anchor: name={cand_name}, "
+                    f"file={cand_file}, type={candidate.get('type')}"
+                )
+                # Return unresolved anchor as-is (preserve File/Directory results)
+                return dict(candidate)
 
         # Enrich with symbol metadata
         enriched = dict(candidate)
