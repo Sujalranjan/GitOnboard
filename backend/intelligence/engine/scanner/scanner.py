@@ -41,6 +41,10 @@ class RepositoryScanner:
 
         # Extended: CI/CD
         ".circleci", ".gitlab-ci", ".travis",
+
+        # Project-specific: ephemeral data
+        "data",  # SQLite databases, caches, analysis artifacts
+        "evaluation",  # Analysis evaluation runs
     }
 
     def __init__(self, target_dir: str):
