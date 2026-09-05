@@ -3,6 +3,7 @@ import logging
 import time
 import json
 from ..scanner.scanner import RepositoryScanner
+from ..scanner.eligibility import FileEligibility
 from ..parser.manager import ASTParserManager
 from ..analyzers.registry import AnalyzerRegistry
 from ...rim.repository import RepositoryModel
@@ -72,13 +73,19 @@ class AnalysisEngine:
             )
         )
         
-        # 2. Parse ASTs
+        # 2. Parse ASTs - only for analyzable files
         parser_manager = ASTParserManager(self.target_dir)
-        total_files = len(manifest.files)
+
+        # Filter to analyzable files (source, config, test)
+        analyzable_files = [f for f in manifest.files if FileEligibility.is_analyzable_as_source(f.path)]
+        total_files = len(analyzable_files)
+
+        logger.info(f"[PIPELINE] Filtering: {len(manifest.files)} discovered → {total_files} analyzable files")
+        logger.debug(f"[PIPELINE] Excluded: {len(manifest.files) - total_files} files (dependencies, build, cache, generated, etc.)")
 
         # Custom parse with progress tracking
         asts = {}
-        for idx, file_info in enumerate(manifest.files):
+        for idx, file_info in enumerate(analyzable_files):
             try:
                 ast = parser_manager.parse_file(file_info.path, file_info.language)
                 if ast:
@@ -96,7 +103,7 @@ class AnalysisEngine:
                     "files"
                 )
 
-        logger.info(f"[PIPELINE] Parsed {len(asts)} ASTs")
+        logger.info(f"[PIPELINE] Parsed {len(asts)} ASTs from {total_files} analyzable files")
         
         # 3. Execute Analyzers
         # Analyzers should ideally be topologically sorted based on dependencies.

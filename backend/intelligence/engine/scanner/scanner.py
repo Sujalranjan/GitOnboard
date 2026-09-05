@@ -6,16 +6,41 @@ from collections import defaultdict
 
 from .manifest import RepositoryManifest, RepositoryFile, Package, RepositoryMetadata
 from .detector import LanguageDetector, FrameworkDetector
+from .eligibility import FileEligibility, FileCategory
 
 class RepositoryScanner:
     """
     Scans a repository directory to build a RepositoryManifest.
-    Respects common ignore patterns.
+    Uses centralized file eligibility to exclude dependencies, build artifacts, caches, etc.
+    Preserves ALL discovered files in manifest but marks them with their category.
     """
-    
+
+    # Comprehensive exclusions (prevents os.walk from traversing these directories)
     DEFAULT_IGNORES = {
-        ".git", "node_modules", "venv", ".venv", "env", ".env", 
-        "__pycache__", "build", "dist", ".idea", ".vscode"
+        # Original
+        ".git", "node_modules", "venv", ".venv", "env", ".env",
+        "__pycache__", "build", "dist", ".idea", ".vscode",
+
+        # Extended: Python caches
+        ".pytest_cache", ".mypy_cache", ".ruff_cache", ".pyre", ".pytype",
+        ".tox", ".nox", ".hypothesis", ".coverage", "htmlcov",
+        ".eggs", "site-packages",
+
+        # Extended: JavaScript/Node
+        ".next", ".nuxt", ".cache", ".parcel-cache", ".turbo", ".turbopack",
+        ".webpack", ".babel-cache", ".rollup.cache", ".rts2_cache_*",
+        ".eslintcache", ".stylelintcache", ".tsdist", ".jest", ".vitest",
+        ".mocha", ".nyc_output", "jest", "playwright-report", "blob-report",
+        "test-results", "coverage",
+
+        # Extended: Build output
+        "out", "target", ".docusaurus", "_site", "_book", "site", ".vuepress",
+
+        # Extended: IDE/Editors
+        ".vim", ".sublime-*", ".DS_Store",
+
+        # Extended: CI/CD
+        ".circleci", ".gitlab-ci", ".travis",
     }
 
     def __init__(self, target_dir: str):
@@ -82,23 +107,27 @@ class RepositoryScanner:
             for file in files:
                 full_path = root_path / file
                 rel_path = str(full_path.relative_to(self.target_dir)).replace("\\", "/")
-                
+
                 try:
                     size = full_path.stat().st_size
                 except Exception:
                     size = 0
-                    
+
+                # Classify the file
+                category = FileEligibility.classify_file(rel_path)
+
                 lang = LanguageDetector.detect_language(rel_path)
                 if lang != "Unknown":
                     language_set.add(lang)
                     language_sizes[lang] += size
-                    
+
                 repo_file = RepositoryFile(
                     path=rel_path,
                     name=file,
                     extension=full_path.suffix.lower(),
                     size=size,
-                    language=lang
+                    language=lang,
+                    category=category.value
                 )
                 manifest.files.append(repo_file)
                 
