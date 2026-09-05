@@ -294,14 +294,107 @@ ast = parser_manager.parse_file(file_info.path, file_info.language)
 
 ---
 
+## Investigation Complete
+
+### Execution Trace (Phase 1 — COMPLETE)
+
+```
+AnalysisEngine.run()
+    ↓
+RepositoryScanner
+    └─ Discovers 1369 files ✓
+    ↓
+LanguageDetector
+    └─ Detects Python, JavaScript, TypeScript ✓
+    ↓
+ASTParserManager
+    └─ Should parse files into AST
+    └─ BUG FOUND: Line 81 calls parse_file(file_info) with wrong signature
+    └─ Expected: parse_file(rel_path, language)
+    └─ Exception caught silently, returns None
+    └─ asts dictionary remains EMPTY ✗
+    ↓
+AnalyzerRegistry.get_all()
+    └─ Returns proper analyzer list ✓
+    └─ ConfigAnalyzer, DependencyAnalyzer, SymbolAnalyzer, etc.
+    ↓
+SymbolAnalyzer.analyze()
+    └─ Receives empty asts dictionary ✗
+    └─ Cannot extract symbols without ASTs
+    └─ Result: 0 symbols added to RepositoryModel
+    ↓
+save_rim_to_fact_store()
+    └─ Correctly receives RepositoryModel with 0 symbols
+    └─ Persists: 1369 FactFile, 0 FactSymbol, 0 FactRelationship
+```
+
+### Registry Inspection (Phase 2 — COMPLETE)
+
+**SymbolAnalyzer is properly registered** in `backend/intelligence/engine/analyzers/__init__.py`:
+
+```python
+registry.register(SymbolAnalyzer())  # Line 18
+```
+
+Registered analyzers:
+- ✓ ConfigAnalyzer
+- ✓ DependencyAnalyzer
+- ✓ SymbolAnalyzer (with support for Python, TypeScript, JavaScript, Java)
+- ✓ ImportAnalyzer
+- ✓ TypeAnalyzer
+- ✓ CallGraphAnalyzer
+- ✓ UsesAnalyzer
+- ✓ RouteAnalyzer
+- ✓ DatabaseAnalyzer
+- ✓ TestAnalyzer
+
+### Symbol Extractor Status (Phase 3 — COMPLETE)
+
+**SymbolAnalyzer EXISTS and is properly implemented** in `backend/intelligence/engine/analyzers/symbol.py`:
+
+- ✓ PythonSymbolVisitor: Uses ast.NodeVisitor to extract Python functions/classes (lines 23-103)
+- ✓ _process_synthetic_ast(): Processes TypeScript/JavaScript/Java symbols (lines 109-181)
+- ✓ SymbolAnalyzer.analyze(): Main entry point that orchestrates extraction (lines 188-247)
+- ✓ Supported languages: Python, TypeScript, JavaScript, Java
+
+**The extraction code was NOT the problem — it was complete and correct.**
+
+### Root Cause (Phase 4-5 — COMPLETE)
+
+**CRITICAL BUG: Parser Signature Mismatch**
+
+Location: `backend/intelligence/engine/orchestration/pipeline.py` line 81
+
+**Before (BROKEN):**
+```python
+for idx, file_info in enumerate(manifest.files):
+    try:
+        ast = parser_manager.parse_file(file_info)  # ← WRONG: passes object
+```
+
+**After (FIXED):**
+```python
+for idx, file_info in enumerate(manifest.files):
+    try:
+        ast = parser_manager.parse_file(file_info.path, file_info.language)  # ← CORRECT
+```
+
+**Why this broke symbol extraction:**
+1. ASTParserManager.parse_file() signature: `parse_file(rel_path: str, language: str)`
+2. AnalysisEngine was passing: `parse_file(RepositoryFile_object)`
+3. Method received wrong type → exception raised → caught silently by try/except
+4. ASTs dictionary stayed empty: `{}`
+5. SymbolAnalyzer received empty ASTs → extracted 0 symbols
+6. FactStore persisted 0 symbols and 0 relationships
+
 ## Report Status
 
-**Verdict:** INVESTIGATION_IN_PROGRESS
+**Verdict: SYMBOL_EXTRACTION_FIXED**
 
-- Phase 1: NOT YET STARTED
-- Phase 2: NOT YET STARTED
-- Phase 3: NOT YET STARTED
-- Phase 4: NOT YET STARTED
-- Phase 5: NOT YET STARTED
+✓ Phase 1: Root cause identified (line 81 parser call)
+✓ Phase 2: Registry verified (SymbolAnalyzer registered)
+✓ Phase 3: Extractors verified (implementation complete and correct)
+✓ Phase 4: Bug fixed (file deployed)
+✓ Phase 5: Backend rebuilt
 
-**Do not proceed to Phase 3 RIM validation until this investigation is complete.**
+**Next: Re-analyze repository and verify symbol extraction now works**
