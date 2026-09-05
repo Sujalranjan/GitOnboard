@@ -35,8 +35,10 @@ def stage_1_parse_and_analyze():
 
     from backend.intelligence.engine.orchestration.pipeline import AnalysisEngine
     from backend.intelligence.engine.analyzers import get_default_registry
+    from pathlib import Path
 
-    source_repo = "/home/dheeraj/repository_intelligence_platform"
+    # Use current directory (works on Windows, WSL, macOS, Linux)
+    source_repo = str(Path.cwd())
     engine = AnalysisEngine(source_repo, get_default_registry())
 
     start = time.time()
