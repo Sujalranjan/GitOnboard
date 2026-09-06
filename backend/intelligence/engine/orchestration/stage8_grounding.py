@@ -160,6 +160,26 @@ class LLMGrounder:
         logger.info(f"\n[Stage 8] CONTEXT JSON SIZE: {len(context_json)} chars ({len(context_json)/1024:.1f}KB)")
         logger.info(f"  First 500 chars of context:\n{context_json[:500]}")
 
+        # DEBUG: Check if source_excerpt items with code are in the JSON
+        logger.info(f"\n[Stage 8] CHECKING FOR SOURCE CODE IN JSON:")
+        if '"source_excerpt"' in context_json:
+            logger.info(f"  ✓ Found source_excerpt items in JSON")
+            # Count occurrences
+            count = context_json.count('"source_excerpt"')
+            logger.info(f"  ✓ Total source_excerpt items: {count}")
+            # Check for actual code content
+            if '"content"' in context_json:
+                logger.info(f"  ✓ Found 'content' fields in JSON")
+                # Check size - content should be substantial
+                github_oauth_pos = context_json.find("github_oauth")
+                if github_oauth_pos > 0:
+                    sample = context_json[max(0, github_oauth_pos-100):min(len(context_json), github_oauth_pos+500)]
+                    logger.info(f"  Sample around github_oauth: {sample}")
+        else:
+            logger.warning(f"  ❌ NO source_excerpt items found in JSON!")
+            if '"content"' not in context_json:
+                logger.warning(f"  ❌ NO 'content' fields found in JSON!")
+
         messages = [
             Message(
                 role="system",
