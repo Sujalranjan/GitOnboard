@@ -232,6 +232,21 @@ def execute_8_stage_pipeline(
             )
 
             stage7_time = time.time() - stage7_start
+            # Diagnostic: Check what's actually in the context
+            context_str = str(context)
+            files_with_content = 0
+            if context.relevant_files:
+                for f in context.relevant_files[:3]:
+                    # Check if context has actual file content
+                    if f in context_str and len(context_str) > 500:
+                        files_with_content += 1
+
+            logger.info(f"[Stage 7] Context composition:")
+            logger.info(f"  Files: {len(context.relevant_files or [])} (content included: {files_with_content > 0})")
+            logger.info(f"  Symbols: {len(context.relevant_symbols or [])}")
+            logger.info(f"  Total context size: {metrics.context_size_kb:.1f}KB")
+            logger.info(f"  Context sample (first 500 chars): {context_str[:500]}")
+
             stages["stage_7"] = StageResult(
                 status="PASS",
                 time=stage7_time,
@@ -239,6 +254,7 @@ def execute_8_stage_pipeline(
                     "files_selected": len(context.relevant_files or []),
                     "symbols_selected": len(context.relevant_symbols or []),
                     "context_size_kb": metrics.context_size_kb,
+                    "context_has_code": "YES" if metrics.context_size_kb > 50 else "METADATA_ONLY",
                 }
             )
         except Exception as e:
