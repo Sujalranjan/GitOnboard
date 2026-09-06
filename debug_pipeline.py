@@ -198,37 +198,36 @@ def run_full_debug():
     db = SessionLocal()
 
     try:
-        # Get repo and analysis
-        logger.info("Fetching repository and analysis...")
-        repo = db.query(Repository).first()
-        if not repo:
-            logger.error("❌ No repository found in database")
+        # Find an analysis with actual relationships in fact store
+        from backend.models.fact_store import FactRelationship
+
+        logger.info("Finding analysis with fact store data...")
+        analysis = db.query(Analysis).filter(
+            Analysis.id.in_(
+                db.query(FactRelationship.analysis_id).distinct()
+            )
+        ).order_by(Analysis.id.desc()).first()
+
+        if not analysis:
+            logger.error("❌ No analysis with relationships found in fact store")
             return
 
+        logger.info(f"✓ Analysis ID: {analysis.id}, Status: {analysis.status}")
+
+        repo = db.query(Repository).filter(Repository.id == analysis.repository_id).first()
+        if not repo:
+            logger.error("❌ Repository not found")
+            return
         logger.info(f"✓ Repository: {repo.url}")
 
-        analysis = db.query(Analysis).filter(Analysis.repository_id == repo.id).order_by(Analysis.created_at.desc()).first()
-        if not analysis:
-            logger.error("❌ No analysis found")
+        # Load model from fact store
+        from backend.intelligence.store.fact_store import load_rim_from_fact_store
+        try:
+            model = load_rim_from_fact_store(db, analysis.id)
+            logger.info(f"✓ Model loaded from fact store: {len(model.entities)} entities, {len(model.relationships)} relationships")
+        except Exception as e:
+            logger.error(f"❌ Failed to load model from fact store: {e}")
             return
-
-        logger.info(f"✓ Analysis ID: {analysis.id}")
-
-        # Check if model exists
-        from backend.models.repository import AnalysisArtifact
-        art = db.query(AnalysisArtifact).filter(
-            AnalysisArtifact.analysis_id == analysis.id,
-            AnalysisArtifact.type == "core_model"
-        ).first()
-
-        if not art or not art.blob_data:
-            logger.error("❌ No model artifact found - need to run Stage 1 first")
-            return
-
-        # Load model
-        from backend.intelligence.rim.serialization import deserialize_rim
-        model = deserialize_rim(art.blob_data.decode("utf-8"))
-        logger.info(f"✓ Model loaded: {len(model.entities)} entities, {len(model.relationships)} relationships")
 
         if len(model.relationships) == 0:
             logger.error("❌ CRITICAL: Model has 0 relationships - analysis incomplete!")
