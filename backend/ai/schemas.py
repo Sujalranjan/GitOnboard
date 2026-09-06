@@ -17,12 +17,21 @@ class Message(BaseModel):
     content: str
 
 
+class Tool(BaseModel):
+    """Tool definition for tool-calling LLM."""
+    name: str
+    description: str
+    parameters: Dict[str, Any]  # JSON schema for tool parameters
+
+
 class LLMRequest(BaseModel):
     messages: List[Message]
     model: Optional[str] = None
     temperature: float = 0.2
     max_tokens: int = 4096
     response_format: Optional[Dict[str, Any]] = None
+    tools: Optional[List[Tool]] = None
+    tool_choice: Optional[str] = None  # "auto", "required", or specific tool name
 
 
 class TokenUsage(BaseModel):
@@ -31,11 +40,19 @@ class TokenUsage(BaseModel):
     total_tokens: int = 0
 
 
+class ToolCall(BaseModel):
+    """LLM requested to call a tool."""
+    tool_name: str
+    parameters: Dict[str, Any]
+    tool_call_id: str  # For tracking tool results
+
+
 class LLMResponse(BaseModel):
     content: str
     model: str
     provider: str
     usage: TokenUsage = Field(default_factory=TokenUsage)
+    tool_calls: Optional[List[ToolCall]] = None  # If LLM requested tool calls
 
 
 class StructuredLLMRequest(LLMRequest):
