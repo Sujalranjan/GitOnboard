@@ -61,11 +61,15 @@ class GroundingValidator:
 
         if context.evidence:
             for evidence in context.evidence:
-                if evidence.source_id:
-                    self.entity_names.add(evidence.source_id)
-                if evidence.summary:
+                # Handle both dict and ContextEvidence object formats
+                source_id = evidence.get("source_id") if isinstance(evidence, dict) else getattr(evidence, "source_id", None)
+                summary = evidence.get("summary") if isinstance(evidence, dict) else getattr(evidence, "summary", None)
+
+                if source_id:
+                    self.entity_names.add(source_id)
+                if summary:
                     # Extract entity names from summary
-                    words = evidence.summary.split()
+                    words = summary.split()
                     for word in words:
                         if len(word) > 3 and word.isidentifier():
                             self.entity_names.add(word)
@@ -536,8 +540,10 @@ Investigate the repository using the available tools. Start by exploring the rel
         final_context = compact_context
         collected_items = context_manager.list_context()
         for item in collected_items:
-            if item.data:
-                final_context.evidence.append(item.data)
+            # item is already a ContextEvidence object (inherits from ContextItem which inherits from ContextEvidence)
+            # Only append if it has actual content data
+            if item.data and isinstance(item.data, dict) and item.data.get("content"):
+                final_context.evidence.append(item)
 
         validator = GroundingValidator(final_context)
         grounding_result = validator.validate(answer)
