@@ -185,9 +185,23 @@ def execute_8_stage_pipeline(
                 raise Exception("No retrieval results to navigate")
 
             navigator = GraphNavigator(model=model, max_depth=3, max_edges_per_entity=5)
+
+            # Log retrieval results to diagnose matching
+            logger.info(f"[Stage 6] Input: {len(retrieval_results)} retrieval results, model has {len(model.entities)} entities")
+            for i, rr in enumerate(retrieval_results[:3]):
+                in_model = rr.id in model.entities if hasattr(rr, 'id') else False
+                logger.info(f"  Result {i+1}: {getattr(rr, 'entity_name', 'N/A')} (ID: {getattr(rr, 'id', 'N/A')}) - In model: {in_model}")
+
             graph_result = navigator.navigate(retrieval_results, max_entities=100)
 
             stage6_time = time.time() - stage6_start
+
+            # Log validation errors if any
+            if graph_result.entity_count == 0 and graph_result.validation_errors:
+                logger.warning(f"[Stage 6] Graph navigation found 0 entities. Validation errors:")
+                for err in graph_result.validation_errors[:5]:
+                    logger.warning(f"  - {err}")
+
             stages["stage_6"] = StageResult(
                 status="PASS",
                 time=stage6_time,
@@ -195,6 +209,7 @@ def execute_8_stage_pipeline(
                     "entities_discovered": graph_result.entity_count,
                     "edges": graph_result.edge_count,
                     "traversal_depth": graph_result.traversal_depth,
+                    "validation_errors": len(graph_result.validation_errors),
                 }
             )
         except Exception as e:
@@ -243,7 +258,7 @@ def execute_8_stage_pipeline(
                 status="PASS",
                 time=stage8_time,
                 details={
-                    "answer_preview": answer[:200] + "..." if len(answer) > 200 else answer,
+                    "answer": answer,  # Full answer, not truncated
                     "grounding_status": grounding.grounding_status,
                     "grounded_entities": len(grounding.grounded_entities),
                 }
