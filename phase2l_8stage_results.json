@@ -1,0 +1,52 @@
+{
+  "stage_1": {
+    "status": "PASS",
+    "entities": 10298,
+    "relationships": 22932,
+    "time": 16.632012605667114
+  },
+  "stage_2": {
+    "status": "PASS",
+    "time": 6.357873916625977
+  },
+  "stage_3": {
+    "status": "PASS",
+    "time": 0.8261609077453613
+  },
+  "stage_4": {
+    "status": "SKIPPED",
+    "time": 2.384185791015625e-07
+  },
+  "stage_5": {
+    "status": "PASS",
+    "queries": 3,
+    "results_per_query": {
+      "Where is authentication implemented?": 5,
+      "How does the analysis engine work?": 5,
+      "Which files handle repository scanning?": 5
+    },
+    "time": 0.9195921421051025
+  },
+  "stage_6": {
+    "status": "PASS",
+    "queries_processed": 3,
+    "time": 5.733349084854126
+  },
+  "stage_7": {
+    "status": "PASS",
+    "queries_assembled": 3,
+    "time": 13.338294506072998
+  },
+  "stage_8": {
+    "status": "PASS",
+    "queries_grounded": 3,
+    "time": 32.05263710021973
+  },
+  "timestamp": "2026-09-06T20:27:06.551276",
+  "total_time": 77.4889030456543,
+  "queries": [
+    "Where is authentication implemented?",
+    "How does the analysis engine work?",
+    "Which files handle repository scanning?"
+  ]
+}

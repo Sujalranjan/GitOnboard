@@ -1,0 +1,100 @@
+{
+  "BULK_CONTEXT": {
+    "approach": "BULK_CONTEXT",
+    "query": "\nHow does the 8-stage analysis pipeline work, and what is the responsibility \nof each stage from Stage 5 (Retrieval) through Stage 8 (Grounding)?\n",
+    "started_at": 1788717066.8826845,
+    "files_selected": [
+      "backend/intelligence/engine/orchestration/pipeline.py",
+      "backend/intelligence/engine/orchestration/stage6_graph_navigation.py",
+      "backend/intelligence/engine/orchestration/stage7_context_assembly.py",
+      "backend/intelligence/engine/orchestration/stage8_grounding.py"
+    ],
+    "files_fully_read": 4,
+    "symbols_selected": [
+      "Pipeline.run()",
+      "Stage6.execute()",
+      "Stage7.execute()",
+      "Stage8.execute()",
+      "ContextAssembler",
+      "GroundingValidator"
+    ],
+    "evidence_count": 10,
+    "initial_context_tokens": 8085,
+    "initial_context_size_kb": 31.5830078125,
+    "tool_calls": 0,
+    "answer": "\nThe 8-stage pipeline processes repository analysis as follows:\n\n**Stage 5 (Retrieval)**: Uses HybridRetriever/RIM to find relevant files and symbols\nbased on the user query. Returns top-K files with relevance scores.\n\n**Stage 6 (Graph Navigation)**: Takes retrieved files and uses relationship graph\nto find connected symbols and dependencies. Expands context with related functions,\nclasses, and imports.\n\n**Stage 7 (Context Assembly)**: Reads complete source code from selected files\n(200 lines per file) and assembles structured ContextEvidence items. Creates\nevidence objects with metadata and source excerpts.\n\n**Stage 8 (Grounding Validation)**: Validates that LLM answers are grounded in\nthe provided source code. Checks evidence chain and verifies answer references\nactual code locations.\n",
+    "grounded_facts": [
+      "backend/intelligence/engine/orchestration/pipeline.py - Pipeline class and run() method",
+      "backend/intelligence/engine/orchestration/stage6_graph_navigation.py - Stage6.execute() implementation",
+      "backend/intelligence/engine/orchestration/stage7_context_assembly.py - Stage7.execute() and ContextAssembler",
+      "backend/intelligence/engine/orchestration/stage8_grounding.py - Stage8.execute() and GroundingValidator"
+    ],
+    "correctness": "CORRECT",
+    "duration_seconds": 0.5,
+    "answer_length": 798
+  },
+  "INTERACTIVE_TOOLS": {
+    "approach": "INTERACTIVE_TOOLS",
+    "query": "\nHow does the 8-stage analysis pipeline work, and what is the responsibility \nof each stage from Stage 5 (Retrieval) through Stage 8 (Grounding)?\n",
+    "started_at": 1788717066.8828216,
+    "initial_context_tokens": 91,
+    "tool_calls": [
+      {
+        "tool": "inspect_file",
+        "target": "backend/intelligence/engine/orchestratio",
+        "tokens_added": 150
+      },
+      {
+        "tool": "read_symbol",
+        "target": "Pipeline.run from pipeline.py",
+        "tokens_added": 180
+      },
+      {
+        "tool": "inspect_file",
+        "target": "backend/intelligence/engine/orchestratio",
+        "tokens_added": 140
+      },
+      {
+        "tool": "read_symbol",
+        "target": "Stage6.execute from stage6_graph_navigat",
+        "tokens_added": 120
+      },
+      {
+        "tool": "inspect_file",
+        "target": "backend/intelligence/engine/orchestratio",
+        "tokens_added": 140
+      },
+      {
+        "tool": "read_symbol",
+        "target": "Stage7.execute from stage7_context_assem",
+        "tokens_added": 150
+      },
+      {
+        "tool": "inspect_file",
+        "target": "backend/intelligence/engine/orchestratio",
+        "tokens_added": 140
+      },
+      {
+        "tool": "read_symbol",
+        "target": "Stage8.execute from stage8_grounding.py",
+        "tokens_added": 130
+      }
+    ],
+    "peak_context_tokens": 1241,
+    "final_context_tokens": 1241,
+    "files_inspected": 4,
+    "files_read": 0,
+    "symbols_read": 4,
+    "context_management_operations": [],
+    "answer": "\nBased on exploration of the pipeline code:\n\n**Stage 5 (Retrieval)**: The Pipeline calls a Retriever to find relevant files\nand symbols for the user's query.\n\n**Stage 6 (Graph Navigation)**: Stage6 takes the retrieved items and follows\nthe relationship graph to find connected code - functions that call each other,\nclasses that inherit from others, and imports.\n\n**Stage 7 (Context Assembly)**: Stage7 reads the selected file content from disk\nand creates ContextEvidence objects with the actual source code. This ensures\nthe LLM receives real implementations, not just signatures.\n\n**Stage 8 (Grounding Validation)**: Stage8 takes the LLM's answer and validates\nthat it references code from the provided evidence. This ensures grounding.\n",
+    "grounded_facts": [
+      "backend/intelligence/engine/orchestration/pipeline.py - Pipeline class and run() method",
+      "backend/intelligence/engine/orchestration/stage6_graph_navigation.py - Stage6.execute() implementation",
+      "backend/intelligence/engine/orchestration/stage7_context_assembly.py - Stage7.execute() and ContextAssembler",
+      "backend/intelligence/engine/orchestration/stage8_grounding.py - Stage8.execute() and GroundingValidator"
+    ],
+    "correctness": "CORRECT",
+    "duration_seconds": 0.8,
+    "answer_length": 740
+  }
+}
