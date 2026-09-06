@@ -450,27 +450,55 @@ Investigate the repository using the available tools. Start by exploring the rel
             logger.error(f"[Research Loop] Final answer call failed: {e}")
             return f"Research failed to complete: {str(e)}", tool_wrapper.events
 
-    async def ground(self, context: RepositoryContext, query: str, execution_context: Optional[ExecutionContext] = None) -> tuple[str, GroundingValidationResult, List[ResearchEvent]]:
+    async def ground_interactive(
+        self,
+        context: RepositoryContext,
+        query: str,
+        execution_context: ExecutionContext,  # REQUIRED
+    ) -> tuple[str, GroundingValidationResult, List[ResearchEvent]]:
         """
-        Interactive research with Phase 2L tools.
+        Phase 2M Interactive research with Phase 2L tools.
 
-        Phase 2M implementation:
-        - Creates compact context (no source code)
-        - LLM uses tools to inspect what it needs
-        - Returns answer + grounding validation + research events
+        CRITICAL: execution_context is MANDATORY.
+
+        If execution_context is None:
+        - DO NOT fall back to bulk context
+        - Return explicit REPOSITORY_CONTEXT_ERROR
+
+        Phase 2M is NOT backward compatible with bulk context mode.
 
         Args:
             context: RepositoryContext from Stage 7
             query: Original user query
-            execution_context: ExecutionContext with analysis_id, repo_root, db
+            execution_context: ExecutionContext with analysis_id, repo_root, db (REQUIRED)
 
         Returns:
             (answer: str, grounding_result: GroundingValidationResult, events: List[ResearchEvent])
+
+        Raises:
+            ValueError: If execution_context is missing or invalid
         """
+        if not execution_context:
+            error_msg = (
+                "REPOSITORY_CONTEXT_ERROR: Phase 2M interactive research requires execution_context. "
+                "execution_context must contain: analysis_id (int), repo_root (str), db (Session). "
+                "Phase 2M is NOT backward compatible with bulk-context mode. "
+                "Use ground_legacy() for bulk-context queries."
+            )
+            logger.error(f"[Stage 8 Interactive] {error_msg}")
+            raise ValueError(error_msg)
+
+        if not execution_context.analysis_id:
+            raise ValueError("REPOSITORY_CONTEXT_ERROR: execution_context.analysis_id is required")
+        if not execution_context.repo_root:
+            raise ValueError("REPOSITORY_CONTEXT_ERROR: execution_context.repo_root is required")
+        if not execution_context.db:
+            raise ValueError("REPOSITORY_CONTEXT_ERROR: execution_context.db is required")
+
         import time
         start_time = time.time()
 
-        logger.info(f"\n[Stage 8 - Phase 2M] RECEIVED CONTEXT FROM STAGE 7:")
+        logger.info(f"\n[Stage 8 - Phase 2M Interactive] RECEIVED CONTEXT FROM STAGE 7:")
         logger.info(f"  Relevant files: {len(context.relevant_files or [])} - {context.relevant_files[:3]}")
         logger.info(f"  Relevant symbols: {len(context.relevant_symbols or [])}")
         logger.info(f"  Evidence items: {len(context.evidence or [])}")
@@ -479,43 +507,93 @@ Investigate the repository using the available tools. Start by exploring the rel
         compact_context = self._create_compact_context(context)
         original_size = len(context.model_dump_json())
         compact_size = len(compact_context.model_dump_json())
-        logger.info(f"\n[Stage 8 - Phase 2M] CONTEXT COMPACTION:")
+        logger.info(f"\n[Stage 8 - Phase 2M Interactive] CONTEXT COMPACTION:")
         logger.info(f"  Original size: {original_size/1024:.1f}KB")
         logger.info(f"  Compact size: {compact_size/1024:.1f}KB")
         logger.info(f"  Reduction: {((original_size - compact_size) / original_size * 100):.1f}%")
 
-        # Set up Phase 2L tools
-        if not execution_context:
-            logger.warning("[Stage 8 - Phase 2M] No execution_context provided - Phase 2L tools will not be available")
-            # Fall back to bulk context mode
-            tool_wrapper = None
-            context_manager = None
-        else:
-            context_manager = ContextManager(
-                budget=ContextBudget(max_tokens=100000, current_tokens=compact_size),
-            )
-            tool_wrapper = Phase2LToolWrapper(execution_context, context_manager)
+        # Initialize Phase 2L tools (no fallback option)
+        context_manager = ContextManager(
+            budget=ContextBudget(max_tokens=100000, current_tokens=compact_size),
+        )
+        tool_wrapper = Phase2LToolWrapper(execution_context, context_manager)
 
-            logger.info(f"[Stage 8 - Phase 2M] Phase 2L tools initialized:")
-            logger.info(f"  analysis_id: {execution_context.analysis_id}")
-            logger.info(f"  repo_root: {execution_context.repo_root}")
+        logger.info(f"[Stage 8 - Phase 2M Interactive] Phase 2L tools initialized:")
+        logger.info(f"  analysis_id: {execution_context.analysis_id}")
+        logger.info(f"  repo_root: {execution_context.repo_root}")
 
-        # Run research loop
-        if tool_wrapper:
-            answer, research_events = await self._run_research_loop(
-                query,
-                compact_context,
-                tool_wrapper,
-                max_iterations=10,
-            )
-        else:
-            # Fallback to bulk context
-            logger.warning("[Stage 8 - Phase 2M] Using fallback bulk context mode")
-            context_json = context.model_dump_json(indent=2)
-            messages = [
-                Message(
-                    role=MessageRole.SYSTEM,
-                    content="""You are a code analyst with access to repository structure.
+        # Run interactive research loop
+        answer, research_events = await self._run_research_loop(
+            query,
+            compact_context,
+            tool_wrapper,
+            max_iterations=10,
+        )
+
+        llm_latency = time.time() - start_time
+
+        # Validate grounding against ALL collected evidence
+        final_context = compact_context
+        collected_items = context_manager.list_context()
+        for item in collected_items:
+            if item.data:
+                final_context.evidence.append(item.data)
+
+        validator = GroundingValidator(final_context)
+        grounding_result = validator.validate(answer)
+        grounding_result.llm_latency = llm_latency
+
+        logger.info(
+            f"[Stage 8 - Phase 2M Interactive] Research complete: {len(answer)} chars, "
+            f"grounding={grounding_result.grounding_status}, "
+            f"latency={llm_latency:.2f}s"
+        )
+
+        tool_wrapper._emit_event(
+            ResearchEventType.GROUNDING_VALIDATED,
+            "grounding",
+            f"Answer grounding: {grounding_result.grounding_status}",
+            {
+                "grounding_status": grounding_result.grounding_status,
+                "grounded_entities": len(grounding_result.grounded_entities),
+            },
+        )
+
+        return answer, grounding_result, research_events
+
+    async def ground_legacy(
+        self,
+        context: RepositoryContext,
+        query: str,
+    ) -> tuple[str, GroundingValidationResult]:
+        """
+        Legacy bulk-context mode (backward compatibility only).
+
+        This is the OLD Stage 8 behavior:
+        - Full RepositoryContext sent to LLM
+        - No interactive tool calling
+        - No research events
+        - Simple grounding validation
+
+        DEPRECATED: Use ground_interactive() for new code.
+
+        Args:
+            context: RepositoryContext from Stage 7
+            query: Original user query
+
+        Returns:
+            (answer: str, grounding_result: GroundingValidationResult)
+        """
+        import time
+        start_time = time.time()
+
+        logger.warning("[Stage 8 Legacy] Using deprecated bulk-context mode. Consider using ground_interactive().")
+
+        context_json = context.model_dump_json(indent=2)
+        messages = [
+            Message(
+                role=MessageRole.SYSTEM,
+                content="""You are a code analyst with access to repository structure.
 
 IMPORTANT:
 1. Answer ONLY using the provided repository context.
@@ -523,73 +601,55 @@ IMPORTANT:
 3. Cite specific file paths and symbol names from the context when possible.
 4. Do not make assumptions about code you have not seen.
 5. Be concise and precise."""
-                ),
-                Message(
-                    role=MessageRole.USER,
-                    content=f"""Repository Context (from retrieval + graph traversal):
+            ),
+            Message(
+                role=MessageRole.USER,
+                content=f"""Repository Context (from retrieval + graph traversal):
 {context_json}
 
 Question: {query}
 
 Answer based ONLY on the provided context. Cite specific files and symbols."""
-                )
-            ]
+            )
+        ]
 
-            try:
-                request = LLMRequest(
-                    messages=messages,
-                    temperature=0.2,
-                    max_tokens=1024,
-                )
-                response = await self.llm_service.generate(request)
-                answer = response.content
-                research_events = []
-            except Exception as e:
-                logger.error(f"[Stage 8] LLMService failed: {e}")
-                raise
+        try:
+            request = LLMRequest(
+                messages=messages,
+                temperature=0.2,
+                max_tokens=1024,
+            )
+            response = await self.llm_service.generate(request)
+            answer = response.content
+        except Exception as e:
+            logger.error(f"[Stage 8 Legacy] LLMService failed: {e}")
+            raise
 
         llm_latency = time.time() - start_time
 
         # Validate grounding
-        final_context = compact_context if tool_wrapper else context
-        if tool_wrapper and context_manager:
-            # Add all collected evidence to validation context
-            collected_items = context_manager.list_context()
-            for item in collected_items:
-                if item.data:
-                    final_context.evidence.append(item.data)
-
-        validator = GroundingValidator(final_context)
+        validator = GroundingValidator(context)
         grounding_result = validator.validate(answer)
         grounding_result.llm_latency = llm_latency
 
         logger.info(
-            f"[Stage 8 - Phase 2M] Research complete: {len(answer)} chars, "
+            f"[Stage 8 Legacy] Answer: {len(answer)} chars, "
             f"grounding={grounding_result.grounding_status}, "
             f"latency={llm_latency:.2f}s"
         )
 
-        if tool_wrapper:
-            tool_wrapper._emit_event(
-                ResearchEventType.GROUNDING_VALIDATED,
-                "grounding",
-                f"Answer grounding: {grounding_result.grounding_status}",
-                {
-                    "grounding_status": grounding_result.grounding_status,
-                    "grounded_entities": len(grounding_result.grounded_entities),
-                },
-            )
-
-        return answer, grounding_result, research_events if tool_wrapper else []
+        return answer, grounding_result
 
 
 def stage8_sync_wrapper(
     context: RepositoryContext,
     query: str,
     execution_context: Optional[ExecutionContext] = None,
-) -> tuple[str, GroundingValidationResult, List[ResearchEvent]]:
+) -> tuple[str, GroundingValidationResult]:
     """
     Synchronous wrapper for Stage 8 (for integration with sync validation scripts).
+
+    DEPRECATED: Use ground_interactive_sync() or ground_legacy_sync() explicitly.
 
     Args:
         context: RepositoryContext from Stage 7
@@ -597,14 +657,76 @@ def stage8_sync_wrapper(
         execution_context: Optional ExecutionContext with analysis_id, repo_root, db
 
     Returns:
-        (answer: str, grounding_result: GroundingValidationResult, events: List[ResearchEvent])
+        (answer: str, grounding_result: GroundingValidationResult)
     """
     grounder = LLMGrounder()
     try:
-        return asyncio.run(grounder.ground(context, query, execution_context))
+        if execution_context:
+            # Phase 2M interactive mode
+            answer, grounding, _events = asyncio.run(
+                grounder.ground_interactive(context, query, execution_context)
+            )
+            return answer, grounding
+        else:
+            # Legacy bulk context mode
+            return asyncio.run(grounder.ground_legacy(context, query))
     except RuntimeError as e:
         if "asyncio.run() cannot be called from a running event loop" in str(e):
-            # Already in async context, use await instead
+            logger.warning("[Stage 8] Already in event loop, cannot use asyncio.run()")
+            raise
+        raise
+
+
+def stage8_sync_wrapper_interactive(
+    context: RepositoryContext,
+    query: str,
+    execution_context: ExecutionContext,
+) -> tuple[str, GroundingValidationResult, List[ResearchEvent]]:
+    """
+    Synchronous wrapper for Phase 2M interactive research.
+
+    Args:
+        context: RepositoryContext from Stage 7
+        query: Original user query
+        execution_context: ExecutionContext with analysis_id, repo_root, db (REQUIRED)
+
+    Returns:
+        (answer: str, grounding_result: GroundingValidationResult, events: List[ResearchEvent])
+
+    Raises:
+        ValueError: If execution_context is None or invalid
+    """
+    grounder = LLMGrounder()
+    try:
+        return asyncio.run(grounder.ground_interactive(context, query, execution_context))
+    except RuntimeError as e:
+        if "asyncio.run() cannot be called from a running event loop" in str(e):
+            logger.warning("[Stage 8] Already in event loop, cannot use asyncio.run()")
+            raise
+        raise
+
+
+def stage8_sync_wrapper_legacy(
+    context: RepositoryContext,
+    query: str,
+) -> tuple[str, GroundingValidationResult]:
+    """
+    Synchronous wrapper for legacy bulk-context mode.
+
+    DEPRECATED: Consider migrating to ground_interactive_sync().
+
+    Args:
+        context: RepositoryContext from Stage 7
+        query: Original user query
+
+    Returns:
+        (answer: str, grounding_result: GroundingValidationResult)
+    """
+    grounder = LLMGrounder()
+    try:
+        return asyncio.run(grounder.ground_legacy(context, query))
+    except RuntimeError as e:
+        if "asyncio.run() cannot be called from a running event loop" in str(e):
             logger.warning("[Stage 8] Already in event loop, cannot use asyncio.run()")
             raise
         raise
