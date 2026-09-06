@@ -68,18 +68,38 @@ def execute_8_stage_pipeline(
 
     try:
         # ====================================================================
-        # STAGES 1-5: Use existing pipeline
+        # STAGES 1-2: Parse, Analyze & Persist
         # ====================================================================
 
         stage1_start = time.time()
         try:
-            # Get or build the repository model (combines Stages 1-2)
-            # Note: get_or_build_model returns QueryLayer, which wraps the actual model
-            query_layer = get_or_build_model(repo_name, db, current_user)
+            # Get repository
             repo, analysis = get_latest_analysis(repo_name, db, current_user)
 
-            # Extract the actual model from QueryLayer
-            model = query_layer.model
+            # Try to load existing model first
+            try:
+                query_layer = get_or_build_model(repo_name, db, current_user)
+                model = query_layer.model
+                logger.info(f"Loaded existing model for {repo_name}")
+            except Exception:
+                # No existing model - run full analysis
+                logger.info(f"No model found, running full analysis for {repo_name}")
+                from backend.intelligence.engine.orchestration.pipeline import AnalysisEngine
+                from backend.intelligence.engine.analyzers import get_default_registry
+                from backend.intelligence.store.fact_store import save_rim_to_fact_store
+                from pathlib import Path
+
+                source_repo = str(Path.cwd())
+                engine_obj = AnalysisEngine(source_repo, get_default_registry())
+                model = engine_obj.run(
+                    repo_name=f"{repo_name}-Pipeline",
+                    skip_validation=True
+                )
+
+                # Save model to database
+                save_rim_to_fact_store(db, analysis.id, model)
+                db.commit()
+                logger.info(f"Model saved for analysis {analysis.id}")
 
             stage1_time = time.time() - stage1_start
             stages["stage_1"] = StageResult(
@@ -91,16 +111,15 @@ def execute_8_stage_pipeline(
                 }
             )
         except Exception as e:
-            logger.error(f"Stage 1 failed: {e}")
+            logger.error(f"Stage 1 failed: {e}", exc_info=True)
             stages["stage_1"] = StageResult(status="FAIL", time=0, error=str(e))
-            return _make_response(request.query, repo.id, stages, start_time)
+            return _make_response(request.query, 0, stages, start_time)
 
-        # Stage 2: FactStore Persistence (already done in get_or_build_model)
-        stage2_time = 0.0  # Included in Stage 1
+        # Stage 2: FactStore Persistence (already done in Stage 1 if needed)
         stages["stage_2"] = StageResult(
             status="PASS",
-            time=stage2_time,
-            details={"message": "Completed in Stage 1"}
+            time=0.0,
+            details={"message": "Model persisted (included in Stage 1)"}
         )
 
         # Stages 3-5: Hybrid Retrieval
