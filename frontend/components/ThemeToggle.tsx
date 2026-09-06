@@ -41,7 +41,7 @@ export function ThemeToggle() {
             aria-label={label}
             className={`p-1.5 rounded-md transition-all duration-150 flex items-center justify-center ${
               isActive
-                ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-400 font-semibold"
+                ? "bg-blue-100 text-blue-700 shadow-sm dark:bg-blue-900 dark:text-blue-300 font-semibold"
                 : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
             }`}
           >
