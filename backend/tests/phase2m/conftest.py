@@ -14,6 +14,8 @@ os.environ["DEPLOYMENT_TYPE"] = "TEST"
 from backend.database import Base, SessionLocal, engine
 from backend.models.repository import Analysis, Repository
 from backend.models.user import User
+from backend.ai.service import LLMService
+from backend.ai.providers.mock_tool_calling import ToolCallingMockProvider
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -81,3 +83,27 @@ def test_analysis(db: Session, test_repository: Repository) -> Analysis:
     db.commit()
     db.refresh(analysis)
     return analysis
+
+
+@pytest.fixture(autouse=True)
+def use_tool_calling_mock():
+    """
+    Use ToolCallingMockProvider for all Phase 2M tests.
+
+    This allows validating the tool-calling pipeline without requiring
+    a real LLM provider that supports the JSON protocol.
+    """
+    import backend.ai.service
+
+    # Save original service instance
+    original_service = backend.ai.service._service_instance
+
+    # Create new service with ToolCallingMockProvider
+    tool_calling_provider = ToolCallingMockProvider()
+    mock_service = LLMService(providers=[tool_calling_provider])
+    backend.ai.service._service_instance = mock_service
+
+    yield
+
+    # Restore original service
+    backend.ai.service._service_instance = original_service
