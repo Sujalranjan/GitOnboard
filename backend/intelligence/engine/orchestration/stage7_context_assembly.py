@@ -215,20 +215,31 @@ class ContextAssembler7:
             logger.info(f"[Stage 7] Successfully read {len(file_contents)} files, adding to evidence...")
             if file_contents:
                 for file_path, content in file_contents.items():
-                    # Create evidence item with actual code
+                    # Create evidence item with actual code in 'data' field
+                    # (ContextEvidence uses 'data' dict, not 'detail')
                     code_evidence = ContextEvidence(
-                        source_type="source_code",
+                        source_type="source_excerpt",  # Use source_excerpt type
                         source_id=file_path,
-                        summary=f"Source code from {file_path}",
-                        detail=content,
+                        summary=f"Source code excerpt from {file_path}",
+                        data={
+                            "file_path": file_path,
+                            "content": content,
+                            "lines": len(content.split('\n')),
+                            "chars": len(content),
+                        },
+                        metadata={
+                            "excerpt_type": "full_file",
+                            "truncated": False,
+                        },
                         confidence=1.0,
+                        relevance=1.0,
                     )
                     if not context.evidence:
                         context.evidence = []
                     context.evidence.append(code_evidence)
-                    logger.info(f"  Added evidence: {file_path}")
+                    logger.info(f"  ✓ Added evidence: {file_path} ({len(content)} chars)")
 
-                logger.info(f"[Stage 7] ✓ Added {len(file_contents)} file contents to context evidence")
+                logger.info(f"[Stage 7] ✓ Added {len(file_contents)} file contents to context evidence (total evidence items: {len(context.evidence)})")
             else:
                 logger.warning(f"[Stage 7] ✗ No files were successfully read!")
 
