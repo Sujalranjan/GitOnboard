@@ -71,12 +71,11 @@ def execute_8_stage_pipeline(
         # STAGES 1-5: Use existing pipeline
         # ====================================================================
 
-        # Get or build the repository model (combines Stages 1-2)
-        repo, analysis = get_latest_analysis(repo_name, db, current_user)
-
         stage1_start = time.time()
         try:
-            model = get_or_build_model(repo, analysis, db)
+            # Get or build the repository model (combines Stages 1-2)
+            model = get_or_build_model(repo_name, db, current_user)
+            repo, analysis = get_latest_analysis(repo_name, db, current_user)
             stage1_time = time.time() - stage1_start
             stages["stage_1"] = StageResult(
                 status="PASS",
