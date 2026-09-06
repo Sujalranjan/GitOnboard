@@ -1,0 +1,296 @@
+{
+  "timestamp": "/home/dheeraj/repository_intelligence_platform/backend/tests/phase2l1/test3_diagnosis_results.json",
+  "analysis_id": 847141,
+  "unique_files": 11,
+  "verdicts": {
+    "SUCCESS": 11
+  },
+  "details": [
+    {
+      "index": 1,
+      "path": "tests/test_baseline_integration.py",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:tests/test_baseline_integration.py#tests/test_baseline_integration.py",
+          "size": 6132,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 20
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 20,
+          "language": "python",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    },
+    {
+      "index": 2,
+      "path": "backend/routers/sandbox.py",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:backend/routers/sandbox.py#backend/routers/sandbox.py",
+          "size": 16511,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 34
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 34,
+          "language": "python",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    },
+    {
+      "index": 3,
+      "path": "backend/tests/test_fact_store.py",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:backend/tests/test_fact_store.py#backend/tests/test_fact_store.py",
+          "size": 6850,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 23
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 23,
+          "language": "python",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    },
+    {
+      "index": 4,
+      "path": "backend/services/github_oauth.py",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:backend/services/github_oauth.py#backend/services/github_oauth.py",
+          "size": 3892,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 11
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 11,
+          "language": "python",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    },
+    {
+      "index": 5,
+      "path": "backend/tests/test_capabilities.py",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:backend/tests/test_capabilities.py#backend/tests/test_capabilities.py",
+          "size": 11877,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 40
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 40,
+          "language": "python",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    },
+    {
+      "index": 6,
+      "path": "backend/intelligence/analysis/engine/registry.py",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:backend/intelligence/analysis/engine/registry.py#backend/intelligence/analysis/engine/registry.py",
+          "size": 734,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 7
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 7,
+          "language": "python",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    },
+    {
+      "index": 7,
+      "path": "backend/routers/auth.py",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:backend/routers/auth.py#backend/routers/auth.py",
+          "size": 3906,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 17
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 17,
+          "language": "python",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    },
+    {
+      "index": 8,
+      "path": "frontend/app/page.tsx",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:frontend/app/page.tsx#frontend/app/page.tsx",
+          "size": 3130,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 6
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 6,
+          "language": "tsx",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    },
+    {
+      "index": 9,
+      "path": "backend/main.py",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:backend/main.py#backend/main.py",
+          "size": 12403,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 34
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 34,
+          "language": "python",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    },
+    {
+      "index": 10,
+      "path": "tests/test_phase1_file_loading.py",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:tests/test_phase1_file_loading.py#tests/test_phase1_file_loading.py",
+          "size": 9939,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 30
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 30,
+          "language": "python",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    },
+    {
+      "index": 11,
+      "path": "tests/test_auth_hardening.py",
+      "steps": [
+        {
+          "step": "2A_fact_file_lookup",
+          "result": "FOUND",
+          "fact_file_id": "847141:urn:file:tests/test_auth_hardening.py#tests/test_auth_hardening.py",
+          "size": 2471,
+          "language": null
+        },
+        {
+          "step": "2B_symbol_count_db",
+          "count": 15
+        },
+        {
+          "step": "2C_inspect_file",
+          "result": "SUCCESS",
+          "success": true,
+          "symbols_returned": 15,
+          "language": "python",
+          "error": null
+        }
+      ],
+      "verdict": "SUCCESS"
+    }
+  ]
+}
