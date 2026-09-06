@@ -26,12 +26,22 @@ def build_default_service() -> "LLMService":
     - DEPLOYMENT_TYPE=LOCAL: Ollama only -> deterministic fallback.
     - DEPLOYMENT_TYPE=PROD: Gemini first -> OpenRouter -> deterministic fallback.
     - Never cross-use providers between LOCAL and PROD.
+
+    PYTEST_CURRENT_TEST environment variable does NOT override an explicitly
+    set DEPLOYMENT_TYPE. This allows real LLM testing with pytest when needed.
     """
     deployment_type = os.environ.get("DEPLOYMENT_TYPE", "LOCAL").strip().upper()
     providers: List[LLMProvider] = []
 
-    # Automated test environment detection: use deterministic mock provider to avoid 300s Ollama waits
-    if deployment_type == "TEST" or "PYTEST_CURRENT_TEST" in os.environ:
+    # Debug logging
+    is_pytest_running = "PYTEST_CURRENT_TEST" in os.environ
+    is_deployment_explicit = "DEPLOYMENT_TYPE" in os.environ
+    logger.info(f"[build_default_service] deployment_type={deployment_type}, is_pytest={is_pytest_running}, is_explicit={is_deployment_explicit}")
+
+    # Automated test environment detection: use deterministic mock provider ONLY if
+    # DEPLOYMENT_TYPE is not explicitly set (defaults to LOCAL) and pytest is running
+    # If DEPLOYMENT_TYPE is explicitly TEST, LOCAL, or PROD, respect that choice.
+    if deployment_type == "TEST" or (is_pytest_running and not is_deployment_explicit):
         from .providers.mock_test import DeterministicTestProvider
         providers.append(DeterministicTestProvider())
         logger.info("LLMService: TEST mode - DeterministicTestProvider registered.")

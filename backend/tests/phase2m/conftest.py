@@ -7,9 +7,12 @@ import os
 import pytest
 from sqlalchemy.orm import Session
 
-# Ensure test mode before importing database
+# Ensure test database
+# NOTE: Do NOT set DEPLOYMENT_TYPE here - let pytest environment variables take precedence
+# Otherwise pytest will override command-line DEPLOYMENT_TYPE=LOCAL before it's applied
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
-os.environ["DEPLOYMENT_TYPE"] = "TEST"
+# DEPLOYMENT_TYPE defaults to "LOCAL" in backend.ai.service if not set
+# Tests default to TEST mode via is_pytest_running check if DEPLOYMENT_TYPE not explicit
 
 from backend.database import Base, SessionLocal, engine
 from backend.models.repository import Analysis, Repository
@@ -128,22 +131,38 @@ def gitboard_login_query_context() -> RepositoryContext:
 
 
 @pytest.fixture(autouse=True)
-def use_tool_calling_mock():
+def use_tool_calling_mock(request):
     """
-    Use ToolCallingMockProvider for all Phase 2M tests.
+    Configure LLMService provider based on DEPLOYMENT_TYPE and test marker.
 
-    This allows validating the tool-calling pipeline without requiring
-    a real LLM provider that supports the JSON protocol.
+    - DEPLOYMENT_TYPE=TEST: Use ToolCallingMockProvider (deterministic)
+    - DEPLOYMENT_TYPE=LOCAL/PROD: Use real provider (Ollama/Cloud)
+    - @pytest.mark.real_llm: Skip mock, use real provider
+
+    This allows validating tool-calling with both mock and real LLMs.
     """
+    import os
     import backend.ai.service
+
+    deployment_type = os.environ.get("DEPLOYMENT_TYPE", "TEST").strip().upper()
+
+    # Skip mock if test is marked for real LLM
+    if request.node.get_closest_marker("real_llm"):
+        backend.ai.service._service_instance = None
+        yield
+        return
 
     # Save original service instance
     original_service = backend.ai.service._service_instance
 
-    # Create new service with ToolCallingMockProvider
-    tool_calling_provider = ToolCallingMockProvider()
-    mock_service = LLMService(providers=[tool_calling_provider])
-    backend.ai.service._service_instance = mock_service
+    if deployment_type == "TEST":
+        # For TEST mode: use ToolCallingMockProvider
+        tool_calling_provider = ToolCallingMockProvider()
+        mock_service = LLMService(providers=[tool_calling_provider])
+        backend.ai.service._service_instance = mock_service
+    else:
+        # For LOCAL/PROD mode: reset singleton to None so it rebuilds with real provider
+        backend.ai.service._service_instance = None
 
     yield
 

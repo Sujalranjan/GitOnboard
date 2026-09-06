@@ -175,6 +175,34 @@ class LLMGrounder:
                if k not in ["requirement", "relevant_files", "relevant_symbols", "evidence"]}
         )
 
+    @staticmethod
+    def _extract_json_from_response(response: str) -> str:
+        """
+        Extract JSON from model response.
+
+        Handles both:
+        - Plain JSON: {"tool": "...", "parameters": {...}}
+        - Markdown-wrapped JSON: ```json {...} ```
+
+        Args:
+            response: Raw model response
+
+        Returns:
+            JSON string ready for parsing
+        """
+        # Check if response is wrapped in markdown code fences
+        import re
+        # Pattern: ```json\n...\n``` or ```\n...\n```
+        fence_pattern = r"^```(?:json)?\s*\n(.*?)\n```\s*$"
+        match = re.search(fence_pattern, response.strip(), re.DOTALL)
+
+        if match:
+            # Extract JSON from inside fences
+            return match.group(1).strip()
+        else:
+            # Return as-is for plain JSON
+            return response.strip()
+
     def _get_tool_descriptions(self) -> str:
         """Get descriptions of available Phase 2L tools for LLM prompt."""
         return """
@@ -320,8 +348,10 @@ Investigate the repository using the available tools. Start by exploring the rel
 
             # Parse LLM response - look for tool calls or final answer
             try:
+                # Extract JSON from response (handles markdown-wrapped JSON)
+                json_str = self._extract_json_from_response(llm_response)
                 # Try to parse as JSON
-                parsed = json.loads(llm_response)
+                parsed = json.loads(json_str)
                 if "final_answer" in parsed:
                     # LLM has decided to answer
                     final_answer = parsed["final_answer"]
