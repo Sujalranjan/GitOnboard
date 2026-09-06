@@ -18,9 +18,9 @@ from datetime import datetime
 
 from backend.ai.service import get_llm_service
 from backend.ai.schemas import LLMRequest, Message, MessageRole
-from backend.agent.context.contracts import RepositoryContext, ContextEvidence
+from backend.agent.context.contracts import RepositoryContext, ContextEvidence, ContextBudget
 from backend.intelligence.context_management.manager import ContextManager
-from backend.intelligence.context_management.models import ContextBudget, ContextItemPriority
+from backend.intelligence.context_management.models import ContextItemPriority
 from backend.intelligence.engine.orchestration.stage8_phase2l_adapter import (
     Phase2LToolWrapper,
     ExecutionContext,
