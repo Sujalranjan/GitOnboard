@@ -203,12 +203,16 @@ class ContextAssembler7:
             logger.info(f"[Stage 7] Reading actual file content for {len(context.relevant_files)} files...")
             file_contents = {}
             for file_path in context.relevant_files[:10]:  # Limit to first 10 to save tokens
+                logger.info(f"  Attempting to read: {file_path}")
                 content = self._read_file_content(file_path, max_lines=50)
                 if content:
                     file_contents[file_path] = content
-                    logger.info(f"  ✓ {file_path} ({len(content)} chars)")
+                    logger.info(f"  ✓ {file_path} - {len(content)} chars, {len(content.split(chr(10)))} lines")
+                else:
+                    logger.warning(f"  ✗ {file_path} - Failed to read or file empty")
 
             # Add file contents to context evidence
+            logger.info(f"[Stage 7] Successfully read {len(file_contents)} files, adding to evidence...")
             if file_contents:
                 for file_path, content in file_contents.items():
                     # Create evidence item with actual code
@@ -222,8 +226,11 @@ class ContextAssembler7:
                     if not context.evidence:
                         context.evidence = []
                     context.evidence.append(code_evidence)
+                    logger.info(f"  Added evidence: {file_path}")
 
-            logger.info(f"[Stage 7] Added {len(file_contents)} file contents to context")
+                logger.info(f"[Stage 7] ✓ Added {len(file_contents)} file contents to context evidence")
+            else:
+                logger.warning(f"[Stage 7] ✗ No files were successfully read!")
 
         # Collect metrics
         selected_files = context.relevant_files or []

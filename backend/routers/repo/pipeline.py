@@ -234,18 +234,30 @@ def execute_8_stage_pipeline(
             stage7_time = time.time() - stage7_start
             # Diagnostic: Check what's actually in the context
             context_str = str(context)
-            files_with_content = 0
-            if context.relevant_files:
-                for f in context.relevant_files[:3]:
-                    # Check if context has actual file content
-                    if f in context_str and len(context_str) > 500:
-                        files_with_content += 1
+
+            # Check evidence items for actual code content
+            has_code = False
+            code_evidence_count = 0
+            if context.evidence:
+                for evidence in context.evidence:
+                    if evidence.source_type == "source_code" and evidence.detail:
+                        has_code = True
+                        code_evidence_count += 1
 
             logger.info(f"[Stage 7] Context composition:")
-            logger.info(f"  Files: {len(context.relevant_files or [])} (content included: {files_with_content > 0})")
+            logger.info(f"  Files: {len(context.relevant_files or [])}")
             logger.info(f"  Symbols: {len(context.relevant_symbols or [])}")
+            logger.info(f"  Evidence items: {len(context.evidence or [])}")
+            logger.info(f"  Evidence with code: {code_evidence_count}")
             logger.info(f"  Total context size: {metrics.context_size_kb:.1f}KB")
-            logger.info(f"  Context sample (first 500 chars): {context_str[:500]}")
+            logger.info(f"  Has actual code: {has_code}")
+
+            # Show first evidence item to verify content
+            if context.evidence:
+                first_ev = context.evidence[0]
+                logger.info(f"  First evidence: type={first_ev.source_type}, detail_len={len(first_ev.detail or '')}")
+                if first_ev.detail:
+                    logger.info(f"  Content sample: {first_ev.detail[:200]}")
 
             stages["stage_7"] = StageResult(
                 status="PASS",
@@ -254,7 +266,9 @@ def execute_8_stage_pipeline(
                     "files_selected": len(context.relevant_files or []),
                     "symbols_selected": len(context.relevant_symbols or []),
                     "context_size_kb": metrics.context_size_kb,
-                    "context_has_code": "YES" if metrics.context_size_kb > 50 else "METADATA_ONLY",
+                    "evidence_items": len(context.evidence or []),
+                    "evidence_with_code": code_evidence_count,
+                    "context_has_code": "YES" if has_code else "METADATA_ONLY",
                 }
             )
         except Exception as e:
