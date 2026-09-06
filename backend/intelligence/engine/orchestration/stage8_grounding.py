@@ -412,9 +412,26 @@ Investigate the repository using the available tools. Start by exploring the rel
                         role=MessageRole.ASSISTANT,
                         content=llm_response,
                     ))
+
+                    # PART F FIX: Add recovery guidance after tool failures
+                    tool_result_msg = json.dumps(tool_result)
+                    if not tool_result.get("success", False):
+                        # Tool failed - add recovery guidance
+                        failure_reason = tool_result.get("error", "Unknown error")
+                        recovery_guidance = (
+                            f"\n⚠️ TOOL FAILURE GUIDANCE:\n"
+                            f"The {tool_name} operation failed: {failure_reason}\n"
+                            f"NEXT STEPS (choose one):\n"
+                            f"1. If file does not exist: try a different file, or check the list_context for available files\n"
+                            f"2. If symbol not found: inspect_file first to see available symbols, then try reading a different symbol\n"
+                            f"3. If you have enough information from previous results: provide your final_answer\n"
+                            f"4. Do NOT repeat the same failed operation - it will fail again"
+                        )
+                        tool_result_msg += "\n" + recovery_guidance
+
                     messages.append(Message(
                         role=MessageRole.TOOL,
-                        content=json.dumps(tool_result),
+                        content=tool_result_msg,
                     ))
 
                     tool_wrapper._emit_event(

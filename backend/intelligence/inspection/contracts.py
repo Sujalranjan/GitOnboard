@@ -64,7 +64,7 @@ class FileSymbol(BaseModel):
     qualified_name: str
     symbol_type: str  # function, class, method, variable, interface
     line_start: int
-    line_end: int
+    line_end: Optional[int] = None
     symbol_id: str
     parent_symbol: Optional[str] = None
 

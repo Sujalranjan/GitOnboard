@@ -526,6 +526,60 @@ class HybridRetriever:
             lexical_candidates.append(c)
         return lexical_candidates
 
+    def _validate_file_existence(self, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Validate that retrieved file references exist in FactStore.
+
+        Filters out candidates that reference non-existent files.
+        This prevents Stage 5 from returning stale/invalid metadata.
+
+        PART D FIX: Addresses A1 issue (non-existent files in retrieval results).
+        """
+        if not self.analysis_id or not self.db:
+            return candidates
+
+        # Build set of valid file paths for this analysis
+        valid_files = set()
+        try:
+            fact_files = self.db.query(FactFile).filter(
+                FactFile.analysis_id == self.analysis_id
+            ).all()
+            for f in fact_files:
+                valid_files.add(f.path)
+        except Exception as e:
+            logger.warning(f"Could not validate file existence: {e}")
+            return candidates
+
+        # Filter candidates
+        valid_candidates = []
+        filtered_count = 0
+        for candidate in candidates:
+            file_path = candidate.get("file_path", "")
+
+            if not file_path:
+                # No file path - skip validation
+                valid_candidates.append(candidate)
+                continue
+
+            if file_path in valid_files:
+                # File exists in FactStore for this analysis
+                valid_candidates.append(candidate)
+            else:
+                # File does not exist - filter out and log
+                filtered_count += 1
+                logger.warning(
+                    f"[Retrieval] Filtered invalid file from results: {file_path} "
+                    f"(analysis_id={self.analysis_id}). Entity: {candidate.get('name', 'unknown')}"
+                )
+
+        if filtered_count > 0:
+            logger.info(
+                f"[Retrieval] Validation filtered {filtered_count} invalid files from "
+                f"{len(candidates)} candidates (kept {len(valid_candidates)})"
+            )
+
+        return valid_candidates
+
     def retrieve(
         self,
         query: str,
@@ -643,6 +697,9 @@ class HybridRetriever:
             logger.info(f"[Retrieval] Using traditional fact store expansion for query: {query[:50]}...")
             expander = FactStoreExpander(self.db, self.analysis_id, max_expansions_per_seed=2, max_total_context=top_k)
             fused = expander.expand_candidates(fused)
+
+        # Step 6: Validate retrieved file references exist in FactStore (PART D FIX)
+        fused = self._validate_file_existence(fused)
 
         # Convert to canonical schema
         return self._convert_to_schema(fused[:top_k])
