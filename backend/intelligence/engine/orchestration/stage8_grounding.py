@@ -134,8 +134,31 @@ class LLMGrounder:
         import time
         start_time = time.time()
 
+        # LOG: What context are we receiving from Stage 7?
+        logger.info(f"\n[Stage 8] RECEIVED CONTEXT FROM STAGE 7:")
+        logger.info(f"  Relevant files: {len(context.relevant_files or [])} - {context.relevant_files[:3]}")
+        logger.info(f"  Relevant symbols: {len(context.relevant_symbols or [])}")
+        logger.info(f"  Evidence items: {len(context.evidence or [])}")
+
+        # Check for actual code in evidence
+        code_evidence = []
+        if context.evidence:
+            for i, ev in enumerate(context.evidence[:5]):
+                logger.info(f"  Evidence[{i}]: type={ev.source_type}, source_id={ev.source_id}")
+                if ev.data and "content" in ev.data:
+                    content_len = len(ev.data.get("content", ""))
+                    code_evidence.append(f"{ev.source_id} ({content_len} chars)")
+                    logger.info(f"    → HAS CODE: {content_len} chars")
+                    logger.info(f"    → First 300 chars:\n{ev.data.get('content', '')[:300]}")
+                else:
+                    logger.info(f"    → NO CODE (only metadata)")
+
+        logger.info(f"  Total evidence items with actual code: {len(code_evidence)}")
+
         # Build grounding message
         context_json = context.model_dump_json(indent=2) if hasattr(context, 'model_dump_json') else str(context)
+        logger.info(f"\n[Stage 8] CONTEXT JSON SIZE: {len(context_json)} chars ({len(context_json)/1024:.1f}KB)")
+        logger.info(f"  First 500 chars of context:\n{context_json[:500]}")
 
         messages = [
             Message(
@@ -172,6 +195,17 @@ Answer based ONLY on the provided context. Cite specific files and symbols."""
             answer = response.content if hasattr(response, 'content') else str(response)
 
             llm_latency = time.time() - start_time
+
+            # LOG: What did LLM receive and respond with?
+            logger.info(f"\n[Stage 8] LLM CALL COMPLETED:")
+            logger.info(f"  Latency: {llm_latency:.2f}s")
+            logger.info(f"  Query sent: {query}")
+            logger.info(f"  Context size sent: {len(context_json)/1024:.1f}KB")
+            logger.info(f"  Answer received ({len(answer)} chars):")
+            logger.info(f"    {answer[:500]}")
+            if len(answer) > 500:
+                logger.info(f"    ... [truncated] ...")
+                logger.info(f"    {answer[-300:]}")
 
             # Validate grounding
             validator = GroundingValidator(context)

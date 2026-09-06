@@ -215,16 +215,24 @@ class ContextAssembler7:
             logger.info(f"[Stage 7] Successfully read {len(file_contents)} files, adding to evidence...")
             if file_contents:
                 for file_path, content in file_contents.items():
+                    # LOG EXACT CONTENT BEING ADDED
+                    content_lines = content.split('\n')
+                    logger.info(f"\n[Stage 7] ADDING FILE CONTENT TO CONTEXT:")
+                    logger.info(f"  File: {file_path}")
+                    logger.info(f"  Total chars: {len(content)}")
+                    logger.info(f"  Total lines: {len(content_lines)}")
+                    logger.info(f"  First 500 chars:\n{content[:500]}")
+                    logger.info(f"  Last 200 chars:\n{content[-200:]}")
+
                     # Create evidence item with actual code in 'data' field
-                    # (ContextEvidence uses 'data' dict, not 'detail')
                     code_evidence = ContextEvidence(
-                        source_type="source_excerpt",  # Use source_excerpt type
+                        source_type="source_excerpt",
                         source_id=file_path,
                         summary=f"Source code excerpt from {file_path}",
                         data={
                             "file_path": file_path,
                             "content": content,
-                            "lines": len(content.split('\n')),
+                            "lines": len(content_lines),
                             "chars": len(content),
                         },
                         metadata={
@@ -237,9 +245,16 @@ class ContextAssembler7:
                     if not context.evidence:
                         context.evidence = []
                     context.evidence.append(code_evidence)
-                    logger.info(f"  ✓ Added evidence: {file_path} ({len(content)} chars)")
 
-                logger.info(f"[Stage 7] ✓ Added {len(file_contents)} file contents to context evidence (total evidence items: {len(context.evidence)})")
+                    # VERIFY IT WAS ADDED
+                    added_evidence = context.evidence[-1]
+                    logger.info(f"  ✓ VERIFIED in context.evidence[{len(context.evidence)-1}]:")
+                    logger.info(f"    - source_type: {added_evidence.source_type}")
+                    logger.info(f"    - source_id: {added_evidence.source_id}")
+                    logger.info(f"    - data['content'] length: {len(added_evidence.data.get('content', ''))}")
+                    logger.info(f"    - data['content'] first 200 chars: {added_evidence.data.get('content', '')[:200]}")
+
+                logger.info(f"\n[Stage 7] ✓ COMPLETE: Added {len(file_contents)} files to evidence (total items: {len(context.evidence)})")
             else:
                 logger.warning(f"[Stage 7] ✗ No files were successfully read!")
 
