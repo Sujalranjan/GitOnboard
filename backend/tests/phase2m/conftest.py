@@ -16,6 +16,8 @@ from backend.models.repository import Analysis, Repository
 from backend.models.user import User
 from backend.ai.service import LLMService
 from backend.ai.providers.mock_tool_calling import ToolCallingMockProvider
+from backend.agent.context.contracts import RepositoryContext, ContextEvidence
+from backend.intelligence.engine.orchestration.stage8_phase2l_adapter import ExecutionContext
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -83,6 +85,46 @@ def test_analysis(db: Session, test_repository: Repository) -> Analysis:
     db.commit()
     db.refresh(analysis)
     return analysis
+
+
+@pytest.fixture
+def gitboard_execution_context(db: Session, test_analysis: Analysis) -> ExecutionContext:
+    """Create ExecutionContext for Phase 2M testing."""
+    return ExecutionContext(
+        analysis_id=test_analysis.id,
+        repo_root="/home/dheeraj/repository_intelligence_platform",
+        db=db,
+        repo_name="default",
+    )
+
+
+@pytest.fixture
+def gitboard_login_query_context() -> RepositoryContext:
+    """Create RepositoryContext for login query using real retrieval."""
+    # These would normally come from Stage 5/6 retrieval
+    return RepositoryContext(
+        repository_id="gitonboard",
+        requirement="How does login work? Explain the authentication flow.",
+        relevant_files=[
+            "backend/routers/auth.py",
+            "backend/services/auth_service.py",
+            "backend/models/user.py",
+        ],
+        relevant_symbols=[
+            {"name": "login_route", "file": "backend/routers/auth.py"},
+            {"name": "authenticate", "file": "backend/services/auth_service.py"},
+        ],
+        evidence=[
+            ContextEvidence(
+                source_type="rim_fact",
+                source_id="auth_flow",
+                summary="Authentication route and service",
+                data={"relationship": "login_route calls authenticate"},
+                confidence=0.95,
+                relevance=0.9,
+            )
+        ],
+    )
 
 
 @pytest.fixture(autouse=True)
