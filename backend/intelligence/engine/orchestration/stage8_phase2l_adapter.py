@@ -21,8 +21,7 @@ from sqlalchemy.orm import Session
 from backend.intelligence.inspection.file_inspector import inspect_file
 from backend.intelligence.inspection.source_reader import read_symbol, read_file, read_lines
 from backend.intelligence.context_management.manager import ContextManager
-from backend.intelligence.context_management.models import ContextBudget
-from backend.agent.context.contracts import ContextEvidence
+from backend.agent.context.contracts import ContextEvidence, ContextBudget
 
 logger = logging.getLogger(__name__)
 
