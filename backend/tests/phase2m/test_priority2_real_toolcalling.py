@@ -23,30 +23,10 @@ from backend.models.repository import Analysis
 
 
 @pytest.fixture
-def gitboard_execution_context(db: Session) -> ExecutionContext:
-    """Create execution context using real GitOnboard repository."""
-    # Get or create a test analysis
-    analysis = db.query(Analysis).first()
-    if not analysis:
-        # Create a test repository and analysis
-        from backend.models.repository import Repository
-        repo = Repository(
-            name="test-gitonboard",
-            url="file:///home/dheeraj/repository_intelligence_platform",
-            platform="local",
-        )
-        db.add(repo)
-        db.flush()
-
-        analysis = Analysis(
-            repository_id=repo.id,
-            status="completed",
-        )
-        db.add(analysis)
-        db.commit()
-
+def gitboard_execution_context(db: Session, test_analysis: Analysis) -> ExecutionContext:
+    """Create execution context using test analysis and real GitOnboard repository."""
     return ExecutionContext(
-        analysis_id=analysis.id,
+        analysis_id=test_analysis.id,
         repo_root="/home/dheeraj/repository_intelligence_platform",
         db=db,
         repo_name="default",
