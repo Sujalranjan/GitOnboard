@@ -76,14 +76,19 @@ def execute_8_stage_pipeline(
             # Get repository
             repo, analysis = get_latest_analysis(repo_name, db, current_user)
 
-            # Try to load existing model first
+            # Try to load existing model from fact store
+            from backend.intelligence.store.fact_store import load_rim_from_fact_store
+
             try:
-                query_layer = get_or_build_model(repo_name, db, current_user)
-                model = query_layer.model
-                logger.info(f"Loaded existing model for {repo_name}")
-            except Exception:
-                # No existing model - run full analysis
-                logger.info(f"No model found, running full analysis for {repo_name}")
+                model = load_rim_from_fact_store(db, analysis.id)
+                logger.info(f"Loaded existing model for {repo_name} from fact store")
+
+                if not model.entities or not model.relationships:
+                    raise Exception("Model is empty - needs re-analysis")
+
+            except Exception as e:
+                # No existing model or incomplete - run full analysis
+                logger.info(f"No model or incomplete model found ({e}), running full analysis for {repo_name}")
                 from backend.intelligence.engine.orchestration.pipeline import AnalysisEngine
                 from backend.intelligence.engine.analyzers import get_default_registry
                 from backend.intelligence.store.fact_store import save_rim_to_fact_store
@@ -96,7 +101,7 @@ def execute_8_stage_pipeline(
                     skip_validation=True
                 )
 
-                # Save model to database
+                # Save model to fact store
                 save_rim_to_fact_store(db, analysis.id, model)
                 db.commit()
                 logger.info(f"Model saved for analysis {analysis.id}")
