@@ -240,7 +240,8 @@ def execute_8_stage_pipeline(
             code_evidence_count = 0
             if context.evidence:
                 for evidence in context.evidence:
-                    if evidence.source_type == "source_code" and evidence.detail:
+                    # Check if evidence has actual code in 'data' field
+                    if evidence.source_type == "source_excerpt" and evidence.data.get("content"):
                         has_code = True
                         code_evidence_count += 1
 
@@ -255,9 +256,11 @@ def execute_8_stage_pipeline(
             # Show first evidence item to verify content
             if context.evidence:
                 first_ev = context.evidence[0]
-                logger.info(f"  First evidence: type={first_ev.source_type}, detail_len={len(first_ev.detail or '')}")
-                if first_ev.detail:
-                    logger.info(f"  Content sample: {first_ev.detail[:200]}")
+                logger.info(f"  First evidence: type={first_ev.source_type}, source_id={first_ev.source_id}")
+                if first_ev.data and "content" in first_ev.data:
+                    content_len = len(first_ev.data.get("content", ""))
+                    content_sample = first_ev.data.get("content", "")[:200]
+                    logger.info(f"  Content: {content_len} chars, sample: {content_sample}")
 
             stages["stage_7"] = StageResult(
                 status="PASS",
