@@ -47,6 +47,24 @@ def read_symbol(
         SourceReadResult with symbol source code
     """
     try:
+        # PHASE 2L.2: Validate analysis context to prevent silent failures
+        if analysis_id is None and (repo_name is None or repo_name == "default"):
+            # Missing analysis context - return explicit error rather than silent empty
+            return SourceReadResult(
+                file_path=file_path,
+                source="",
+                raw_text="",
+                line_start=0,
+                line_end=0,
+                total_lines=0,
+                file_size_kb=0.0,
+                language=detect_language(file_path),
+                symbol_name=symbol_name,
+                success=False,
+                error="REPOSITORY_CONTEXT_ERROR: analysis_id is required for source reading when repo_name='default'. "
+                      "Please provide analysis_id explicitly."
+            )
+
         # Initialize RepositoryToolLayer
         tool_layer = RepositoryToolLayer(
             repo_name=repo_name,
