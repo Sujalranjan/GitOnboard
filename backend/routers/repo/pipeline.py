@@ -74,8 +74,13 @@ def execute_8_stage_pipeline(
         stage1_start = time.time()
         try:
             # Get or build the repository model (combines Stages 1-2)
-            model = get_or_build_model(repo_name, db, current_user)
+            # Note: get_or_build_model returns QueryLayer, which wraps the actual model
+            query_layer = get_or_build_model(repo_name, db, current_user)
             repo, analysis = get_latest_analysis(repo_name, db, current_user)
+
+            # Extract the actual model from QueryLayer
+            model = query_layer.model
+
             stage1_time = time.time() - stage1_start
             stages["stage_1"] = StageResult(
                 status="PASS",
