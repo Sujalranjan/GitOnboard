@@ -115,28 +115,28 @@ export default function PipelinePage() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold mb-2 text-slate-900">8-Stage Pipeline</h1>
-      <p className="text-slate-600 mb-8">
+      <h1 className="text-3xl font-bold mb-2 text-slate-900 dark:text-slate-100">8-Stage Pipeline</h1>
+      <p className="text-slate-600 dark:text-slate-400 mb-8">
         Execute the complete intelligence pipeline: Parse → Index → Retrieve → Graph → Context → Ground
       </p>
 
       {/* Query Input */}
-      <div className="bg-white rounded-lg border border-slate-200 p-6 mb-8">
-        <label className="block text-sm font-semibold text-slate-700 mb-3">
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 p-6 mb-8">
+        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
           Query
         </label>
         <textarea
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="e.g., Where is authentication implemented? How does the analysis engine work?"
-          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+          className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
           rows={3}
           disabled={isExecuting}
         />
 
         <div className="flex gap-4 items-end">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
+            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
               Top K Results
             </label>
             <input
@@ -145,7 +145,7 @@ export default function PipelinePage() {
               onChange={(e) => setTopK(Math.max(1, parseInt(e.target.value) || 5))}
               min="1"
               max="20"
-              className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
               disabled={isExecuting}
             />
           </div>
@@ -162,7 +162,7 @@ export default function PipelinePage() {
 
       {/* Error Display */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8 text-red-700">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-8 text-red-700 dark:text-red-400">
           <p className="font-semibold">Error</p>
           <p className="text-sm">{error}</p>
         </div>
@@ -171,17 +171,17 @@ export default function PipelinePage() {
       {/* Results */}
       {result && (
         <div className="space-y-6">
-          <div className="bg-slate-50 rounded-lg border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-2">Query</h2>
-            <p className="text-slate-700">{result.query}</p>
-            <p className="text-sm text-slate-500 mt-3">
+          <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 p-6">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">Query</h2>
+            <p className="text-slate-700 dark:text-slate-300">{result.query}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-3">
               Total execution time: <span className="font-mono font-semibold">{result.total_time.toFixed(2)}s</span>
             </p>
           </div>
 
           {/* Stages Results */}
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-900">Pipeline Stages</h2>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Pipeline Stages</h2>
             {Object.entries(result.stages)
               .sort(([a], [b]) => getStageNumber(a) - getStageNumber(b))
               .map(([key, stage]) => {
@@ -191,23 +191,23 @@ export default function PipelinePage() {
                 return (
                   <div
                     key={key}
-                    className="bg-white border border-slate-200 rounded-lg p-6 hover:shadow-md transition-shadow"
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-6 hover:shadow-md dark:hover:shadow-lg transition-shadow"
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <h3 className="text-base font-semibold text-slate-900">
+                        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                           <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full mr-2 ${getStatusColor(stage.status)}`}>
                             {getStatusIcon(stage.status)}
                           </span>
                           Stage {stageNum}: {key.replace(/_/g, " ")}
                         </h3>
-                        <p className="text-sm text-slate-600 mt-1">{description}</p>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{description}</p>
                       </div>
                       <div className="text-right ml-4">
                         <div className={`text-sm font-semibold ${getStatusColor(stage.status)}`}>
                           {stage.status}
                         </div>
-                        <div className="text-xs text-slate-500 font-mono mt-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">
                           {stage.time.toFixed(3)}s
                         </div>
                       </div>
@@ -215,11 +215,11 @@ export default function PipelinePage() {
 
                     {/* Details */}
                     {stage.details && (
-                      <div className="mt-4 bg-slate-50 rounded p-4 text-sm">
+                      <div className="mt-4 bg-slate-50 dark:bg-slate-800 rounded p-4 text-sm">
                         <div className="space-y-1">
                           {Object.entries(stage.details).map(([key, value]) => (
-                            <div key={key} className="flex justify-between text-slate-700">
-                              <span className="font-mono text-slate-600">{key}:</span>
+                            <div key={key} className="flex justify-between text-slate-700 dark:text-slate-300">
+                              <span className="font-mono text-slate-600 dark:text-slate-400">{key}:</span>
                               <span className="font-semibold">
                                 {typeof value === "object"
                                   ? JSON.stringify(value)
@@ -233,7 +233,7 @@ export default function PipelinePage() {
 
                     {/* Error */}
                     {stage.error && (
-                      <div className="mt-3 bg-red-50 border border-red-200 rounded p-3 text-xs text-red-700">
+                      <div className="mt-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-3 text-xs text-red-700 dark:text-red-400">
                         <p className="font-semibold">Error</p>
                         <p className="font-mono">{stage.error}</p>
                       </div>
@@ -244,9 +244,9 @@ export default function PipelinePage() {
           </div>
 
           {/* Summary */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-6 mt-8">
-            <h3 className="font-semibold text-green-900 mb-2">Pipeline Complete</h3>
-            <p className="text-sm text-green-800">
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6 mt-8">
+            <h3 className="font-semibold text-green-900 dark:text-green-400 mb-2">Pipeline Complete</h3>
+            <p className="text-sm text-green-800 dark:text-green-300">
               All stages executed successfully in {result.total_time.toFixed(2)} seconds
             </p>
           </div>
@@ -257,7 +257,7 @@ export default function PipelinePage() {
       {isExecuting && (
         <div className="flex flex-col items-center justify-center py-12">
           <LoadingSpinner />
-          <p className="mt-4 text-slate-600">Executing pipeline stages...</p>
+          <p className="mt-4 text-slate-600 dark:text-slate-400">Executing pipeline stages...</p>
         </div>
       )}
     </div>
