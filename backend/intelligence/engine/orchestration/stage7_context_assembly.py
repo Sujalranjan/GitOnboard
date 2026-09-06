@@ -116,6 +116,21 @@ class ContextAssembler7:
         self.db = db
         self.validator = ContextAssemblyValidator()
 
+    def _read_file_content(self, file_path: str, max_lines: int = 100) -> Optional[str]:
+        """Read actual file content from disk."""
+        try:
+            from pathlib import Path
+            fp = Path(file_path)
+            if not fp.exists():
+                return None
+
+            content = fp.read_text(encoding='utf-8', errors='ignore')
+            lines = content.split('\n')[:max_lines]
+            return '\n'.join(lines)
+        except Exception as e:
+            logger.warning(f"Could not read file {file_path}: {e}")
+            return None
+
     def assemble(
         self,
         query: str,
@@ -181,6 +196,34 @@ class ContextAssembler7:
 
         # Validate assembled context
         validated, errors = self.validator.validate(context, graph_result, query)
+
+        # ENHANCEMENT: Add actual file content to context
+        # This ensures LLM gets real code, not just metadata
+        if context.relevant_files:
+            logger.info(f"[Stage 7] Reading actual file content for {len(context.relevant_files)} files...")
+            file_contents = {}
+            for file_path in context.relevant_files[:10]:  # Limit to first 10 to save tokens
+                content = self._read_file_content(file_path, max_lines=50)
+                if content:
+                    file_contents[file_path] = content
+                    logger.info(f"  ✓ {file_path} ({len(content)} chars)")
+
+            # Add file contents to context evidence
+            if file_contents:
+                for file_path, content in file_contents.items():
+                    # Create evidence item with actual code
+                    code_evidence = ContextEvidence(
+                        source_type="source_code",
+                        source_id=file_path,
+                        summary=f"Source code from {file_path}",
+                        detail=content,
+                        confidence=1.0,
+                    )
+                    if not context.evidence:
+                        context.evidence = []
+                    context.evidence.append(code_evidence)
+
+            logger.info(f"[Stage 7] Added {len(file_contents)} file contents to context")
 
         # Collect metrics
         selected_files = context.relevant_files or []
