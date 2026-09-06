@@ -11,6 +11,7 @@ from .intelligence import intelligence_router
 from .symbols import symbols_router
 from .rim_comparison_v2 import rim_comparison_router
 from .benchmark_pilot import benchmark_pilot_router
+from .pipeline import pipeline_router
 
 repo_router = APIRouter()
 repo_router.add_api_route("", list_repos, methods=["GET"], tags=["repositories"])
@@ -26,5 +27,6 @@ repo_router.include_router(intelligence_router)
 repo_router.include_router(symbols_router)
 repo_router.include_router(rim_comparison_router)
 repo_router.include_router(benchmark_pilot_router)
+repo_router.include_router(pipeline_router)
 
 __all__ = ["repo_router", "import_router"]
