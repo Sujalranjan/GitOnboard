@@ -38,6 +38,20 @@ def inspect_file(
         InspectFileResult with file metadata and symbols
     """
     try:
+        # PHASE 2L.2: Validate analysis context to prevent silent failures
+        if analysis_id is None and (repo_name is None or repo_name == "default"):
+            # Missing analysis context - return explicit error rather than silent empty
+            return InspectFileResult(
+                file_path=file_path,
+                language="unknown",
+                total_lines=0,
+                file_size_kb=0.0,
+                symbols=[],
+                success=False,
+                error="REPOSITORY_CONTEXT_ERROR: analysis_id is required for file inspection when repo_name='default'. "
+                      "Please provide analysis_id explicitly."
+            )
+
         # Initialize RepositoryToolLayer
         tool_layer = RepositoryToolLayer(
             repo_name=repo_name,
