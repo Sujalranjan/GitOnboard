@@ -67,10 +67,8 @@ def inspect_file(
         # Extract language from file extension
         language = detect_language(file_path)
 
-        # Get file size and metadata from FactFile if available
-        total_lines = 0
-        file_size_kb = 0.0
-
+        # PART E FIX: Check if file exists in FactStore before proceeding
+        fact_file = None
         if db and tool_layer.analysis_id:
             fact_file = (
                 db.query(FactFile)
@@ -80,8 +78,24 @@ def inspect_file(
                 )
                 .first()
             )
-            if fact_file:
-                file_size_kb = calculate_file_size_kb(fact_file.size or 0)
+            if not fact_file:
+                # File not found in FactStore for this analysis
+                return InspectFileResult(
+                    file_path=file_path,
+                    language=language,
+                    total_lines=0,
+                    file_size_kb=0.0,
+                    symbols=[],
+                    success=False,
+                    error=f"FILE_NOT_FOUND: Repository file '{file_path}' does not exist or has not been analyzed.",
+                )
+
+        # Get file size and metadata from FactFile
+        total_lines = 0
+        file_size_kb = 0.0
+
+        if db and tool_layer.analysis_id and fact_file:
+            file_size_kb = calculate_file_size_kb(fact_file.size or 0)
         else:
             # Try filesystem fallback
             if tool_layer.repo_root:
@@ -103,13 +117,16 @@ def inspect_file(
         # Convert outline symbols to FileSymbol objects
         symbols: list[FileSymbol] = []
         for sym in outline.get("symbols", []):
+            line_end = sym.get("line_end")
+            if line_end is None:
+                line_end = sym.get("line_start", 0)  # Use line_start as fallback
             symbols.append(
                 FileSymbol(
                     name=sym["name"],
                     qualified_name=sym.get("qualified_name", sym["name"]),
                     symbol_type=sym["type"],
                     line_start=sym.get("line_start", 0),
-                    line_end=sym.get("line_end", 0),
+                    line_end=line_end,
                     symbol_id=sym.get("symbol_id", f"{file_path}:{sym['name']}"),
                     parent_symbol=sym.get("parent_symbol"),
                 )
