@@ -202,12 +202,20 @@ class ContextAssembler7:
         if context.relevant_files:
             logger.info(f"[Stage 7] Reading actual file content for {len(context.relevant_files)} files...")
             file_contents = {}
-            for file_path in context.relevant_files[:10]:  # Limit to first 10 to save tokens
+            total_content_size = 0
+            max_content_size = 200_000  # 200KB total for file contents
+
+            for file_path in context.relevant_files:  # Read all selected files
+                if total_content_size > max_content_size:
+                    logger.info(f"[Stage 7] Reached max content size ({max_content_size} bytes), stopping file reads")
+                    break
+
                 logger.info(f"  Attempting to read: {file_path}")
-                content = self._read_file_content(file_path, max_lines=50)
+                content = self._read_file_content(file_path, max_lines=200)
                 if content:
                     file_contents[file_path] = content
-                    logger.info(f"  ✓ {file_path} - {len(content)} chars, {len(content.split(chr(10)))} lines")
+                    total_content_size += len(content)
+                    logger.info(f"  ✓ {file_path} - {len(content)} chars, {len(content.split(chr(10)))} lines (total: {total_content_size})")
                 else:
                     logger.warning(f"  ✗ {file_path} - Failed to read or file empty")
 
