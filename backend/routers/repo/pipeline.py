@@ -262,6 +262,19 @@ def execute_8_stage_pipeline(
                     content_sample = first_ev.data.get("content", "")[:200]
                     logger.info(f"  Content: {content_len} chars, sample: {content_sample}")
 
+            # Include actual code samples in response for transparency
+            code_samples = {}
+            if context.evidence:
+                for i, ev in enumerate(context.evidence[:3]):  # First 3 evidence items
+                    if ev.data and "content" in ev.data:
+                        content = ev.data.get("content", "")
+                        code_samples[ev.source_id] = {
+                            "size_chars": len(content),
+                            "lines": len(content.split('\n')),
+                            "first_200_chars": content[:200],
+                            "last_100_chars": content[-100:],
+                        }
+
             stages["stage_7"] = StageResult(
                 status="PASS",
                 time=stage7_time,
@@ -272,6 +285,7 @@ def execute_8_stage_pipeline(
                     "evidence_items": len(context.evidence or []),
                     "evidence_with_code": code_evidence_count,
                     "context_has_code": "YES" if has_code else "METADATA_ONLY",
+                    "code_samples": code_samples,  # Show actual code delivered
                 }
             )
         except Exception as e:
@@ -287,11 +301,30 @@ def execute_8_stage_pipeline(
             answer, grounding = stage8_sync_wrapper(context, request.query)
 
             stage8_time = time.time() - stage8_start
+            # Show what context was sent to LLM and what LLM returned
+            context_sent_to_llm = {
+                "files_in_context": len(context.relevant_files or []),
+                "symbols_in_context": len(context.relevant_symbols or []),
+                "evidence_items_sent": len(context.evidence or []),
+            }
+
+            # Count how many evidence items had actual code
+            evidence_with_code_in_response = 0
+            if context.evidence:
+                for ev in context.evidence:
+                    if ev.data and "content" in ev.data and ev.data.get("content"):
+                        evidence_with_code_in_response += 1
+
+            context_sent_to_llm["evidence_items_with_code"] = evidence_with_code_in_response
+
             stages["stage_8"] = StageResult(
                 status="PASS",
                 time=stage8_time,
                 details={
+                    "context_received_from_stage_7": context_sent_to_llm,
                     "answer": answer,  # Full answer, not truncated
+                    "answer_length_chars": len(answer),
+                    "answer_preview": answer[:300] + "..." if len(answer) > 300 else answer,
                     "grounding_status": grounding.grounding_status,
                     "grounded_entities": len(grounding.grounded_entities),
                 }
