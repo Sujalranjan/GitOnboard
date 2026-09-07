@@ -284,20 +284,11 @@ class HybridRetriever:
                 "line_end": l_end,
             })
 
-        # 5. Index Capabilities
-        caps = self.db.query(FactCapability).filter(FactCapability.analysis_id == self.analysis_id).all()
-        for c in caps:
-            search_text = f"capability {c.name} {c.capability_type or ''} {c.evidence_summary or ''}"
-            docs.append({
-                "id": c.id,
-                "name": c.name,
-                "qualified_name": c.name,
-                "type": "capability",
-                "file_path": "",
-                "search_text": search_text,
-                "match_type": "capability",
-                "match_name": c.name,
-            })
+        # 5. Index Capabilities (DISABLED)
+        # Capabilities are abstract concepts without file locations.
+        # Indexing them causes empty file_path to propagate downstream, breaking inspection tools.
+        # For code navigation queries, files and symbols are sufficient.
+        # If capability search is needed in future, link capabilities to their source files first.
 
         self.bm25_index = BM25Index()
         self.bm25_index.index(docs, text_key="search_text")
@@ -557,8 +548,17 @@ class HybridRetriever:
             file_path = candidate.get("file_path", "")
 
             if not file_path:
-                # No file path - skip validation
-                valid_candidates.append(candidate)
+                # Empty file path indicates:
+                # 1. Capability (abstract concept without location)
+                # 2. Entity missing file reference (metadata error)
+                # Both should be filtered out for code navigation queries
+                entity_type = candidate.get("type", candidate.get("match_type", "unknown"))
+                filtered_count += 1
+                logger.warning(
+                    f"[Retrieval] Filtered candidate with empty file_path: "
+                    f"type={entity_type}, name={candidate.get('name', 'unknown')} "
+                    f"(analysis_id={self.analysis_id})"
+                )
                 continue
 
             if file_path in valid_files:
