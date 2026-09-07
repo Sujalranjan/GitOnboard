@@ -137,15 +137,28 @@ class AnalysisWorker(WorkerInterface):
                             if p:
                                 file_entities_by_path[p] = e
 
-                    ignored_dirs = {".git", "node_modules", ".venv", "venv", "__pycache__", ".idea", ".vscode"}
+                    # Only upload code files, skip dot-folders and build artifacts
+                    ignored_dirs = {
+                        ".git", ".gitignore", ".github",
+                        "node_modules", "venv", ".venv", ".env",
+                        "build", "dist", "out", "target",
+                        "__pycache__", ".pytest_cache", ".tox", ".mypy_cache",
+                        ".vscode", ".idea", ".next", ".nuxt", "coverage", ".coverage"
+                    }
+                    code_extensions = {".py", ".js", ".ts", ".tsx", ".jsx"}
 
-                    # Count total files for progress tracking
+                    # Count total files for progress tracking (code files only)
                     all_files = []
                     for root, dirs, files in os.walk(target_dir):
-                        dirs[:] = [d for d in dirs if d not in ignored_dirs]
+                        # Skip ignored directories and dot-folders
+                        dirs[:] = [d for d in dirs if d not in ignored_dirs and not d.startswith(".")]
                         for f in files:
+                            # Skip hidden files and non-code files
+                            if f.startswith("."):
+                                continue
                             full_p = Path(root) / f
-                            if full_p.is_file():
+                            # Only upload code files
+                            if full_p.suffix.lower() in code_extensions and full_p.is_file():
                                 all_files.append(full_p)
 
                     progress = ProgressTracker(db, analysis.id)
