@@ -466,6 +466,23 @@ class AnalysisWorker(WorkerInterface):
                 logger.info(f"Job {job_id}: status → Completed")
                 logger.info(f"Job {job_id} completed successfully.")
 
+                # Clean up PostgreSQL temporary work files immediately
+                # (prevents 1-2GB temp file accumulation per analysis)
+                try:
+                    import shutil
+                    import os
+                    pg_tmp_path = Path("/var/lib/postgresql/data/base/pgsql_tmp")
+                    if pg_tmp_path.exists():
+                        for tmp_file in pg_tmp_path.glob("pgsql_tmp*"):
+                            try:
+                                if tmp_file.is_file():
+                                    tmp_file.unlink()
+                                    logger.debug(f"Cleaned temp file: {tmp_file.name}")
+                            except Exception:
+                                pass
+                except Exception as cleanup_err:
+                    logger.debug(f"PostgreSQL temp cleanup note: {cleanup_err}")
+
                 # Queue semantic indexing as background job (non-blocking, silent)
                 # Runs after analysis is marked READY, doesn't interfere with retrieval
                 if rim_model and rim_model.entities:

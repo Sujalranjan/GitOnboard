@@ -22,11 +22,22 @@ def generate_fingerprint(target_dir: Path) -> str:
 
 class RepositoryBuilder:
     """Pure entity ingestion layer. Scans directory and parses AST exactly once."""
-    
+
+    # Only analyze code files
+    CODE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx"}
+
     def __init__(self, repo_name: str, target_dir: Path):
         self.repo_name = repo_name
         self.target_dir = target_dir
-        self.ignored_dirs = {".git", "node_modules", "venv", "build", "dist", "__pycache__"}
+        # Ignore common build/cache/version-control directories
+        self.ignored_dirs = {
+            ".git", ".gitignore", ".github",
+            "node_modules", "venv", ".venv", ".env",
+            "build", "dist", "out", "target",
+            "__pycache__", ".pytest_cache", ".tox", ".mypy_cache",
+            ".vscode", ".idea", ".venv", "env",
+            ".next", ".nuxt", "coverage", ".coverage"
+        }
         self.parser = LanguageParser()
 
     def build(self) -> RepositoryModel:
@@ -40,8 +51,9 @@ class RepositoryBuilder:
         entities = RepositoryEntities()
         
         for root, dirs, files in os.walk(self.target_dir):
-            dirs[:] = [d for d in dirs if d not in self.ignored_dirs]
-            
+            # Skip ignored directories and dot-folders
+            dirs[:] = [d for d in dirs if d not in self.ignored_dirs and not d.startswith(".")]
+
             rel_root = str(Path(root).relative_to(self.target_dir)).replace("\\", "/")
             if rel_root != ".":
                 dir_id = rel_root
@@ -50,23 +62,29 @@ class RepositoryBuilder:
                     path=rel_root,
                     name=Path(root).name
                 )
-            
+
             for file in files:
+                # Skip hidden files and non-code files
                 if file.startswith("."):
                     continue
-                
+
                 pf = Path(root) / file
+                ext = pf.suffix.lower()
+
+                # Only index code files (Python, JavaScript, TypeScript)
+                if ext not in self.CODE_EXTENSIONS:
+                    continue
+
                 rel_path = str(pf.relative_to(self.target_dir)).replace("\\", "/")
                 file_id = rel_path
-                
+
                 try:
                     size = pf.stat().st_size
                 except Exception:
                     size = 0
-                
-                ext = pf.suffix.lower()
+
                 is_python = ext == ".py"
-                
+
                 entities.files[file_id] = FileNode(
                     id=file_id,
                     path=rel_path,
@@ -75,7 +93,8 @@ class RepositoryBuilder:
                     size=size,
                     is_python=is_python
                 )
-                
+
+                # Parse code files for symbols
                 if self.parser.supports_extension(ext):
                     self._parse_file(pf, file_id, ext, entities)
                     
