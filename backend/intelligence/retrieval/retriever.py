@@ -194,6 +194,7 @@ class HybridRetriever:
             search_text = f"file path {f.path} {f.language or ''} {f.content_type or ''}"
             docs.append({
                 "id": f.id,
+                "analysis_id": self.analysis_id,  # CRITICAL: Retain analysis_id for filtering
                 "name": f.path,
                 "qualified_name": f.path,
                 "type": "file",
@@ -217,6 +218,7 @@ class HybridRetriever:
             search_text = f"{sym.name} {sym.qualified_name or ''} {sym.symbol_type} {fpath} {signature} {docstring}"
             docs.append({
                 "id": sym.id,
+                "analysis_id": self.analysis_id,  # CRITICAL: Retain analysis_id
                 "symbol_id": sym.id,  # Include symbol_id for proper expansion resolution
                 "name": sym.name,
                 "qualified_name": sym.qualified_name or sym.name,
@@ -245,6 +247,7 @@ class HybridRetriever:
             search_text = f"route {r.method} {r.path} {fpath}"
             docs.append({
                 "id": r.id,
+                "analysis_id": self.analysis_id,  # CRITICAL: Retain analysis_id
                 "name": f"{r.method} {r.path}",
                 "qualified_name": f"{r.method} {r.path}",
                 "type": "route",
@@ -272,6 +275,7 @@ class HybridRetriever:
             search_text = f"database table {d.name} {d.object_type} {fpath}"
             docs.append({
                 "id": d.id,
+                "analysis_id": self.analysis_id,  # CRITICAL: Retain analysis_id
                 "name": d.name,
                 "qualified_name": d.name,
                 "type": "database_table",
@@ -505,16 +509,30 @@ class HybridRetriever:
             return []
 
     def _search_lexical(self, query: str, top_k: int = 30) -> List[Dict[str, Any]]:
-        """Queries in-memory BM25 index."""
+        """Queries in-memory BM25 index with ANALYSIS-LEVEL ISOLATION."""
         if not self.bm25_index:
             return []
 
-        scored_docs = self.bm25_index.search(query, top_k=top_k)
+        scored_docs = self.bm25_index.search(query, top_k=top_k * 2)  # Fetch more to account for filtering
         lexical_candidates = []
+
         for doc, score in scored_docs:
             c = dict(doc)
             c["bm25_score"] = score
+
+            # CRITICAL: Filter by analysis_id to prevent cross-analysis contamination
+            if self.analysis_id and c.get("analysis_id") != self.analysis_id:
+                logger.debug(
+                    f"[Retrieval] Filtered BM25 result from different analysis: "
+                    f"expected {self.analysis_id}, got {c.get('analysis_id')} "
+                    f"(entity: {c.get('name', 'unknown')})"
+                )
+                continue
+
             lexical_candidates.append(c)
+            if len(lexical_candidates) >= top_k:
+                break
+
         return lexical_candidates
 
     def _validate_file_existence(self, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
