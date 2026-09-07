@@ -40,7 +40,18 @@ class AnalysisWorker(WorkerInterface):
                 logger.error(f"Job {job_id} not found")
                 return
 
+            # Safety: Skip if job is already completed (prevent duplicate analysis runs)
+            if job.status == "Completed":
+                logger.info(f"Job {job_id}: Already completed, skipping duplicate processing")
+                return
+
             analysis = db.query(Analysis).filter(Analysis.id == job.analysis_id).first()
+            if analysis and analysis.status == "Completed":
+                logger.info(f"Job {job_id}: Analysis already completed, skipping to avoid duplicate work")
+                job.status = "Completed"
+                db.commit()
+                return
+
             repo = db.query(Repository).filter(Repository.id == analysis.repository_id).first()
 
             # Parse owner/repo from url early so we can use repo_name for notifications

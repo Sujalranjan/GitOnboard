@@ -139,17 +139,35 @@ async def lifespan(app: FastAPI):
     # Start worker queue
     repo_queue.start()
     
-    # Recover unfinished jobs
+    # Recover unfinished jobs (only jobs that are truly incomplete)
     db = SessionLocal()
     try:
         unfinished_jobs = db.query(AnalysisJob).filter(
             AnalysisJob.status.in_(["Queued", "Downloading", "Analyzing", "Saving"])
         ).all()
+
+        recovered_count = 0
         for job in unfinished_jobs:
-            logger.info(f"Recovering unfinished job {job.id}")
+            # Safety check: don't re-queue if analysis is already completed
+            analysis = db.query(Analysis).filter(Analysis.id == job.analysis_id).first()
+            if analysis and analysis.status == "Completed":
+                logger.info(f"Job {job.id}: Analysis already completed, skipping recovery")
+                # Mark job as completed to match analysis state
+                job.status = "Completed"
+                db.commit()
+                continue
+
+            # Only recover truly incomplete jobs
+            logger.info(f"Recovering unfinished job {job.id} (analysis_id={job.analysis_id})")
             job.status = "Queued"
             db.commit()
             await repo_queue.enqueue(job.id)
+            recovered_count += 1
+
+        if recovered_count > 0:
+            logger.info(f"Recovered {recovered_count} unfinished job(s)")
+        else:
+            logger.info("No unfinished jobs to recover")
 
         # Recover in-flight agent runs after server restart
         try:
