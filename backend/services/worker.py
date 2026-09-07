@@ -350,7 +350,6 @@ class AnalysisWorker(WorkerInterface):
 
                     try:
                         from backend.intelligence.retrieval.retriever import HybridRetriever
-                        from backend.intelligence.retrieval.semantic_builder import SemanticIndexBuilder
 
                         # Build BM25 index and store in memory for export
                         try:
@@ -390,41 +389,13 @@ class AnalysisWorker(WorkerInterface):
                             bm25_error_msg = str(bm25_err)[:100]
                             record_indexing_failure(analysis.id, "bm25", bm25_error_code, bm25_error_msg)
 
-                        # Build Chroma semantic index
-                        try:
-                            semantic_builder = SemanticIndexBuilder()
-                            chroma_bytes = semantic_builder.build_index(rim_model.entities)
-                            if chroma_bytes:
-                                results["semantic_index_db"] = chroma_bytes
-                                semantic_doc_count = len(rim_model.entities)  # Approximate
-                                logger.info(f"Semantic index ready: {len(chroma_bytes)} bytes with ~{semantic_doc_count} entities")
-
-                                # Update progress for semantic indexing
-                                progress.update(
-                                    "Building indexes",
-                                    f"Built semantic index with {semantic_doc_count} entities",
-                                    semantic_doc_count,
-                                    semantic_doc_count,
-                                    "entities"
-                                )
-                                semantic_ok = True
-                            else:
-                                # Check if it's due to chromadb unavailable or empty entities
-                                if not rim_model.entities:
-                                    semantic_error_code = IndexFailureCode.CHROMA_ENTITY_SKIP
-                                    semantic_error_msg = "No entities to embed"
-                                else:
-                                    semantic_error_code = IndexFailureCode.CHROMA_BUILD_FAILED
-                                    semantic_error_msg = "Chroma index build returned None"
-                                record_indexing_failure(analysis.id, "semantic", semantic_error_code, semantic_error_msg)
-                        except ImportError:
-                            semantic_error_code = IndexFailureCode.CHROMA_UNAVAILABLE
-                            semantic_error_msg = "chromadb not installed"
-                            record_indexing_failure(analysis.id, "semantic", semantic_error_code, semantic_error_msg)
-                        except Exception as chroma_err:
-                            semantic_error_code = IndexFailureCode.CHROMA_BUILD_FAILED
-                            semantic_error_msg = str(chroma_err)[:100]
-                            record_indexing_failure(analysis.id, "semantic", semantic_error_code, semantic_error_msg)
+                        # Build Chroma semantic index (BACKGROUND, NON-BLOCKING)
+                        # Semantic indexing is optional and will run async after analysis completes
+                        logger.info("Semantic (Chroma) indexing: SCHEDULED for background processing (non-blocking)")
+                        semantic_error_code = IndexFailureCode.CHROMA_UNAVAILABLE
+                        semantic_error_msg = "Semantic indexing scheduled for background (non-blocking)"
+                        # Don't block on semantic indexing - let it run after analysis READY
+                        # semantic_ok remains False, which results in PARTIAL overall status
 
                     except Exception as e:
                         logger.error(f"Failed to build retrieval indexes: {e}", exc_info=True)
@@ -495,6 +466,18 @@ class AnalysisWorker(WorkerInterface):
                 logger.info(f"Job {job_id}: status → Completed")
                 logger.info(f"Job {job_id} completed successfully.")
 
+                # Queue semantic indexing as background job (non-blocking, silent)
+                # Runs after analysis is marked READY, doesn't interfere with retrieval
+                if rim_model and rim_model.entities:
+                    import threading
+                    semantic_bg_thread = threading.Thread(
+                        target=self._build_semantic_index_background,
+                        args=(analysis.id, rim_model.entities, db),
+                        daemon=True
+                    )
+                    semantic_bg_thread.start()
+                    logger.debug(f"Analysis {analysis.id}: Semantic indexing queued for background processing")
+
                 # Notify SSE subscribers of completion
                 from backend.task_manager import task_manager
                 task_manager.notify(repo.user_id, repo_name, "import", "completed")
@@ -546,3 +529,43 @@ class AnalysisWorker(WorkerInterface):
             logger.error(f"Critical worker error on job {job_id}: {e}")
         finally:
             db.close()
+
+    def _build_semantic_index_background(self, analysis_id: int, entities: dict, db: Session):
+        """
+        Build semantic (Chroma) index in background thread.
+
+        Runs after analysis is marked COMPLETED, non-blocking.
+        Stores semantic index in analysis_artifacts when complete.
+        """
+        logger.info(f"Analysis {analysis_id}: Background semantic indexing started (silent)")
+        try:
+            from backend.intelligence.retrieval.semantic_builder import SemanticIndexBuilder
+            from backend.models.repository import AnalysisArtifact
+
+            builder = SemanticIndexBuilder()
+            chroma_bytes = builder.build_index(entities)
+
+            if chroma_bytes:
+                # Store in database
+                db_session = SessionLocal()
+                try:
+                    artifact = AnalysisArtifact(
+                        analysis_id=analysis_id,
+                        type="semantic_index_db",
+                        data={},
+                        blob_data=chroma_bytes
+                    )
+                    db_session.add(artifact)
+                    db_session.commit()
+                    logger.info(f"Analysis {analysis_id}: Semantic index built and stored ({len(chroma_bytes)} bytes)")
+                except Exception as db_err:
+                    logger.warning(f"Analysis {analysis_id}: Failed to store semantic index: {db_err}")
+                    db_session.rollback()
+                finally:
+                    db_session.close()
+            else:
+                logger.debug(f"Analysis {analysis_id}: Semantic index build returned None")
+        except ImportError:
+            logger.debug(f"Analysis {analysis_id}: chromadb not available for semantic indexing")
+        except Exception as bg_err:
+            logger.debug(f"Analysis {analysis_id}: Background semantic indexing error: {bg_err}")

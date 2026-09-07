@@ -251,11 +251,11 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
             db.flush()
             logger.info(f"[FACT_STORE] FactFile records committed to database")
 
-        # 2. Save Code Symbols
+        # 2. Save Code Symbols (including FILE entities to support relationship references)
         seen_symbol_ids = set()
         symbol_records = []
         for entity_id, entity in model.entities.items():
-            if entity.type not in (EntityType.FILE, EntityType.DIRECTORY) and entity.id not in seen_symbol_ids:
+            if entity.id not in seen_symbol_ids:
                 seen_symbol_ids.add(entity.id)
                 f_id = entity.metadata.get("file_id") if entity.metadata else None
                 f_path = entity.location.repository_path if entity.location else None
