@@ -471,17 +471,29 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
             attempted_calls = []  # Track what we've already tried
             total_tokens_used = 0  # Track token usage
 
-            # Simple but accurate token counting (no model download needed)
+            # Initialize Qwen tokenizer for accurate token counting
+            try:
+                from qwen_tokenizer import QwenTokenizer
+                tokenizer = QwenTokenizer()
+                logger.info("[TOKENS] Using Qwen tokenizer for accurate token counting")
+            except Exception as e:
+                logger.warning(f"[TOKENS] Failed to load Qwen tokenizer: {e}, falling back to estimation")
+                tokenizer = None
+
             def count_tokens(text):
-                """Estimate tokens using simple heuristic: ~1 token per 4 characters"""
-                # This is accurate for most LLMs including Qwen
-                # More accurate than word count for code/JSON
+                """Count tokens using Qwen tokenizer or estimation fallback"""
+                if tokenizer:
+                    try:
+                        return len(tokenizer.encode(text))
+                    except:
+                        pass
+                # Fallback: ~1 token per 4 characters
                 return max(1, len(text.encode('utf-8')) // 4)
 
             # Count system prompt tokens
             system_prompt_tokens = count_tokens(system_prompt)
             total_tokens_used += system_prompt_tokens
-            logger.info(f"[TOKENS] System prompt: {system_prompt_tokens} tokens")
+            logger.info(f"[TOKENS] System prompt: {system_prompt_tokens} tokens (using {'Qwen tokenizer' if tokenizer else 'estimation'})")
 
             # 5. Tool-calling loop
             while iteration < max_iterations:
