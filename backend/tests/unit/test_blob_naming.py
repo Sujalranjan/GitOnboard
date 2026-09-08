@@ -29,10 +29,12 @@ def test_sanitize_relative_path_empty_error():
 
 
 def test_build_blob_key_deterministic():
-    key = build_blob_key(repository_id=42, snapshot_id="abc123commit", relative_path="src/main.py")
-    assert key == "repositories/42/snapshots/abc123commit/src/main.py"
+    repo_hash = "550e8400-e29b-41d4-a716-446655440000"
+    key = build_blob_key(repository_hash=repo_hash, snapshot_id="abc123commit", relative_path="src/main.py")
+    assert key == "repositories/550e8400-e29b-41d4-a716-446655440000/snapshots/abc123commit/src/main.py"
 
 
 def test_build_blob_key_special_chars_sanitized():
-    key = build_blob_key(repository_id=1, snapshot_id="feature/branch@1", relative_path="./tests/test_auth.py")
-    assert key == "repositories/1/snapshots/feature_branch_1/tests/test_auth.py"
+    repo_hash = "550e8400-e29b-41d4-a716-446655440001"
+    key = build_blob_key(repository_hash=repo_hash, snapshot_id="feature/branch@1", relative_path="./tests/test_auth.py")
+    assert key == "repositories/550e8400-e29b-41d4-a716-446655440001/snapshots/feature_branch_1/tests/test_auth.py"
