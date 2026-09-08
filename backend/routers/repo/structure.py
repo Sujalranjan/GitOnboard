@@ -563,7 +563,7 @@ async def save_repo_file(
     if fact_file and fact_file.blob_name:
         blob_name = fact_file.blob_name
     else:
-        blob_name = build_blob_key(repo.id, f"snap_{analysis.id}", clean_path)
+        blob_name = build_blob_key(repo.repository_hash, f"snap_{analysis.id}", clean_path)
 
     # Persist payload into Azurite Blob Storage
     try:

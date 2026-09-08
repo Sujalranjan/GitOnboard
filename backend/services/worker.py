@@ -232,7 +232,7 @@ class AnalysisWorker(WorkerInterface):
                     storage.ensure_container_exists()
 
                     snapshot_id = (commit_info.get("hash") if commit_info else None) or f"snap_{analysis.id}"
-                    repo_id = repo.id
+                    repo_hash = repo.repository_hash  # Use UUID for blob key consistency
 
                     # Map existing file entities by relative path
                     file_entities_by_path = {}
@@ -269,7 +269,7 @@ class AnalysisWorker(WorkerInterface):
                     for file_idx, full_p in enumerate(all_files):
                         rel_p = str(full_p.relative_to(target_dir)).replace("\\", "/").removeprefix("./").lstrip("/")
                         try:
-                            blob_key = build_blob_key(repo_id, snapshot_id, rel_p)
+                            blob_key = build_blob_key(repo_hash, snapshot_id, rel_p)
                             content_type, _ = mimetypes.guess_type(str(full_p))
                             content_type = content_type or "text/plain"
                             file_size = full_p.stat().st_size
