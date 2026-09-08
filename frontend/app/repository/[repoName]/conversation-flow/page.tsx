@@ -1,12 +1,16 @@
+'use client';
+
 import React from 'react';
+import { useParams } from 'next/navigation';
 import LLMConversationFlow from '@/components/LLMConversationFlow';
 
-interface Props {
-  params: Promise<{ repoName: string }>;
-}
+export default function ConversationFlowPage() {
+  const params = useParams();
+  const repoName = (params?.repoName as string) || '';
 
-export default async function ConversationFlowPage({ params }: Props) {
-  const { repoName } = await params;
+  if (!repoName) {
+    return <div className="p-8 text-center text-slate-500">Loading...</div>;
+  }
 
   return (
     <div className="flex flex-col h-full w-full">
