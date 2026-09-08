@@ -1,13 +1,47 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, MessageCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { Zap, MessageCircle, CheckCircle2, Eye, EyeOff, Send, Settings } from 'lucide-react';
 
 interface Message {
-  type: 'user-query' | 'llm-thinking' | 'tool-searching' | 'tool-found' | 'tool-analyzing' | 'tool-reading' | 'final-answer';
+  type: 'user-query' | 'llm-thinking' | 'tool-call' | 'tool-response' | 'final-answer';
   content: string;
   icon?: React.ReactNode;
 }
+
+interface ModelOption {
+  id: string;
+  name: string;
+  description: string;
+  category: 'fast' | 'quality' | 'cloud';
+}
+
+const AVAILABLE_MODELS: ModelOption[] = [
+  {
+    id: 'qwen3:4b-instruct',
+    name: 'Qwen 3 4B (Fast)',
+    description: 'Quick responses, limited reasoning',
+    category: 'fast',
+  },
+  {
+    id: 'qwen2.5-coder:7b',
+    name: 'Qwen 2.5 Coder 7B (Quality)',
+    description: 'Better reasoning, slower',
+    category: 'quality',
+  },
+  {
+    id: 'cloud-gemini',
+    name: 'Gemini (Cloud)',
+    description: 'Best quality, requires API key',
+    category: 'cloud',
+  },
+  {
+    id: 'cloud-openrouter',
+    name: 'OpenRouter (Cloud)',
+    description: 'Multiple models (Claude, GPT-4), requires API key',
+    category: 'cloud',
+  },
+];
 
 export const LLMConversationFlow: React.FC = () => {
   const [query, setQuery] = useState('');
@@ -18,8 +52,12 @@ export const LLMConversationFlow: React.FC = () => {
   const [elapsed, setElapsed] = useState(0);
   const [done, setDone] = useState(false);
   const [showToolDetails, setShowToolDetails] = useState(true);
+  const [selectedModel, setSelectedModel] = useState<string>('qwen2.5-coder:7b');
+  const [changingModel, setChangingModel] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,6 +66,40 @@ export const LLMConversationFlow: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Close settings menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+
+    if (settingsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [settingsOpen]);
+
+  const handleModelChange = async (modelId: string) => {
+    setChangingModel(true);
+    try {
+      const response = await fetch('/api/llm/set-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelId }),
+      });
+      if (response.ok) {
+        setSelectedModel(modelId);
+      } else {
+        console.error('Failed to change model');
+      }
+    } catch (error) {
+      console.error('Error changing model:', error);
+    } finally {
+      setChangingModel(false);
+    }
+  };
 
   const simulateQuery = async (userQuery: string) => {
     setRunning(true);
@@ -38,132 +110,89 @@ export const LLMConversationFlow: React.FC = () => {
     setDone(false);
     startTimeRef.current = Date.now();
 
-    const flowSteps: Array<any> = [
-      {
-        type: 'user-query' as const,
-        content: userQuery,
-        delay: 0,
-      },
-      {
-        type: 'llm-thinking' as const,
-        content: 'Analyzing your question... I need to search for relevant code patterns and understand the architecture.',
-        delay: 1000,
-      },
-      {
-        type: 'tool-searching' as const,
-        content: 'Searching repository for related symbols and components...',
-        delay: 2000,
-        toolCall: true,
-        data: 8.2,
-      },
-      ...(showToolDetails ? [{
-        type: 'tool-found' as const,
-        content: '📊 Tool Response:\n• Searched 1,200+ code symbols\n• Found 186 matching results\n• Query time: 87ms\n• Data: 8.2 KB\n\nKey findings:\n• get_current_user (FUNCTION)\n• TokenUsage (CLASS)\n• verify_token (FUNCTION)\n• github_oauth (MODULE)',
-        delay: 3200,
-      }] : [{
-        type: 'tool-found' as const,
-        content: '✓ Found 186 relevant symbols including key components and their relationships',
-        delay: 3200,
-      }]),
-      {
-        type: 'tool-analyzing' as const,
-        content: 'Understanding how components interact with each other...',
-        delay: 4500,
-        toolCall: true,
-        data: 4.1,
-      },
-      ...(showToolDetails ? [{
-        type: 'tool-found' as const,
-        content: '🔗 Tool Response:\n• Analyzed relationship graph\n• Time: 94ms\n• Data: 4.1 KB\n\nRelationships found:\n• 12+ route handlers call this function\n• Calls: jwt.decode(), User.query(), HTTPException\n• Central component in auth flow',
-        delay: 5800,
-      }] : []),
-      {
-        type: 'tool-reading' as const,
-        content: 'Reading implementation details and source code...',
-        delay: 6700,
-        toolCall: true,
-        data: 2.8,
-      },
-      ...(showToolDetails ? [{
-        type: 'tool-found' as const,
-        content: '💾 Tool Response:\n• Read source code file\n• Lines: 1-40\n• Time: 412ms\n• Data: 2.8 KB\n\nCode preview:\ndef get_current_user(token: str, db: Session):\n    payload = jwt.decode(token, SECRET_KEY)\n    user_id = payload.get("sub")\n    user = db.query(User).filter(...).first()\n    if not user:\n        raise HTTPException(status_code=401)\n    return user',
-        delay: 8000,
-      }] : []),
-      {
-        type: 'final-answer' as const,
-        content: generateAnswer(userQuery),
-        delay: showToolDetails ? 9200 : 8000,
-      },
-    ];
+    try {
+      // Get repo name from URL or use default
+      const repoName = typeof window !== 'undefined'
+        ? window.location.pathname.split('/')[3] || 'default'
+        : 'default';
 
-    for (const step of flowSteps) {
-      await new Promise(resolve => setTimeout(resolve, step.delay));
+      // Call real backend endpoint with streaming
+      const response = await fetch('/api/llm/analyze/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: userQuery,
+          repo_name: repoName,
+          model: selectedModel,
+          show_tool_details: showToolDetails,
+        }),
+      });
 
-      setMessages(prev => [...prev, {
-        type: step.type,
-        content: step.content,
-      }]);
-
-      if ('toolCall' in step && step.toolCall) {
-        setToolCalls(prev => prev + 1);
-        setTotalData(prev => prev + (step.data || 0));
+      if (!response.ok) {
+        throw new Error(`Failed to analyze: ${response.statusText}`);
       }
 
-      setElapsed((Date.now() - startTimeRef.current) / 1000);
-    }
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
 
-    setRunning(false);
-    setDone(true);
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines[lines.length - 1];
+
+        for (let i = 0; i < lines.length - 1; i++) {
+          const line = lines[i].trim();
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'completed') {
+                // Stream finished
+                setDone(true);
+              } else if (data.type === 'error') {
+                setMessages(prev => [...prev, {
+                  type: 'final-answer' as const,
+                  content: `Error: ${data.content}`,
+                }]);
+              } else if (data.type === 'tool-call') {
+                setToolCalls(prev => prev + 1);
+                setMessages(prev => [...prev, {
+                  type: 'tool-call' as const,
+                  content: data.content,
+                }]);
+              } else {
+                setMessages(prev => [...prev, {
+                  type: data.type as Message['type'],
+                  content: data.content,
+                }]);
+              }
+
+              setElapsed((Date.now() - startTimeRef.current) / 1000);
+            } catch (e) {
+              console.error('Failed to parse SSE data:', e);
+            }
+          }
+        }
+      }
+
+      setRunning(false);
+    } catch (error) {
+      console.error('Error analyzing query:', error);
+      setMessages(prev => [...prev, {
+        type: 'final-answer' as const,
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to analyze query'}`,
+      }]);
+      setRunning(false);
+      setDone(true);
+    }
   };
 
-  const generateAnswer = (userQuery: string) => {
-    const answers: Record<string, string> = {
-      auth: `Authentication is handled through JWT tokens with FastAPI dependency injection. Here's how it works:
-
-1. Users send requests with JWT tokens in the Authorization header
-2. The system verifies the token signature using a secret key
-3. Valid tokens are decoded to extract the user ID
-4. The system validates that the user exists in the database
-5. The user object is automatically injected into request handlers
-
-This creates a secure, stateless authentication system that validates on every request.`,
-
-      architecture: `The repository uses a layered architecture:
-
-Frontend Layer: React/Next.js handles the UI
-API Layer: FastAPI provides REST endpoints
-Business Logic: Python handles analysis and processing
-Data Layer: PostgreSQL stores the repository data
-Storage: Azure Blob Storage holds file contents
-
-Components communicate through well-defined APIs with clear separation of concerns.`,
-
-      database: `The database stores repository data in a normalized schema:
-
-- Repositories: Core metadata and identification
-- Symbols: Functions, classes, and variables discovered during analysis
-- Relationships: How symbols call or reference each other
-- Files: Source code file metadata and content pointers
-- Analysis: Results from code parsing and analysis runs
-
-This structure enables fast querying of code relationships.`,
-
-      default: `Analysis of your query is complete! The system has:
-
-• Searched through 186+ relevant code symbols
-• Analyzed relationships and dependencies
-• Retrieved source code implementations
-• Built a comprehensive understanding
-
-The codebase is well-structured with clear patterns and proper separation of concerns.`,
-    };
-
-    const lowerQuery = userQuery.toLowerCase();
-    for (const [key, answer] of Object.entries(answers)) {
-      if (lowerQuery.includes(key)) return answer;
-    }
-    return answers.default;
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,185 +209,256 @@ The codebase is well-structured with clear patterns and proper separation of con
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-4 sm:p-6">
-      <div className="max-w-3xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <MessageCircle className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">
-              Repository Assistant
-            </h1>
-          </div>
-          <p className="text-slate-600 dark:text-slate-400 text-lg mb-4">
-            Ask questions about your codebase and get instant answers
-          </p>
-
-          {/* Toggle Tools Details */}
-          <button
-            onClick={() => setShowToolDetails(!showToolDetails)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors text-sm font-medium"
-          >
-            {showToolDetails ? (
-              <>
-                <Eye className="w-4 h-4" />
-                Hide Tool Details
-              </>
-            ) : (
-              <>
-                <EyeOff className="w-4 h-4" />
-                Show Tool Details
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Chat Area */}
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 mb-6 min-h-96 max-h-96 overflow-y-auto space-y-4">
+    <div className="flex flex-col h-full bg-slate-950 text-white overflow-hidden">
+      {/* Chat Area - Full Height */}
+      <div className="flex-1 overflow-y-auto px-6 py-8">
+        <div className="max-w-3xl mx-auto">
+          {/* Empty State */}
           {messages.length === 0 && !running && (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <MessageCircle className="w-16 h-16 text-slate-300 dark:text-slate-600 mb-4" />
-              <p className="text-slate-500 dark:text-slate-400">
-                Ask a question to get started
-              </p>
-            </div>
-          )}
+            <div className="flex flex-col items-center justify-center h-full">
+              <MessageCircle className="w-20 h-20 text-slate-600 mb-6" />
+              <p className="text-xl text-slate-400 mb-8">Ask a question to get started</p>
 
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`animate-slide-up ${
-                msg.type === 'user-query'
-                  ? 'flex justify-end'
-                  : 'flex justify-start'
-              }`}
-            >
-              <div
-                className={`max-w-xs sm:max-w-sm lg:max-w-md px-4 py-3 rounded-lg ${
-                  msg.type === 'user-query'
-                    ? 'bg-blue-600 text-white rounded-br-none'
-                    : msg.type === 'final-answer'
-                      ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-2 border-green-200 dark:border-green-800 text-slate-900 dark:text-white rounded-bl-none'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-bl-none'
-                }`}
-              >
-                {msg.type === 'tool-searching' && (
-                  <div className="flex items-center gap-2 mb-1">
-                    <Zap className="w-4 h-4 animate-pulse" />
-                    <span className="text-xs font-semibold">Searching</span>
-                  </div>
-                )}
-                {msg.type === 'tool-analyzing' && (
-                  <div className="flex items-center gap-2 mb-1">
-                    <Zap className="w-4 h-4 animate-pulse" />
-                    <span className="text-xs font-semibold">Analyzing</span>
-                  </div>
-                )}
-                {msg.type === 'tool-reading' && (
-                  <div className="flex items-center gap-2 mb-1">
-                    <Zap className="w-4 h-4 animate-pulse" />
-                    <span className="text-xs font-semibold">Reading Code</span>
-                  </div>
-                )}
-                {msg.type === 'final-answer' && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
-                    <span className="text-sm font-semibold text-green-700 dark:text-green-400">Answer</span>
-                  </div>
-                )}
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {msg.content}
-                </p>
-              </div>
-            </div>
-          ))}
-
-          {running && messages.length > 0 && (
-            <div className="flex justify-start">
-              <div className="bg-slate-100 dark:bg-slate-700 px-4 py-3 rounded-lg rounded-bl-none">
-                <div className="flex gap-2">
-                  <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                  <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+              {/* Suggested Queries */}
+              <div className="w-full">
+                <p className="text-xs font-semibold text-slate-500 mb-4 uppercase">Try asking about:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {suggestedQueries.map((q, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setQuery(q);
+                        setTimeout(() => simulateQuery(q), 0);
+                      }}
+                      className="text-left px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700"
+                    >
+                      → {q}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
-          <div ref={messagesEndRef} />
+          {/* Messages */}
+          {messages.length > 0 && (
+            <div className="space-y-4">
+              {messages.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`animate-slide-up ${
+                    msg.type === 'user-query' ? 'flex justify-end' : 'flex justify-start'
+                  }`}
+                >
+                  <div
+                    className={`max-w-2xl px-4 py-3 rounded-lg ${
+                      msg.type === 'user-query'
+                        ? 'bg-blue-600 text-white rounded-br-none'
+                        : msg.type === 'tool-call'
+                          ? 'bg-amber-900/40 border border-amber-700/50 text-amber-100 rounded-bl-none'
+                          : msg.type === 'tool-response'
+                            ? 'bg-slate-700/50 border border-slate-600 text-slate-200 rounded-bl-none'
+                            : msg.type === 'final-answer'
+                              ? 'bg-green-900/30 border border-green-700 text-slate-100 rounded-bl-none'
+                              : 'bg-slate-800 text-slate-300 rounded-bl-none'
+                    }`}
+                  >
+                    {/* Tool Call Header */}
+                    {msg.type === 'tool-call' && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Zap className="w-4 h-4 animate-pulse text-amber-400" />
+                          <span className="text-xs font-semibold text-amber-300 uppercase">🔧 Tool Call</span>
+                        </div>
+                        <div className="bg-slate-900/50 rounded px-3 py-2 text-sm font-mono">
+                          {msg.content}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tool Response Header */}
+                    {msg.type === 'tool-response' && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Zap className="w-4 h-4 text-amber-400" />
+                          <span className="text-xs font-semibold text-amber-300 uppercase">✓ Result</span>
+                        </div>
+                        <div className="bg-slate-900/50 rounded px-3 py-2 text-sm whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">
+                          {msg.content}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* LLM Thinking */}
+                    {msg.type === 'llm-thinking' && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-pulse" />
+                          <span className="text-xs font-semibold text-slate-400">Thinking</span>
+                        </div>
+                        <p className="text-sm leading-relaxed italic text-slate-400">
+                          {msg.content}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Final Answer */}
+                    {msg.type === 'final-answer' && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <CheckCircle2 className="w-5 h-5 text-green-400" />
+                          <span className="text-sm font-semibold text-green-400">Answer</span>
+                        </div>
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                          {msg.content}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* User Query */}
+                    {msg.type === 'user-query' && (
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                        {msg.content}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {running && messages.length > 0 && (
+                <div className="flex justify-start">
+                  <div className="bg-slate-800 px-4 py-3 rounded-lg rounded-bl-none">
+                    <div className="flex gap-2 items-center">
+                      <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" />
+                      <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                      <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                      <span className="text-xs text-slate-400 ml-2">Processing...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+          )}
         </div>
+      </div>
 
-        {/* Metrics */}
-        {done && (
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-blue-100 dark:bg-blue-950/50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{toolCalls}</div>
-              <div className="text-xs text-blue-700 dark:text-blue-300">Searches</div>
+      {/* Footer - Input Area (Sticky) */}
+      <div className="flex-shrink-0 bg-slate-950 px-6 py-6 border-t border-slate-800">
+        <div className="max-w-3xl mx-auto">
+          {/* Metrics */}
+          {(done || running) && (
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg p-2 text-center">
+                <div className="text-lg font-bold text-amber-400">{toolCalls}</div>
+                <div className="text-xs text-amber-300">Tools</div>
+              </div>
+              <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-2 text-center">
+                <div className="text-lg font-bold text-blue-400">{Math.floor(elapsed)}</div>
+                <div className="text-xs text-blue-300">Seconds</div>
+              </div>
+              <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-2 text-center">
+                <div className="text-lg font-bold text-green-400">{messages.length}</div>
+                <div className="text-xs text-green-300">Messages</div>
+              </div>
+              <div className={`rounded-lg p-2 text-center border ${done ? 'bg-green-900/30 border-green-700/50' : 'bg-slate-700/30 border-slate-600/50'}`}>
+                <div className={`text-sm font-bold ${done ? 'text-green-400' : 'text-slate-400'}`}>
+                  {done ? '✓ Done' : 'Running'}
+                </div>
+                <div className={`text-xs ${done ? 'text-green-300' : 'text-slate-400'}`}>Status</div>
+              </div>
             </div>
-            <div className="bg-green-100 dark:bg-green-950/50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{totalData.toFixed(1)} KB</div>
-              <div className="text-xs text-green-700 dark:text-green-300">Data Analyzed</div>
-            </div>
-            <div className="bg-purple-100 dark:bg-purple-950/50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{elapsed.toFixed(2)}s</div>
-              <div className="text-xs text-purple-700 dark:text-purple-300">Response Time</div>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* Input Area */}
-        <form onSubmit={handleSubmit} className="mb-6">
-          <div className="flex gap-3">
+          {/* Input Area */}
+          <form onSubmit={handleSubmit} className="relative flex gap-2 items-center">
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask about your codebase..."
               disabled={running}
-              className="flex-1 px-4 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-3 rounded-full bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50"
             />
+
+            {/* Settings Button */}
+            <div className="relative" ref={settingsRef}>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(!settingsOpen)}
+                className="p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-300 transition-colors"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+
+              {/* Settings Dropdown */}
+              {settingsOpen && (
+                <div className="absolute bottom-full right-0 mb-2 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-50 min-w-56">
+                  {/* Tool Details Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowToolDetails(!showToolDetails);
+                      setSettingsOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-700 transition-colors border-b border-slate-700 first:rounded-t-lg"
+                  >
+                    {showToolDetails ? (
+                      <>
+                        <Eye className="w-4 h-4 text-slate-400" />
+                        <span className="text-sm text-slate-300">Hide Tool Details</span>
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="w-4 h-4 text-slate-400" />
+                        <span className="text-sm text-slate-300">Show Tool Details</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Model Selector */}
+                  <div className="px-4 py-3 last:rounded-b-lg">
+                    <label className="text-xs font-semibold text-slate-400 mb-2 block uppercase">
+                      Select Model
+                    </label>
+                    <select
+                      value={selectedModel}
+                      onChange={(e) => {
+                        handleModelChange(e.target.value);
+                        setSettingsOpen(false);
+                      }}
+                      disabled={changingModel || running}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
+                    >
+                      {AVAILABLE_MODELS.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-400 mt-2">
+                      {AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.description}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Send Button */}
             <button
               type="submit"
               disabled={running || !query.trim()}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
             >
               {running ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span className="hidden sm:inline">Analyzing</span>
-                </>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
-                <>
-                  <span className="hidden sm:inline">Ask</span>
-                  <span className="sm:hidden">→</span>
-                </>
+                <Send className="w-5 h-5" />
               )}
             </button>
-          </div>
-        </form>
-
-        {/* Suggested Queries */}
-        {messages.length === 0 && !running && (
-          <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
-            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-3 uppercase">
-              Try asking about:
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {suggestedQueries.map((q, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    setQuery(q);
-                    setTimeout(() => simulateQuery(q), 0);
-                  }}
-                  className="text-left px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 text-sm transition-colors"
-                >
-                  → {q}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+          </form>
+        </div>
       </div>
 
       <style jsx>{`
