@@ -26,8 +26,7 @@ def handle_search_code(args: Dict[str, Any], context: AgentToolContext) -> Dict[
     tool_layer = _get_tool_layer(context)
     query = args["query"]
     limit = args.get("limit", 20)
-    path_pattern = args.get("path_pattern")
-    results = tool_layer.search_repository(query=query, path_pattern=path_pattern, limit=limit)
+    results = tool_layer.search_repository(query=query, limit=limit)
     return {"query": query, "match_count": len(results), "matches": results}
 
 
