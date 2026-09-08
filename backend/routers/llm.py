@@ -469,6 +469,25 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
             iteration = 0
             final_answer = None
             attempted_calls = []  # Track what we've already tried
+            total_tokens_used = 0  # Track token usage
+
+            # Initialize tokenizer for accurate token counting
+            try:
+                from transformers import AutoTokenizer
+                tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B", trust_remote_code=True)
+            except:
+                # Fallback tokenizer function if model not available
+                def simple_tokenize(text):
+                    return text.split()
+                tokenizer = None
+
+            # Count system prompt tokens
+            if tokenizer:
+                system_prompt_tokens = len(tokenizer.encode(system_prompt))
+            else:
+                system_prompt_tokens = len(simple_tokenize(system_prompt))
+            total_tokens_used += system_prompt_tokens
+            logger.debug(f"[TOKENS] System prompt: {system_prompt_tokens} tokens")
 
             # 5. Tool-calling loop
             while iteration < max_iterations:
@@ -502,6 +521,17 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
 
                 response = await llm_service.generate(llm_request)
                 response_text = response.content.strip()
+
+                # Count tokens for this request/response
+                if tokenizer:
+                    request_tokens = sum(len(tokenizer.encode(msg.content)) for msg in messages[-3:])  # Last 3 messages
+                    response_tokens = len(tokenizer.encode(response_text))
+                else:
+                    request_tokens = sum(len(simple_tokenize(msg.content)) for msg in messages[-3:])
+                    response_tokens = len(simple_tokenize(response_text))
+
+                total_tokens_used += request_tokens + response_tokens
+                logger.debug(f"[TOKENS] Iteration {iteration}: request={request_tokens}, response={response_tokens}, total={total_tokens_used}")
 
                 # Parse JSON response
                 try:
@@ -638,7 +668,12 @@ Instructions:
             yield f"data: {json.dumps({'type': 'final-answer', 'content': final_answer, 'timestamp': elapsed})}\n\n"
 
             # 7. Stream completion metadata
-            yield f"data: {json.dumps({'type': 'completed', 'model_used': model, 'total_tokens': 0, 'tool_calls_count': iteration - 1, 'elapsed_seconds': elapsed})}\n\n"
+            # Add synthesis prompt tokens if we did synthesis
+            if "Based on all the information gathered" in str(messages):
+                synthesis_tokens = len("Based on all the information gathered, provide a final comprehensive answer") // 4
+                total_tokens_used += synthesis_tokens
+
+            yield f"data: {json.dumps({'type': 'completed', 'model_used': model, 'total_tokens': total_tokens_used, 'tool_calls_count': iteration - 1, 'elapsed_seconds': elapsed})}\n\n"
 
         except Exception as e:
             logger.error(f"Error analyzing repository: {e}", exc_info=True)
