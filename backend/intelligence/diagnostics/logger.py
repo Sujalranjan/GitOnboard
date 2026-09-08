@@ -129,7 +129,7 @@ class DiagnosticLogger:
             details=details or {},
         )
         self.actions.append(action)
-        self.logger.info(f"[{action_type.value}] {analyzer_name} @ {file_path}: {message}")
+        self.logger.debug(f"[{action_type.value}] {analyzer_name} @ {file_path}: {message}")
 
     def log_error(
         self,
