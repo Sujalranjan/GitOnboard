@@ -91,7 +91,7 @@ class BoundedGraphExpander:
         expanded_nodes: Dict[str, ExpandedNode] = {}
         seen_ids: Set[str] = set()
 
-        logger.info(
+        logger.debug(
             f"[GraphExpand] Starting expansion of {len(candidates)} anchor nodes "
             f"(analysis_id={self.analysis_id}, max_depth={self.max_depth}, max_nodes_per_hop={self.max_nodes_per_hop})"
         )
@@ -102,7 +102,7 @@ class BoundedGraphExpander:
             ctype = cand.get("entity_type") or cand.get("type", "unknown")
             candidate_types[ctype] = candidate_types.get(ctype, 0) + 1
 
-        logger.info(f"[GraphExpand] Candidate types: {candidate_types}")
+        logger.debug(f"[GraphExpand] Candidate types: {candidate_types}")
 
         # Step 1: Process anchors and resolve to symbols
         for cand in candidates:
@@ -113,14 +113,14 @@ class BoundedGraphExpander:
                 if sym_id:
                     seen_ids.add(sym_id)
 
-        logger.info(
+        logger.debug(
             f"[GraphExpand] Processed {len(anchor_nodes)} anchor nodes from {len(candidates)} candidates"
         )
 
         # Step 2: Expand from each anchor with bounded BFS
         for anchor_id, anchor_dict in anchor_nodes.items():
             if len(expanded_nodes) >= self.max_total_nodes:
-                logger.info(
+                logger.debug(
                     f"[GraphExpand] Reached max_total_nodes limit ({self.max_total_nodes})"
                 )
                 break
@@ -138,7 +138,7 @@ class BoundedGraphExpander:
         for expanded_id, expanded_node in list(expanded_nodes.items())[: self.max_total_nodes - len(anchor_nodes)]:
             results.append(self._expanded_node_to_dict(expanded_node))
 
-        logger.info(
+        logger.debug(
             f"[GraphExpand] Expansion complete: {len(anchor_nodes)} anchors + "
             f"{len(list(expanded_nodes.items())[:self.max_total_nodes - len(anchor_nodes)])} expanded = {len(results)} total"
         )

@@ -321,7 +321,7 @@ Investigate the repository using the available tools. Start by exploring the rel
         )
 
         for iteration in range(max_iterations):
-            logger.info(f"\n[Research Loop] Iteration {iteration + 1}/{max_iterations}")
+            logger.debug(f"\n[Research Loop] Iteration {iteration + 1}/{max_iterations}")
 
             # Call LLM for next action
             try:
@@ -334,7 +334,7 @@ Investigate the repository using the available tools. Start by exploring the rel
                 response = await self.llm_service.generate(request)
                 llm_response = response.content
 
-                logger.info(f"[Research Loop] LLM response: {llm_response[:500]}...")
+                logger.debug(f"[Research Loop] LLM response: {llm_response[:500]}...")
 
             except Exception as e:
                 logger.error(f"[Research Loop] LLM call failed: {e}")
@@ -355,7 +355,7 @@ Investigate the repository using the available tools. Start by exploring the rel
                 if "final_answer" in parsed:
                     # LLM has decided to answer
                     final_answer = parsed["final_answer"]
-                    logger.info(f"[Research Loop] LLM reached final answer at iteration {iteration + 1}")
+                    logger.debug(f"[Research Loop] LLM reached final answer at iteration {iteration + 1}")
 
                     tool_wrapper._emit_event(
                         ResearchEventType.LLM_RESPONSE,
@@ -378,7 +378,7 @@ Investigate the repository using the available tools. Start by exploring the rel
                     parameters = parsed.get("parameters", {})
                     thought = parsed.get("thought", "")
 
-                    logger.info(f"[Research Loop] LLM requesting tool: {tool_name} with params: {parameters}")
+                    logger.debug(f"[Research Loop] LLM requesting tool: {tool_name} with params: {parameters}")
 
                     # Execute tool
                     if tool_name == "inspect_file":
@@ -549,19 +549,19 @@ Investigate the repository using the available tools. Start by exploring the rel
         import time
         start_time = time.time()
 
-        logger.info(f"\n[Stage 8 - Phase 2M Interactive] RECEIVED CONTEXT FROM STAGE 7:")
-        logger.info(f"  Relevant files: {len(context.relevant_files or [])} - {context.relevant_files[:3]}")
-        logger.info(f"  Relevant symbols: {len(context.relevant_symbols or [])}")
-        logger.info(f"  Evidence items: {len(context.evidence or [])}")
+        logger.debug(f"\n[Stage 8 - Phase 2M Interactive] RECEIVED CONTEXT FROM STAGE 7:")
+        logger.debug(f"  Relevant files: {len(context.relevant_files or [])} - {context.relevant_files[:3]}")
+        logger.debug(f"  Relevant symbols: {len(context.relevant_symbols or [])}")
+        logger.debug(f"  Evidence items: {len(context.evidence or [])}")
 
         # Create compact context (strip source)
         compact_context = self._create_compact_context(context)
         original_size = len(context.model_dump_json())
         compact_size = len(compact_context.model_dump_json())
-        logger.info(f"\n[Stage 8 - Phase 2M Interactive] CONTEXT COMPACTION:")
-        logger.info(f"  Original size: {original_size/1024:.1f}KB")
-        logger.info(f"  Compact size: {compact_size/1024:.1f}KB")
-        logger.info(f"  Reduction: {((original_size - compact_size) / original_size * 100):.1f}%")
+        logger.debug(f"\n[Stage 8 - Phase 2M Interactive] CONTEXT COMPACTION:")
+        logger.debug(f"  Original size: {original_size/1024:.1f}KB")
+        logger.debug(f"  Compact size: {compact_size/1024:.1f}KB")
+        logger.debug(f"  Reduction: {((original_size - compact_size) / original_size * 100):.1f}%")
 
         # Initialize Phase 2L tools (no fallback option)
         context_manager = ContextManager(
@@ -569,9 +569,9 @@ Investigate the repository using the available tools. Start by exploring the rel
         )
         tool_wrapper = Phase2LToolWrapper(execution_context, context_manager)
 
-        logger.info(f"[Stage 8 - Phase 2M Interactive] Phase 2L tools initialized:")
-        logger.info(f"  analysis_id: {execution_context.analysis_id}")
-        logger.info(f"  repo_root: {execution_context.repo_root}")
+        logger.debug(f"[Stage 8 - Phase 2M Interactive] Phase 2L tools initialized:")
+        logger.debug(f"  analysis_id: {execution_context.analysis_id}")
+        logger.debug(f"  repo_root: {execution_context.repo_root}")
 
         # Run interactive research loop
         answer, research_events = await self._run_research_loop(
@@ -596,7 +596,7 @@ Investigate the repository using the available tools. Start by exploring the rel
         grounding_result = validator.validate(answer)
         grounding_result.llm_latency = llm_latency
 
-        logger.info(
+        logger.debug(
             f"[Stage 8 - Phase 2M Interactive] Research complete: {len(answer)} chars, "
             f"grounding={grounding_result.grounding_status}, "
             f"latency={llm_latency:.2f}s"
@@ -685,7 +685,7 @@ Answer based ONLY on the provided context. Cite specific files and symbols."""
         grounding_result = validator.validate(answer)
         grounding_result.llm_latency = llm_latency
 
-        logger.info(
+        logger.debug(
             f"[Stage 8 Legacy] Answer: {len(answer)} chars, "
             f"grounding={grounding_result.grounding_status}, "
             f"latency={llm_latency:.2f}s"

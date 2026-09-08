@@ -131,7 +131,7 @@ class TypeScriptCallGraphVisitor:
         logger = logging.getLogger(__name__)
 
         if depth == 0:
-            logger.info(f"[TS Visitor] Starting traversal from {node.type}")
+            logger.debug(f"[TS Visitor] Starting traversal from {node.type}")
 
         if node.type == 'class_declaration':
             self._handle_class_declaration(node)
@@ -308,7 +308,7 @@ class CallGraphAnalyzer(BaseAnalyzer):
     def analyze(self, repository: RepositoryModel, asts: Dict[str, ParsedFile]) -> None:
         diag = get_diagnostic_logger()
 
-        logger.info(f"[CallGraphAnalyzer] Starting with {len(repository.relationships)} existing relationships")
+        logger.debug(f"[CallGraphAnalyzer] Starting with {len(repository.relationships)} existing relationships")
         if diag:
             diag.log_analyzer_start("CallGraphAnalyzer", len(asts))
 
@@ -318,7 +318,7 @@ class CallGraphAnalyzer(BaseAnalyzer):
 
         for file_path, parsed in asts.items():
             if parsed.language not in self.supported_languages:
-                logger.info(f"[CallGraphAnalyzer] Skipping {file_path}: unsupported language {parsed.language}")
+                logger.debug(f"[CallGraphAnalyzer] Skipping {file_path}: unsupported language {parsed.language}")
                 if diag:
                     diag.log_action(
                         ActionType.ANALYZER_PROCESS_FILE,
@@ -330,7 +330,7 @@ class CallGraphAnalyzer(BaseAnalyzer):
                 continue
 
             if not parsed.ast:
-                logger.info(f"[CallGraphAnalyzer] Skipping {file_path}: no AST (parsed.ast={type(parsed.ast).__name__})")
+                logger.debug(f"[CallGraphAnalyzer] Skipping {file_path}: no AST (parsed.ast={type(parsed.ast).__name__})")
                 if diag:
                     diag.log_action(
                         ActionType.ANALYZER_PROCESS_FILE,
@@ -341,7 +341,7 @@ class CallGraphAnalyzer(BaseAnalyzer):
                     )
                 continue
 
-            logger.info(f"[CallGraphAnalyzer] Processing {file_path}: ast_type={type(parsed.ast).__name__}")
+            logger.debug(f"[CallGraphAnalyzer] Processing {file_path}: ast_type={type(parsed.ast).__name__}")
             if diag:
                 diag.log_file_processed(file_path, parsed.language, type(parsed.ast).__name__)
 
@@ -351,7 +351,7 @@ class CallGraphAnalyzer(BaseAnalyzer):
                 if parsed.language == "Python":
                     visitor = PythonCallGraphVisitor(file_path, repository, index)
                     visitor.visit(parsed.ast)
-                    logger.info(f"[CallGraphAnalyzer] Python {file_path}: extracted {len(visitor.relationships)} relationships")
+                    logger.debug(f"[CallGraphAnalyzer] Python {file_path}: extracted {len(visitor.relationships)} relationships")
                     if diag:
                         diag.log_action(
                             ActionType.ANALYZER_PROCESS_FILE,
@@ -381,7 +381,7 @@ class CallGraphAnalyzer(BaseAnalyzer):
 
                     visitor = TypeScriptCallGraphVisitor(file_path, parsed.source, repository, index)
                     visitor.visit(parsed.ast.root_node)
-                    logger.info(f"[CallGraphAnalyzer] TS/JS {file_path}: extracted {len(visitor.relationships)} relationships")
+                    logger.debug(f"[CallGraphAnalyzer] TS/JS {file_path}: extracted {len(visitor.relationships)} relationships")
                     if diag:
                         diag.log_action(
                             ActionType.ANALYZER_PROCESS_FILE,
@@ -406,6 +406,6 @@ class CallGraphAnalyzer(BaseAnalyzer):
                         e,
                     )
 
-        logger.info(f"[CallGraphAnalyzer] Complete: {files_processed} files, {rels_created} relationships created, {len(repository.relationships)} total")
+        logger.debug(f"[CallGraphAnalyzer] Complete: {files_processed} files, {rels_created} relationships created, {len(repository.relationships)} total")
         if diag:
             diag.log_analyzer_complete("CallGraphAnalyzer", files_processed, rels_created)

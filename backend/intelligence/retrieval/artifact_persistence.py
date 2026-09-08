@@ -64,7 +64,7 @@ def persist_rebuilt_bm25(
 
         if existing_artifact:
             # Update existing artifact with fresh data
-            logger.info(
+            logger.debug(
                 f"[BM25_PERSIST_UPDATE] Updating existing BM25 artifact for analysis {analysis_id} "
                 f"to version {current_fact_store_version[:8]}..."
             )
@@ -72,7 +72,7 @@ def persist_rebuilt_bm25(
             db.flush()  # Ensure update is staged
         else:
             # Create new artifact
-            logger.info(
+            logger.debug(
                 f"[BM25_PERSIST_CREATE] Creating new BM25 artifact for analysis {analysis_id} "
                 f"version {current_fact_store_version[:8]}..."
             )
@@ -88,7 +88,7 @@ def persist_rebuilt_bm25(
         # Commit the transaction (atomic)
         db.commit()
 
-        logger.info(
+        logger.debug(
             f"[BM25_PERSIST_SUCCESS] BM25 artifact persisted successfully for analysis {analysis_id} "
             f"version {current_fact_store_version[:8]}..."
         )
