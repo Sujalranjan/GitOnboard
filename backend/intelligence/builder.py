@@ -74,8 +74,10 @@ class RepositoryBuilder:
                 except Exception:
                     size = 0
 
-                # Only INDEX code files (skip hidden files and non-code files)
+                # Only INDEX code files (skip hidden files, non-code files, and dot-folders)
                 is_code_file = not file.startswith(".") and ext in self.CODE_EXTENSIONS
+                is_in_dot_folder = any(part.startswith(".") for part in Path(rel_path).parts)
+                should_index = is_code_file and not is_in_dot_folder
                 is_python = ext == ".py"
 
                 entities.files[file_id] = FileNode(
@@ -87,8 +89,8 @@ class RepositoryBuilder:
                     is_python=is_python
                 )
 
-                # Parse code files for symbols
-                if self.parser.supports_extension(ext):
+                # Parse code files for symbols (only if not in dot-folder)
+                if should_index and self.parser.supports_extension(ext):
                     self._parse_file(pf, file_id, ext, entities)
                     
         return RepositoryModel(metadata=metadata, entities=entities)
