@@ -5,28 +5,45 @@ from backend.database import get_db
 from backend.models.user import User
 from backend.dependencies.auth import get_current_user
 from backend.routers.repo.schemas import GraphQueryRequest
-from backend.routers.repo.services.models import get_or_build_model
+from backend.routers.repo.services.hash_resolution import get_latest_analysis_by_hash
 from backend.intelligence.graphs.graph_query_service import GraphQueryService
+from backend.intelligence.rim.serialization import deserialize_rim
 
 logger = logging.getLogger(__name__)
 
 graph_router = APIRouter(tags=["graph"])
 
-@graph_router.get("/{repo_name}/graph/search")
-def graph_search(repo_name: str, q: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@graph_router.get("/{repo_hash}/graph/search")
+def graph_search(repo_hash: str, q: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not q or not q.strip():
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
-    query_layer = get_or_build_model(repo_name, db, current_user)
-    service = GraphQueryService(query_layer.model)
+    try:
+        repo, analysis = get_latest_analysis_by_hash(repo_hash, db, current_user)
+    except HTTPException as e:
+        logger.warning(f"[GRAPH_SEARCH] Repository not found: {repo_hash}")
+        raise
+
+    # Deserialize model from analysis artifact
+    from backend.models.fact_store import AnalysisArtifact
+    artifact = db.query(AnalysisArtifact).filter(
+        AnalysisArtifact.analysis_id == analysis.id,
+        AnalysisArtifact.type == "rim_model"
+    ).first()
+
+    if not artifact or not artifact.data:
+        raise HTTPException(status_code=404, detail=f"No model found for analysis {analysis.id}")
+
+    model = deserialize_rim(artifact.data)
+    service = GraphQueryService(model)
     results = service.search(q)
 
-    logger.info(f"[GRAPH_SEARCH] repo={repo_name}, query={q}, results={len(results)}")
+    logger.info(f"[GRAPH_SEARCH] repo_hash={repo_hash}, query={q}, results={len(results)}")
     return {"results": results}
 
-@graph_router.post("/{repo_name}/graph/query")
-def graph_query(repo_name: str, req: GraphQueryRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    logger.info(f"[GRAPH_QUERY] repo={repo_name}, node_id={req.node_id}, direction={req.direction}, depth={req.depth}")
+@graph_router.post("/{repo_hash}/graph/query")
+def graph_query(repo_hash: str, req: GraphQueryRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    logger.info(f"[GRAPH_QUERY] repo_hash={repo_hash}, node_id={req.node_id}, direction={req.direction}, depth={req.depth}")
 
     # Step 1: Validate input parameters
     if not req.node_id or not req.node_id.strip():
@@ -62,9 +79,24 @@ def graph_query(repo_name: str, req: GraphQueryRequest, db: Session = Depends(ge
             detail=f"relationship_type must be one of {valid_rel_types} (got '{req.relationship_type}')"
         )
 
-    # Step 2: Build model and get service
-    query_layer = get_or_build_model(repo_name, db, current_user)
-    service = GraphQueryService(query_layer.model)
+    # Step 2: Get analysis and deserialize model
+    try:
+        repo, analysis = get_latest_analysis_by_hash(repo_hash, db, current_user)
+    except HTTPException as e:
+        logger.warning(f"[GRAPH_QUERY] Repository not found: {repo_hash}")
+        raise
+
+    from backend.models.fact_store import AnalysisArtifact
+    artifact = db.query(AnalysisArtifact).filter(
+        AnalysisArtifact.analysis_id == analysis.id,
+        AnalysisArtifact.type == "rim_model"
+    ).first()
+
+    if not artifact or not artifact.data:
+        raise HTTPException(status_code=404, detail=f"No model found for analysis {analysis.id}")
+
+    model = deserialize_rim(artifact.data)
+    service = GraphQueryService(model)
 
     # Step 3: Validate node exists in model
     if node_id not in service.model.entities:
