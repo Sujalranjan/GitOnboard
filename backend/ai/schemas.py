@@ -28,7 +28,7 @@ class LLMRequest(BaseModel):
     messages: List[Message]
     model: Optional[str] = None
     temperature: float = 0.2
-    max_tokens: int = 4096
+    max_tokens: int = 8192
     response_format: Optional[Dict[str, Any]] = None
     tools: Optional[List[Tool]] = None
     tool_choice: Optional[str] = None  # "auto", "required", or specific tool name
