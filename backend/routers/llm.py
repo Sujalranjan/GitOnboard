@@ -119,7 +119,8 @@ async def execute_search_symbols(query: str, db: Session, analysis_id: Optional[
         results = retriever.retrieve(query, top_k=5)
 
         if not results:
-            return f"No symbols found matching '{query}'"
+            # Empty result - guide LLM to try alternatives
+            return f"No symbols found matching '{query}'. TRY ALTERNATIVE SEARCH TERMS: Try searching for related terms like synonyms, abbreviations, or more specific/general versions of the query."
 
         output = f"Found {len(results)} matching symbols:\n"
         for i, result in enumerate(results, 1):
@@ -416,10 +417,29 @@ You MUST respond with ONLY a JSON object in ONE of two formats:
 2. Use tools to gather real data before answering
 3. Stream of work: Tool → Tool → Tool → Complete
 4. When you have enough information, use "complete" action
-5. Never guess - if you can't find something, say so
+5. Never guess - if you can't find something, try alternative searches
+6. If a search returns no results, try related terms before giving up
+
+## Smart Fallback Strategy
+CRITICAL: If search_symbols returns "No symbols found", DO NOT GIVE UP!
+
+When a search returns zero results, intelligently try alternative keywords:
+- Think of SYNONYMS (e.g., if "login" fails, try "auth", "authenticate", "signin")
+- Think of ABBREVIATIONS (e.g., if "database" fails, try "db")
+- Think of RELATED CONCEPTS (e.g., if "cache" fails, try "storage", "persistence")
+- Think of BROADER TERMS (e.g., if "token" fails, try "security", "auth")
+- Think of NARROWER TERMS (e.g., if "data" fails, try specific types like "user", "config")
+- Think of TECHNICAL VARIANTS (e.g., if "json" fails, try "parse", "serialize", "format")
+
+YOUR RESPONSIBILITY: Use your code knowledge to decide what alternative keywords make sense.
+Continue searching with different terms until you either:
+1. Find relevant symbols
+2. Reach iteration limit
+
+Do NOT complete prematurely - try at least 3-5 different search terms before giving up!
 
 ## Available Tools
-- search_symbols: Find code symbols (name or pattern)
+- search_symbols: Find code symbols (name or pattern) - use varied search terms!
 - read_file: Read file contents
 - analyze_relationships: Understand component connections"""
 
@@ -429,13 +449,19 @@ You MUST respond with ONLY a JSON object in ONE of two formats:
                 Message(role=MessageRole.USER, content=request.query),
             ]
 
-            max_iterations = 5  # Prevent infinite loops
+            max_iterations = 10  # Increased for more thorough exploration
             iteration = 0
             final_answer = None
 
             # 5. Tool-calling loop
             while iteration < max_iterations:
                 iteration += 1
+
+                # If approaching limit, tell LLM to wrap up
+                if iteration >= max_iterations - 1:
+                    messages.append(
+                        Message(role=MessageRole.USER, content="You've completed your investigation. Now provide a final comprehensive answer based on what you've learned. Use the complete action to summarize your findings.")
+                    )
 
                 # Call LLM
                 llm_request = LLMRequest(
@@ -520,9 +546,28 @@ You MUST respond with ONLY a JSON object in ONE of two formats:
                     logger.warning(f"Unknown action: {action_data.get('action')}")
                     break
 
-            # Use final answer from LLM or fallback
+            # Use final answer from LLM or synthesize from findings
             if not final_answer:
-                final_answer = "Analysis complete. No final answer generated."
+                # Synthesize answer from the collected tool results
+                synthesis_prompt = f"Based on all the information gathered through {iteration - 1} tool searches, provide a final comprehensive answer to the original question: {request.query}"
+                messages.append(Message(role=MessageRole.USER, content=synthesis_prompt))
+
+                # Final synthesis call
+                final_llm_request = LLMRequest(
+                    messages=messages,
+                    model=model,
+                    temperature=0.2,
+                    max_tokens=2048,
+                    tools=None,
+                    tool_choice=None
+                )
+
+                try:
+                    final_response = await llm_service.generate(final_llm_request)
+                    final_answer = final_response.content.strip()
+                except Exception as e:
+                    logger.warning(f"Failed to generate synthesis: {e}")
+                    final_answer = "Analysis complete. See tool results above for findings."
 
             # 6. Stream final answer
             elapsed = (datetime.now() - start_time).total_seconds()
