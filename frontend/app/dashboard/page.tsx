@@ -320,10 +320,10 @@ function DashboardContent() {
                     <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Repository</span>
                     <p className="text-sm text-slate-600 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/80 p-2 rounded line-clamp-1">{getRepositoryPath(repo)}</p>
                   </div>
-                  
+
                   {(repo.branch || repo.commit) && (
                     <div>
-                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Git Info</span>
+                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Branch</span>
                       <p className="text-sm text-slate-700 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/80 p-2 rounded line-clamp-1">
                         {repo.branch ? <span className="text-blue-600 dark:text-blue-400 font-medium">{repo.branch}</span> : ''}
                         {repo.branch && repo.commit ? ' @ ' : ''}
@@ -331,7 +331,7 @@ function DashboardContent() {
                       </p>
                     </div>
                   )}
-                  
+
                   {(() => {
                     const statusLower = (repo.status || '').toLowerCase();
                     const jobStatusLower = (repo.job_status || '').toLowerCase();
