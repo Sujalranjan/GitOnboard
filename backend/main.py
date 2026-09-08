@@ -279,6 +279,7 @@ from backend.routers.implementation import router as implementation_router
 from backend.routers.repo import repo_router, import_router
 from backend.routers.verification import router as verification_router
 from backend.routers.sandbox import router as sandbox_router
+from backend.routers.llm import router as llm_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
@@ -289,6 +290,7 @@ app.include_router(agent_router)
 app.include_router(implementation_router)
 app.include_router(verification_router)
 app.include_router(sandbox_router)
+app.include_router(llm_router)
 
 @app.get("/", include_in_schema=False)
 def read_root():
