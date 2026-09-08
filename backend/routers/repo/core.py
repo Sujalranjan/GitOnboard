@@ -130,6 +130,24 @@ async def import_repo(req: ImportRequest, db: Session = Depends(get_db), current
         db.refresh(repo)
         logger.info(f"[import_repo] Created new repo ID {repo.id} with URL={url}")
 
+        # FIX: Verify repository was actually persisted to database
+        # (detect database/blob storage desynchronization early)
+        verification = db.query(Repository).filter(Repository.id == repo.id).first()
+        if not verification:
+            logger.error(f"[DESYNC_CLEANUP] Repository {repo.id} was not persisted to database after commit!")
+            logger.error(f"[DESYNC_CLEANUP] Cleaning up to prevent desynchronization...")
+
+            # Delete the orphaned repository record from database
+            try:
+                db.query(Repository).filter(Repository.id == repo.id).delete()
+                db.commit()
+                logger.info(f"[DESYNC_CLEANUP] Deleted orphaned Repository {repo.id} from database")
+            except Exception as cleanup_err:
+                logger.error(f"[DESYNC_CLEANUP] Failed to clean up Repository {repo.id}: {cleanup_err}")
+                db.rollback()
+
+            raise HTTPException(status_code=500, detail="Database persistence failed. Please try importing again.")
+
     # Check for unfinished jobs
     unfinished = db.query(AnalysisJob).join(Analysis).filter(
         Analysis.repository_id == repo.id,
@@ -145,10 +163,22 @@ async def import_repo(req: ImportRequest, db: Session = Depends(get_db), current
     db.commit()
     db.refresh(analysis)
 
+    # FIX: Verify analysis was persisted to database before creating job
+    analysis_verification = db.query(Analysis).filter(Analysis.id == analysis.id).first()
+    if not analysis_verification:
+        logger.error(f"[BUG_FIX] Analysis {analysis.id} was not persisted to database after commit!")
+        raise HTTPException(status_code=500, detail="Failed to persist analysis to database. Please try again.")
+
     job = AnalysisJob(analysis_id=analysis.id)
     db.add(job)
     db.commit()
     db.refresh(job)
+
+    # FIX: Verify job was persisted to database before enqueueing
+    job_verification = db.query(AnalysisJob).filter(AnalysisJob.id == job.id).first()
+    if not job_verification:
+        logger.error(f"[BUG_FIX] AnalysisJob {job.id} was not persisted to database after commit!")
+        raise HTTPException(status_code=500, detail="Failed to persist job to database. Please try again.")
 
     # Enqueue
     enqueue_job(job.id)
