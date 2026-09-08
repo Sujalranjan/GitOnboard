@@ -129,7 +129,7 @@ class DiagnosticLogger:
             details=details or {},
         )
         self.actions.append(action)
-        self.logger.debug(f"[{action_type.value}] {analyzer_name} @ {file_path}: {message}")
+        # Diagnostic logging disabled - keep actions in memory for debugging only
 
     def log_error(
         self,
@@ -326,7 +326,6 @@ class DiagnosticLogger:
         with open(report_file, "w") as f:
             json.dump(report_dict, f, indent=2)
 
-        self.logger.info(f"Diagnostic report saved to {report_file}")
         return report_file
 
     def save_actions(self) -> Path:
@@ -336,7 +335,6 @@ class DiagnosticLogger:
             for action in self.actions:
                 f.write(json.dumps(action.to_dict()) + "\n")
 
-        self.logger.info(f"Actions log saved to {actions_file} ({len(self.actions)} actions)")
         return actions_file
 
     def print_summary(self) -> str:
