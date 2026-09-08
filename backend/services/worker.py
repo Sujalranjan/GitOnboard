@@ -169,16 +169,13 @@ class AnalysisWorker(WorkerInterface):
                             content_type = content_type or "text/plain"
                             file_size = full_p.stat().st_size
 
-                            # Upload to Azure blob storage
+                            # Upload to Azure blob storage (silently)
                             with open(full_p, "rb") as fh:
-                                logger.info(f"[BLOB_UPLOAD] Uploading {rel_p} to blob: {blob_key}")
                                 storage.put_object(blob_key, fh, content_type=content_type)
 
                             # Verify blob exists in storage before recording in database
-                            logger.info(f"[BLOB_VERIFY] Verifying blob exists: {blob_key}")
                             if not storage.object_exists(blob_key):
                                 raise FileNotFoundError(f"Blob upload succeeded but verification failed: {blob_key} not found in storage")
-                            logger.info(f"[BLOB_VERIFY] Blob verified: {blob_key} exists in storage")
 
                             # Create or update file entity
                             f_ent = file_entities_by_path.get(rel_p)
@@ -205,7 +202,6 @@ class AnalysisWorker(WorkerInterface):
                             f_ent.metadata["snapshot_id"] = snapshot_id
                             f_ent.metadata["content_type"] = content_type
                             f_ent.metadata["size"] = file_size
-                            logger.info(f"[BLOB_RECORD] Recorded blob_name in metadata: {blob_key}")
 
                             # Update progress every ~10 files or at end
                             if file_idx % 10 == 0 or file_idx == total_files - 1:
