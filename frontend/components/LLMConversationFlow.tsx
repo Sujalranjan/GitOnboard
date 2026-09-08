@@ -43,7 +43,11 @@ const AVAILABLE_MODELS: ModelOption[] = [
   },
 ];
 
-export const LLMConversationFlow: React.FC = () => {
+interface LLMConversationFlowProps {
+  repoName: string;
+}
+
+export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoName }) => {
   const [query, setQuery] = useState('');
   const [running, setRunning] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -57,6 +61,7 @@ export const LLMConversationFlow: React.FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [totalTokens, setTotalTokens] = useState(0);
   const [modelUsed, setModelUsed] = useState('');
+  const [repoHash, setRepoHash] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -82,6 +87,27 @@ export const LLMConversationFlow: React.FC = () => {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [settingsOpen]);
+
+  // Look up repo hash from repo name
+  useEffect(() => {
+    const lookupRepoHash = async () => {
+      try {
+        const response = await fetch(`/api/repos?search=${encodeURIComponent(repoName)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.repositories && data.repositories.length > 0) {
+            setRepoHash(data.repositories[0].repository_hash);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to look up repository hash:', error);
+      }
+    };
+
+    if (repoName) {
+      lookupRepoHash();
+    }
+  }, [repoName]);
 
   const handleModelChange = async (modelId: string) => {
     setChangingModel(true);
@@ -113,12 +139,14 @@ export const LLMConversationFlow: React.FC = () => {
     startTimeRef.current = Date.now();
 
     try {
-      // Get repo name from URL: /repository/[repoName]/conversation-flow
-      // pathname = '/repository/GitOnboard/conversation-flow'
-      // parts[2] = 'GitOnboard'
-      const repoName = typeof window !== 'undefined'
-        ? window.location.pathname.split('/')[2] || 'default'
-        : 'default';
+      if (!repoHash) {
+        setMessages([{
+          type: 'final-answer',
+          content: 'Error: Repository not found. Please wait while we load the repository information.',
+        }]);
+        setRunning(false);
+        return;
+      }
 
       // Call real backend endpoint with streaming
       const response = await fetch('/api/llm/analyze/stream', {
@@ -126,7 +154,7 @@ export const LLMConversationFlow: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: userQuery,
-          repo_name: repoName,
+          repo_hash: repoHash,
           model: selectedModel,
           show_tool_details: showToolDetails,
         }),
