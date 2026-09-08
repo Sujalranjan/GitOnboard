@@ -111,9 +111,11 @@ export const LLMConversationFlow: React.FC = () => {
     startTimeRef.current = Date.now();
 
     try {
-      // Get repo name from URL or use default
+      // Get repo name from URL: /repository/[repoName]/conversation-flow
+      // pathname = '/repository/GitOnboard/conversation-flow'
+      // parts[2] = 'GitOnboard'
       const repoName = typeof window !== 'undefined'
-        ? window.location.pathname.split('/')[3] || 'default'
+        ? window.location.pathname.split('/')[2] || 'default'
         : 'default';
 
       // Call real backend endpoint with streaming

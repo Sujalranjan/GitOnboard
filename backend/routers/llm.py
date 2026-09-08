@@ -88,6 +88,8 @@ async def build_repository_context(db: Session, repo: Repository, analysis_id: O
 async def execute_search_symbols(query: str, db: Session, analysis_id: Optional[int] = None) -> str:
     """Search for code symbols matching the query."""
     try:
+        logger.debug(f"[SEARCH] execute_search_symbols called with query='{query}', analysis_id={analysis_id}")
+
         # Try to use workspace tool handler first
         try:
             from backend.agent.tools.repository import handle_search_symbols
@@ -104,22 +106,32 @@ async def execute_search_symbols(query: str, db: Session, analysis_id: Optional[
                 context=context
             )
 
+            logger.debug(f"[SEARCH] handle_search_symbols returned: {result}")
+
             if result and result.get('symbols_found'):
                 output = f"Found {len(result.get('symbols_found', []))} matching symbols:\n"
                 for sym in result.get('symbols_found', [])[:5]:
                     output += f"- {sym.get('name', 'Unknown')} ({sym.get('type', 'unknown')})\n"
                     if sym.get('file'):
                         output += f"  File: {sym.get('file')}\n"
+                logger.debug(f"[SEARCH] Returning from handle_search_symbols")
                 return output
-        except Exception:
+            else:
+                logger.debug(f"[SEARCH] handle_search_symbols returned but no 'symbols_found' key, falling through to HybridRetriever")
+        except Exception as e:
+            logger.debug(f"[SEARCH] handle_search_symbols exception: {e}, falling back to HybridRetriever")
             pass  # Fallback to retriever if handler fails
 
         # Fallback: Use HybridRetriever
+        logger.debug(f"[SEARCH] Calling HybridRetriever with analysis_id={analysis_id}")
         retriever = HybridRetriever(db, analysis_id=analysis_id)
         results = retriever.retrieve(query, top_k=5)
 
+        logger.debug(f"[SEARCH] HybridRetriever returned {len(results) if results else 0} results: {results}")
+
         if not results:
             # Empty result - guide LLM to try alternatives
+            logger.debug(f"[SEARCH] No results found")
             return f"No symbols found matching '{query}'. TRY ALTERNATIVE SEARCH TERMS: Try searching for related terms like synonyms, abbreviations, or more specific/general versions of the query."
 
         output = f"Found {len(results)} matching symbols:\n"
@@ -128,9 +140,10 @@ async def execute_search_symbols(query: str, db: Session, analysis_id: Optional[
             if result.file_path:
                 output += f"   File: {result.file_path}\n"
 
+        logger.debug(f"[SEARCH] Returning formatted results")
         return output
     except Exception as e:
-        logger.error(f"Error searching symbols: {e}")
+        logger.error(f"Error searching symbols: {e}", exc_info=True)
         return f"Error searching symbols: {str(e)}"
 
 
