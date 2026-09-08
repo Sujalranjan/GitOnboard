@@ -333,14 +333,13 @@ async def analyze_repository_stream(
         start_time = datetime.now()
 
         try:
-            # Verify repository exists and user has access
+            # Verify repository exists (allow access to any repository for analysis)
             repo = db.query(Repository).filter(
-                (Repository.repository_hash == request.repo_name) | (Repository.url.contains(request.repo_name)),
-                Repository.user_id == current_user.id
+                (Repository.repository_hash == request.repo_name) | (Repository.url.contains(request.repo_name))
             ).first()
 
             if not repo:
-                logger.warning(f"Repository {request.repo_name} not found for user {current_user.username}, proceeding with analysis")
+                logger.warning(f"Repository {request.repo_name} not found, will proceed without context")
 
             # Use selected model or current model
             model = request.model or os.environ.get("OLLAMA_MODEL", "qwen3:4b-instruct")
