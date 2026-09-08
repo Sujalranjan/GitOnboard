@@ -317,24 +317,7 @@ function DashboardContent() {
                 
                 <div className="space-y-4 flex-grow">
                   <div>
-                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Repository ID</span>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm text-slate-700 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/80 p-2 rounded flex-1">{repo.id}</p>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          navigator.clipboard.writeText(String(repo.id));
-                        }}
-                        className="px-2 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                        title="Copy repository ID"
-                      >
-                        📋
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Path</span>
+                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Repository</span>
                     <p className="text-sm text-slate-600 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/80 p-2 rounded line-clamp-1">{getRepositoryPath(repo)}</p>
                   </div>
                   
