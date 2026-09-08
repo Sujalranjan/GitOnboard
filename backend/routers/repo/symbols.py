@@ -17,7 +17,7 @@ from backend.models.fact_store import (
     FactRoute,
     FactDatabaseObject,
 )
-from backend.routers.repo.services.analysis import get_latest_analysis
+from backend.routers.repo.services.hash_resolution import get_latest_analysis_by_hash
 from backend.storage import get_storage
 from backend.ai.service import get_llm_service, LLMService
 from backend.ai.schemas import LLMRequest, Message, MessageRole
@@ -238,9 +238,9 @@ async def _extract_source_snippet(
     return fallback_code, fpath
 
 
-@symbols_router.post("/{repo_name}/symbols/explain", response_model=ExplainSymbolResponse)
+@symbols_router.post("/{repo_hash}/symbols/explain", response_model=ExplainSymbolResponse)
 async def explain_symbol(
-    repo_name: str,
+    repo_hash: str,
     req: ExplainSymbolRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -252,7 +252,11 @@ async def explain_symbol(
     - Validates signature/content hashes to automatically detect stale explanations.
     - Bypasses cache when regenerate=True.
     """
-    repo, analysis = get_latest_analysis(repo_name, db, current_user)
+    try:
+        repo, analysis = get_latest_analysis_by_hash(repo_hash, db, current_user)
+    except HTTPException:
+        logger.warning(f"[EXPLAIN_SYMBOL] Repository not found: {repo_hash}")
+        raise
 
     # 1. Resolve Target Symbol
     sym: Optional[FactSymbol] = None
@@ -318,7 +322,8 @@ async def explain_symbol(
             detail=f"Symbol '{req.name or req.symbol_id}' not found in analyzed repository."
         )
 
-    source_snippet, resolved_fpath = await _extract_source_snippet(sym, sym.file, repo, repo_name, current_user, db, analysis.id)
+    # Extract source using repo object (no filesystem dependency on repo_name)
+    source_snippet, resolved_fpath = await _extract_source_snippet(sym, sym.file, repo, "", current_user, db, analysis.id)
     fpath = resolved_fpath or (sym.file.path if sym.file else (req.file_path or ""))
     current_hash = _compute_symbol_hash(sym, fpath, source_snippet)
 
