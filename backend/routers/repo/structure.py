@@ -400,9 +400,13 @@ def get_architecture(repo_name: str, node_id: str = "root", db: Session = Depend
 async def get_raw_file(
     repo_name: str,
     path: str,
+    start_line: int = None,
+    end_line: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from fastapi import HTTPException
+
     if not path or not path.strip():
         raise HTTPException(status_code=400, detail="Invalid empty file path")
 
@@ -411,75 +415,118 @@ async def get_raw_file(
     from backend.storage import get_storage
 
     logger.info(f"[FILE_API] GET /{repo_name}/file?path={path}")
+    if start_line or end_line:
+        logger.info(f"[FILE_API] Line range: {start_line}-{end_line}")
     logger.info(f"[FILE_API] Analysis ID: {analysis.id}, Repo ID: {repo.id}")
 
+    # Validate path format
     try:
         clean_path = normalize_relative(path)
         logger.info(f"[FILE_API] Clean path: {clean_path}")
     except PathTraversalError:
-        raise HTTPException(status_code=400, detail=f"Invalid repository-relative file path: '{path}'")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid repository-relative file path: '{path}' (path traversal detected)"
+        )
 
+    # Step 1: Validate line range parameters BEFORE checking file existence
+    if start_line is not None or end_line is not None:
+        if start_line is None:
+            start_line = 1
+        if end_line is None:
+            raise HTTPException(
+                status_code=400,
+                detail="end_line is required when start_line is specified"
+            )
+        if start_line < 1:
+            raise HTTPException(
+                status_code=400,
+                detail=f"start_line must be >= 1 (got {start_line})"
+            )
+        if end_line < start_line:
+            raise HTTPException(
+                status_code=400,
+                detail=f"end_line ({end_line}) must be >= start_line ({start_line})"
+            )
+
+    # Step 2: Check if file exists in current analysis's FactStore
     fact_file = (
         db.query(FactFile)
         .filter(FactFile.analysis_id == analysis.id, FactFile.path == clean_path)
         .first()
     )
 
-    if fact_file:
-        logger.info(f"[FILE_API] FactFile found - blob_name: {fact_file.blob_name}, size: {fact_file.size}")
-        if fact_file.blob_name:
-            try:
-                storage = get_storage()
-                logger.info(f"[FILE_API] Attempting to read blob: {fact_file.blob_name}")
-                content = storage.get_object_text(fact_file.blob_name)
-                logger.info(f"[FILE_API] Blob read successful, content size: {len(content) if content else 0}")
-                if content is not None:
-                    logger.info(f"[FILE_API] Returning blob content")
-                    return {
-                        "path": clean_path,
-                        "content": content,
-                        "size": fact_file.size,
-                        "language": fact_file.language,
-                        "content_type": fact_file.content_type,
-                    }
-                else:
-                    logger.info(f"[FILE_API] Blob content is None, falling through")
-            except FileNotFoundError as e:
-                logger.warning(f"[FILE_API] Blob not found: {fact_file.blob_name}")
-            except Exception as e:
-                logger.warning(f"[FILE_API] Error reading blob {fact_file.blob_name}: {type(e).__name__}: {e}")
-        else:
-            logger.info(f"[FILE_API] FactFile has no blob_name")
-    else:
-        logger.info(f"[FILE_API] No FactFile found for path: {clean_path}")
+    if not fact_file:
+        logger.warning(f"[FILE_API] File not found in analysis {analysis.id}: {clean_path}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"File '{clean_path}' not found in repository analysis (analysis_id={analysis.id})"
+        )
 
-    # Fallback to GitHub API if token and repository URL are available
-    logger.info(f"[FILE_API] Attempting GitHub API fallback, token available: {bool(current_user.github_access_token)}")
-    if current_user.github_access_token and repo.url:
-        try:
-            parts = repo.url.rstrip("/").split("/")
-            if len(parts) >= 2:
-                owner = parts[-2]
-                logger.info(f"[FILE_API] GitHub fetch: {owner}/{repo_name}/{clean_path}")
-                content = await fetch_file_content(owner, repo_name, repo.default_branch or "main", clean_path, current_user.github_access_token)
-                logger.info(f"[FILE_API] GitHub returned content size: {len(content) if content else 0}")
-                if content is not None:
-                    return {
-                        "path": clean_path,
-                        "content": content,
-                        "size": len(content.encode("utf-8")),
-                        "language": None,
-                        "content_type": "text/plain",
-                    }
-        except Exception as e:
-            logger.warning(f"[FILE_API] GitHub fallback read failed for {clean_path}: {e}")
+    # Step 3: Retrieve file content from storage
+    logger.info(f"[FILE_API] FactFile found - blob_name: {fact_file.blob_name}, size: {fact_file.size}")
 
-    # If neither Azurite blob nor GitHub contains the file, return explicit 404
-    logger.warning(f"[FILE_API] No content found for {clean_path}, returning 404")
-    raise HTTPException(
-        status_code=404,
-        detail=f"File not found in storage or repository: '{clean_path}'"
-    )
+    if not fact_file.blob_name:
+        logger.warning(f"[FILE_API] FactFile exists but has no blob_name: {clean_path}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"File exists in index but content is not available (blob_name missing)"
+        )
+
+    try:
+        storage = get_storage()
+        logger.info(f"[FILE_API] Attempting to read blob: {fact_file.blob_name}")
+        content = storage.get_object_text(fact_file.blob_name)
+        logger.info(f"[FILE_API] Blob read successful, content size: {len(content) if content else 0}")
+
+        if content is None:
+            logger.error(f"[FILE_API] Blob returned None for {fact_file.blob_name}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to retrieve file content from storage"
+            )
+
+    except FileNotFoundError:
+        logger.warning(f"[FILE_API] Blob not found in storage: {fact_file.blob_name}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"File content missing from storage (blob not found)"
+        )
+    except Exception as e:
+        logger.error(f"[FILE_API] Error reading blob {fact_file.blob_name}: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read file: {type(e).__name__}"
+        )
+
+    # Step 4: Extract line range if requested
+    extracted_content = content
+    total_lines = len(content.splitlines())
+    returned_start_line = start_line
+    returned_end_line = end_line
+
+    if start_line is not None and end_line is not None:
+        if end_line > total_lines:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid line range: end_line ({end_line}) exceeds file lines ({total_lines})"
+            )
+        lines = content.splitlines()
+        extracted_lines = lines[start_line-1:end_line]  # Convert to 0-indexed
+        extracted_content = '\n'.join(extracted_lines)
+        logger.info(f"[FILE_API] Extracted lines {start_line}-{end_line}, content size: {len(extracted_content)}")
+
+    # Step 5: Return response
+    return {
+        "path": clean_path,
+        "content": extracted_content,
+        "size": fact_file.size,
+        "language": fact_file.language,
+        "content_type": fact_file.content_type,
+        "total_lines": total_lines,
+        "line_start": returned_start_line,
+        "line_end": returned_end_line,
+    }
 
 
 from pydantic import BaseModel
