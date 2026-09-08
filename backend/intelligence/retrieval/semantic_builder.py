@@ -23,6 +23,28 @@ class SemanticIndexBuilder:
     def __init__(self):
         self.embeddings_model = None
 
+    def build_index_from_symbols(self, symbol_data: Dict[str, Dict]) -> Optional[bytes]:
+        """
+        Build Chroma index from FactStore symbol data.
+
+        Args:
+            symbol_data: Dict of symbol_id -> {name, type, file_path, qualified_name}
+
+        Returns:
+            bytes: Compressed Chroma database ready for storage, or None if building fails
+        """
+        try:
+            import chromadb
+        except ImportError:
+            logger.warning("chromadb not available - semantic indexing skipped")
+            return None
+
+        if not symbol_data:
+            logger.debug("No symbols to index for semantic search")
+            return None
+
+        return self._build_chroma_index(symbol_data, is_from_symbols=True)
+
     def build_index(self, model_entities: Dict[str, Any]) -> Optional[bytes]:
         """
         Build Chroma index from repository model entities.
@@ -41,6 +63,27 @@ class SemanticIndexBuilder:
 
         if not model_entities:
             logger.debug("No entities to index for semantic search")
+            return None
+
+        return self._build_chroma_index(model_entities, is_from_symbols=False)
+
+    def _build_chroma_index(self, data: Dict[str, Any], is_from_symbols: bool = False) -> Optional[bytes]:
+        """
+        Internal method to build Chroma index.
+
+        Args:
+            data: Dict of entities or symbols
+            is_from_symbols: True if data is from FactStore symbols, False if from RIM entities
+
+        Returns:
+            bytes: Compressed Chroma database or None
+        """
+        try:
+            import chromadb
+        except ImportError:
+            return None
+
+        if not data:
             return None
 
         try:
@@ -67,7 +110,7 @@ class SemanticIndexBuilder:
                 ids = []
                 metadatas = []
 
-                for entity_id, entity in model_entities.items():
+                for entity_id, entity in data.items():
                     try:
                         # Extract text for embedding
                         doc_text = self._entity_to_text(entity)
@@ -122,9 +165,20 @@ class SemanticIndexBuilder:
             return None
 
     def _entity_to_text(self, entity: Any) -> str:
-        """Convert entity to searchable text."""
+        """Convert entity (dict or object) to searchable text."""
         parts = []
 
+        # Handle dict format (from FactStore symbols)
+        if isinstance(entity, dict):
+            if 'type' in entity and 'name' in entity:
+                parts.append(f"{entity['type']} {entity['name']}")
+            if 'qualified_name' in entity:
+                parts.append(entity['qualified_name'])
+            if 'file_path' in entity:
+                parts.append(entity['file_path'])
+            return " ".join(filter(None, parts))
+
+        # Handle object format (RIM entities)
         # Add entity type and name
         if hasattr(entity, 'type') and hasattr(entity, 'name'):
             parts.append(f"{entity.type.value} {entity.name}")
@@ -151,6 +205,19 @@ class SemanticIndexBuilder:
         """Extract metadata for entity. All values must be strings for Chroma."""
         metadata = {}
 
+        # Handle dict format (from FactStore symbols)
+        if isinstance(entity, dict):
+            if 'type' in entity:
+                metadata['type'] = str(entity['type'])
+            if 'name' in entity:
+                metadata['name'] = str(entity['name'])
+            if 'qualified_name' in entity:
+                metadata['qualified_name'] = str(entity['qualified_name'])
+            if 'file_path' in entity:
+                metadata['file_path'] = str(entity['file_path'])
+            return {k: str(v) if v is not None else "" for k, v in metadata.items()}
+
+        # Handle object format (RIM entities)
         if hasattr(entity, 'type'):
             metadata['type'] = str(entity.type.value) if hasattr(entity.type, 'value') else str(entity.type)
         if hasattr(entity, 'name'):
