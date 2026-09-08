@@ -501,11 +501,11 @@ class AnalysisWorker(WorkerInterface):
 
                 # Queue semantic indexing as background job (non-blocking, silent)
                 # Runs after analysis is marked READY, doesn't interfere with retrieval
-                if rim_model and rim_model.entities:
+                if rim_model:
                     import threading
                     semantic_bg_thread = threading.Thread(
                         target=self._build_semantic_index_background,
-                        args=(analysis.id, rim_model.entities, db),
+                        args=(analysis.id, db),
                         daemon=True
                     )
                     semantic_bg_thread.start()
@@ -563,20 +563,41 @@ class AnalysisWorker(WorkerInterface):
         finally:
             db.close()
 
-    def _build_semantic_index_background(self, analysis_id: int, entities: dict, db: Session):
+    def _build_semantic_index_background(self, analysis_id: int, db: Session):
         """
         Build semantic (Chroma) index in background thread.
 
+        Loads entities from FactStore (not stale in-memory dict).
         Runs after analysis is marked COMPLETED, non-blocking.
         Stores semantic index in analysis_artifacts when complete.
         """
-        logger.info(f"Analysis {analysis_id}: Background semantic indexing started (silent)")
+        logger.info(f"Analysis {analysis_id}: Background semantic indexing started")
         try:
             from backend.intelligence.retrieval.semantic_builder import SemanticIndexBuilder
             from backend.models.repository import AnalysisArtifact
+            from backend.models.fact_store import FactSymbol
+
+            # Load entities fresh from FactStore (not stale in-memory dict)
+            entities_from_db = db.query(FactSymbol).filter(
+                FactSymbol.analysis_id == analysis_id
+            ).all()
+
+            if not entities_from_db:
+                logger.debug(f"Analysis {analysis_id}: No symbols in FactStore, skipping semantic indexing")
+                return
+
+            # Convert FactSymbol records to dict format for semantic builder
+            entities_dict = {}
+            for symbol in entities_from_db:
+                entities_dict[symbol.id] = {
+                    'name': symbol.name,
+                    'type': symbol.symbol_type,
+                    'file_path': symbol.file.path if symbol.file else '',
+                    'qualified_name': symbol.qualified_name,
+                }
 
             builder = SemanticIndexBuilder()
-            chroma_bytes = builder.build_index(entities)
+            chroma_bytes = builder.build_index_from_symbols(entities_dict)
 
             if chroma_bytes:
                 # Store in database
