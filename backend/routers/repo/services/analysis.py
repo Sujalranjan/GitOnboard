@@ -4,7 +4,12 @@ from sqlalchemy.orm import Session
 from backend.models.user import User
 from backend.models.repository import Repository, Analysis
 
-def get_latest_analysis(repo_name: str, db: Session, current_user: User):
+def resolve_repository(repo_name: str, db: Session, current_user: User) -> Repository:
+    """
+    Resolve repo_name to a Repository, with ambiguity detection.
+    Supports: integer ID, exact URL, or slug suffix.
+    Raises HTTPException if ambiguous or not found.
+    """
     repos = db.query(Repository).filter(Repository.user_id == current_user.id).all()
     repo = None
 
@@ -32,7 +37,7 @@ def get_latest_analysis(repo_name: str, db: Session, current_user: User):
         if len(exact_matches) == 1:
             repo = exact_matches[0]
         elif len(exact_matches) > 1:
-            raise HTTPException(status_code=400, detail=f"Ambiguous repository '{repo_name}'. Multiple matches found. Please specify repository ID.")
+            raise HTTPException(status_code=400, detail=f"Ambiguous repository '{repo_name}'. {len(exact_matches)} repositories match. Please specify repository ID.")
 
     # 3. Slug suffix match
     if not repo:
@@ -49,6 +54,10 @@ def get_latest_analysis(repo_name: str, db: Session, current_user: User):
     if not repo:
         raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
+    return repo
+
+def get_latest_analysis(repo_name: str, db: Session, current_user: User):
+    repo = resolve_repository(repo_name, db, current_user)
     latest = db.query(Analysis).filter(Analysis.repository_id == repo.id).order_by(Analysis.created_at.desc()).first()
     if not latest:
         raise HTTPException(status_code=404, detail=f"No analysis found for repository '{repo_name}'")
