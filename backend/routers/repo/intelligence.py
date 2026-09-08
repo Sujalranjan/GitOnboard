@@ -64,43 +64,129 @@ def index_symbols(repo_name: str, background_tasks: BackgroundTasks, db: Session
 
 @intelligence_router.get("/{repo_name}/features")
 def get_features(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from fastapi import HTTPException
+
+    logger.info(f"[FEATURES] GET /{repo_name}/features")
+
+    # Step 1: Validate input
+    if not repo_name or not repo_name.strip():
+        raise HTTPException(status_code=400, detail="repo_name cannot be empty")
+
+    # Step 2: Build model
     try:
         query_layer = get_or_build_model(repo_name, db, current_user)
+        logger.info(f"[FEATURES] Model built for {repo_name}")
+    except Exception as e:
+        logger.error(f"[FEATURES] Failed to build model: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load repository analysis")
+
+    # Step 3: Extract and validate features
+    try:
+        if not hasattr(query_layer.model, 'features') or not query_layer.model.features:
+            logger.info(f"[FEATURES] No features found for {repo_name}")
+            return {
+                "features": [],
+                "relationships": [],
+                "feature_count": 0,
+                "relationship_count": 0,
+            }
+
         features = sorted(
             query_layer.model.features.values(),
             key=lambda feature: (-float(feature.confidence or 0.0), feature.name.lower())
         )
-        relationships = list(query_layer.model.feature_relationships.values())
+        logger.info(f"[FEATURES] Found {len(features)} features")
+    except AttributeError as e:
+        logger.error(f"[FEATURES] Features data structure error: {e}")
+        raise HTTPException(status_code=500, detail="Invalid feature data structure")
+    except Exception as e:
+        logger.error(f"[FEATURES] Error sorting features: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process features")
 
-        feature_map = {}
-        for feature in features:
-            members = [
-                {
-                    "item_id": member.item_id,
-                    "item_type": member.item_type,
-                    "confidence": member.confidence,
-                }
-                for member in feature.members
-            ]
+    # Step 4: Extract relationships
+    try:
+        relationships = []
+        if hasattr(query_layer.model, 'feature_relationships') and query_layer.model.feature_relationships:
+            relationships = list(query_layer.model.feature_relationships.values())
+            logger.info(f"[FEATURES] Found {len(relationships)} feature relationships")
+    except Exception as e:
+        logger.warning(f"[FEATURES] Failed to extract relationships: {e}")
+        relationships = []
+
+    # Step 5: Build feature map with safe attribute access
+    feature_map = {}
+    for feature in features:
+        try:
+            # Safely extract members
+            members = []
+            if hasattr(feature, 'members') and feature.members:
+                try:
+                    members = [
+                        {
+                            "item_id": member.item_id,
+                            "item_type": member.item_type,
+                            "confidence": member.confidence,
+                        }
+                        for member in feature.members
+                    ]
+                except (AttributeError, TypeError) as e:
+                    logger.warning(f"[FEATURES] Failed to extract members for feature {feature.id}: {e}")
+                    members = []
+
+            # Safely get evidence count
+            evidence_count = 0
+            if hasattr(feature, 'evidence'):
+                try:
+                    evidence_count = len(feature.evidence) if feature.evidence else 0
+                except (TypeError, AttributeError):
+                    evidence_count = 0
+
+            # Safely get metadata
+            metadata = {}
+            if hasattr(feature, 'metadata') and feature.metadata:
+                try:
+                    metadata = dict(feature.metadata) if isinstance(feature.metadata, dict) else {}
+                except (TypeError, AttributeError):
+                    metadata = {}
+
             feature_map[feature.id] = {
                 "id": feature.id,
                 "name": feature.name,
-                "description": feature.description,
+                "description": feature.description or "",
                 "confidence": feature.confidence,
-                "member_count": len(feature.members),
-                "evidence_count": len(feature.evidence),
+                "member_count": len(members),
+                "evidence_count": evidence_count,
                 "members": members,
-                "metadata": feature.metadata,
+                "metadata": metadata,
             }
+        except Exception as e:
+            logger.warning(f"[FEATURES] Failed to process feature {getattr(feature, 'id', 'unknown')}: {e}")
+            continue
 
-        return {
-            "features": list(feature_map.values()),
-            "relationships": [rel.model_dump() for rel in relationships],
-            "feature_count": len(feature_map),
-            "relationship_count": len(relationships),
-        }
-    except Exception:
-        return {"features": [], "relationships": [], "feature_count": 0, "relationship_count": 0}
+    logger.info(f"[FEATURES] Processed {len(feature_map)} features successfully")
+
+    # Step 6: Serialize relationships
+    relationship_list = []
+    for rel in relationships:
+        try:
+            if hasattr(rel, 'model_dump'):
+                relationship_list.append(rel.model_dump())
+            else:
+                relationship_list.append({
+                    "id": getattr(rel, 'id', 'unknown'),
+                    "source_id": getattr(rel, 'source_id', None),
+                    "target_id": getattr(rel, 'target_id', None),
+                })
+        except Exception as e:
+            logger.warning(f"[FEATURES] Failed to serialize relationship: {e}")
+            continue
+
+    return {
+        "features": list(feature_map.values()),
+        "relationships": relationship_list,
+        "feature_count": len(feature_map),
+        "relationship_count": len(relationship_list),
+    }
 
 @intelligence_router.get("/{repo_name}/search")
 def search_repo(repo_name: str, q: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
