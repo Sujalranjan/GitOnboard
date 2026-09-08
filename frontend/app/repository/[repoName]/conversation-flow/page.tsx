@@ -1,19 +1,16 @@
 import React from 'react';
 import LLMConversationFlow from '@/components/LLMConversationFlow';
 
-/**
- * LLM Conversation Flow Page
- *
- * Shows how LLM queries the repository:
- * User Question → Tool Call → Response → LLM Processing → Next Tool → ... → Final Answer
- *
- * Part of the Repository Intelligence Platform features
- */
+interface Props {
+  params: Promise<{ repoName: string }>;
+}
 
-export default function ConversationFlowPage() {
+export default async function ConversationFlowPage({ params }: Props) {
+  const { repoName } = await params;
+
   return (
     <div className="flex flex-col h-full w-full">
-      <LLMConversationFlow />
+      <LLMConversationFlow repoName={repoName} />
     </div>
   );
 }

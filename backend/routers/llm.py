@@ -223,7 +223,7 @@ class ModelResponse(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     query: str
-    repo_name: str
+    repo_hash: str
     model: str = None
     show_tool_details: bool = True
 
@@ -276,62 +276,6 @@ def set_model(
     )
 
 
-@router.get("/current-model", response_model=ModelResponse)
-def get_current_model(current_user: User = Depends(get_current_user)):
-    """Get the currently active LLM model."""
-    model = os.environ.get("OLLAMA_MODEL", "qwen3:4b-instruct")
-
-    if model not in VALID_MODELS:
-        model = "qwen3:4b-instruct"
-
-    return ModelResponse(
-        current_model=model,
-        model_name=VALID_MODELS.get(model, "Unknown"),
-        status="success",
-    )
-
-
-@router.get("/available-models")
-def get_available_models(current_user: User = Depends(get_current_user)):
-    """Get list of available models and their capabilities."""
-    return {
-        "models": [
-            {
-                "id": "qwen3:4b-instruct",
-                "name": "Qwen 3 4B (Fast)",
-                "description": "Quick responses, limited reasoning",
-                "category": "fast",
-                "parameters": "4B",
-                "status": "available",
-            },
-            {
-                "id": "qwen2.5-coder:7b",
-                "name": "Qwen 2.5 Coder 7B (Quality)",
-                "description": "Better reasoning, slower",
-                "category": "quality",
-                "parameters": "7B",
-                "status": "available" if settings.deployment_type.upper() == "LOCAL" else "available",
-            },
-            {
-                "id": "cloud-gemini",
-                "name": "Gemini (Cloud)",
-                "description": "Best quality, requires API key",
-                "category": "cloud",
-                "parameters": "Large",
-                "status": "available" if os.environ.get("GEMINI_API_KEY") else "not_configured",
-            },
-            {
-                "id": "cloud-openrouter",
-                "name": "OpenRouter (Cloud)",
-                "description": "Multiple models (Claude, GPT-4), requires API key",
-                "category": "cloud",
-                "parameters": "Large",
-                "status": "available" if os.environ.get("OPENROUTER_API_KEY") else "not_configured",
-            },
-        ]
-    }
-
-
 @router.post("/analyze/stream")
 async def analyze_repository_stream(
     request: AnalyzeRequest,
@@ -348,11 +292,11 @@ async def analyze_repository_stream(
         try:
             # Verify repository exists (allow access to any repository for analysis)
             repo = db.query(Repository).filter(
-                (Repository.repository_hash == request.repo_name) | (Repository.url.contains(request.repo_name))
+                Repository.repository_hash == request.repo_hash
             ).first()
 
             if not repo:
-                logger.warning(f"Repository {request.repo_name} not found, will proceed without context")
+                logger.warning(f"Repository {request.repo_hash} not found, will proceed without context")
 
             # Use selected model or current model
             model = request.model or os.environ.get("OLLAMA_MODEL", "qwen3:4b-instruct")
@@ -390,10 +334,11 @@ async def analyze_repository_stream(
             # 4. Call LLM with repository context using JSON tool protocol
             llm_service = get_llm_service()
 
-            system_prompt = f"""You are an expert code analyst helping understand the {request.repo_name} repository.
+            repo_display_name = repo.url.split('/')[-1].replace('.git', '') if repo and repo.url else request.repo_hash[:12]
+            system_prompt = f"""You are an expert code analyst helping understand the {repo_display_name} repository.
 
 ## Repository Information
-{repo_context if repo_context else f"Repository: {request.repo_name}"}
+{repo_context if repo_context else f"Repository: {repo_display_name}"}
 
 ## Your Task
 Answer questions about this codebase by using tools to gather real information:
