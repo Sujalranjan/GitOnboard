@@ -80,28 +80,47 @@ class GraphNavigator:
         # Map RetrieverResult IDs to entity IDs (exact match preferred)
         seed_entity_ids: Set[str] = set()
         for ret_result in retrieval_results:
-            # Try direct ID lookup first
-            if ret_result.id in self.model.entities:
-                seed_entity_ids.add(ret_result.id)
-            else:
-                # Try fuzzy match by name (fallback)
-                found = False
-                if ret_result.entity_name:
-                    if "FUNCTION" in str(ret_result.entity_type).upper():
-                        funcs = self.query_layer.find_function(ret_result.entity_name)
-                        if funcs:
-                            seed_entity_ids.add(funcs[0].id)
-                            found = True
-                    elif "CLASS" in str(ret_result.entity_type).upper():
-                        classes = self.query_layer.get_class(ret_result.entity_name)
-                        if classes:
-                            seed_entity_ids.add(classes[0].id)
-                            found = True
+            entity_id = None
 
-                if not found:
-                    result.validation_errors.append(
-                        f"Seed entity not found: {ret_result.entity_name} (id={ret_result.id})"
-                    )
+            # Strategy 1: Try direct ID lookup first
+            if ret_result.id in self.model.entities:
+                entity_id = ret_result.id
+
+            # Strategy 2: Try with analysis_id prefix (if ID comes from retriever without prefix)
+            if entity_id is None:
+                # Check if metadata contains symbol_id with prefix
+                symbol_id = ret_result.metadata.get("symbol_id") if ret_result.metadata else None
+                if symbol_id and symbol_id in self.model.entities:
+                    entity_id = symbol_id
+
+            # Strategy 3: Try extracting bare ID from symbol_id and matching
+            if entity_id is None and ret_result.metadata:
+                symbol_id = ret_result.metadata.get("symbol_id")
+                if symbol_id and ":" in symbol_id:
+                    # symbol_id format: "847126:urn:type:path#qualified_name"
+                    # Extract just the "urn:..." part
+                    bare_id = ":".join(symbol_id.split(":")[1:])
+                    if bare_id in self.model.entities:
+                        entity_id = bare_id
+
+            # Strategy 4: Fuzzy match by name (fallback)
+            if entity_id is None and ret_result.entity_name:
+                if "FUNCTION" in str(ret_result.entity_type).upper():
+                    funcs = self.query_layer.find_function(ret_result.entity_name)
+                    if funcs:
+                        entity_id = funcs[0].id
+                elif "CLASS" in str(ret_result.entity_type).upper():
+                    classes = self.query_layer.get_class(ret_result.entity_name)
+                    if classes:
+                        entity_id = classes[0].id
+
+            # Add to seed set if found via any strategy
+            if entity_id:
+                seed_entity_ids.add(entity_id)
+            else:
+                result.validation_errors.append(
+                    f"Seed entity not found: {ret_result.entity_name} (id={ret_result.id})"
+                )
 
         if not seed_entity_ids:
             logger.warning("[Stage 6] No valid seed entities from retrieval results")
