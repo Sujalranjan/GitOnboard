@@ -31,6 +31,7 @@ dependencies = [
     "pywinpty>=2.0 ; sys_platform == 'win32'",
     "langgraph>=1.2.11",
     "tokenizers>=0.23.0",
+    "qwen-tokenizer>=0.3.0",
 ]
 
 [tool.ruff]
