@@ -157,15 +157,8 @@ async def import_repo(req: ImportRequest, db: Session = Depends(get_db), current
 
 @core_router.post("/{repo_name}/reanalyze")
 async def reanalyze_repo(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    repos = db.query(Repository).filter(Repository.user_id == current_user.id).all()
-    repo = None
-    for r in repos:
-        if r.url.rstrip("/").endswith(f"/{repo_name}") or r.url.rstrip("/").endswith(f"/{repo_name}.git"):
-            repo = r
-            break
-            
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
+    from backend.routers.repo.services.analysis import resolve_repository
+    repo = resolve_repository(repo_name, db, current_user)
 
     # Check for unfinished jobs
     unfinished = db.query(AnalysisJob).join(Analysis).filter(
@@ -191,15 +184,8 @@ async def reanalyze_repo(repo_name: str, db: Session = Depends(get_db), current_
 
 @core_router.post("/{repo_name}/cancel")
 async def cancel_repo_analysis(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    repos = db.query(Repository).filter(Repository.user_id == current_user.id).all()
-    repo = None
-    for r in repos:
-        if r.url.rstrip("/").endswith(f"/{repo_name}") or r.url.rstrip("/").endswith(f"/{repo_name}.git"):
-            repo = r
-            break
-            
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
+    from backend.routers.repo.services.analysis import resolve_repository
+    repo = resolve_repository(repo_name, db, current_user)
 
     unfinished = db.query(AnalysisJob).join(Analysis).filter(
         Analysis.repository_id == repo.id,
@@ -321,15 +307,8 @@ def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_c
 
 @core_router.delete("/{repo_name}")
 def delete_repo(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    repos = db.query(Repository).filter(Repository.user_id == current_user.id).all()
-    repo = None
-    for r in repos:
-        if r.url.rstrip("/").endswith(f"/{repo_name}") or r.url.rstrip("/").endswith(f"/{repo_name}.git"):
-            repo = r
-            break
-            
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
+    from backend.routers.repo.services.analysis import resolve_repository
+    repo = resolve_repository(repo_name, db, current_user)
 
     from backend.services.repo_cleanup import delete_repository_state
     delete_repository_state(repo, repo_name)
