@@ -16,6 +16,26 @@ logger = logging.getLogger(__name__)
 import_router = APIRouter(tags=["repositories"])
 core_router = APIRouter(tags=["repositories"])
 
+@core_router.get("/lookup-hash", tags=["repositories"])
+def lookup_repo_hash(
+    name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Look up repository hash (UUID) from repository name.
+
+    Used by frontend to convert user-friendly names to efficient UUIDs.
+    """
+    from backend.routers.repo.services.analysis import resolve_repository
+
+    try:
+        repo = resolve_repository(name, db, current_user)
+        return {"repository_hash": repo.repository_hash, "url": repo.url}
+    except HTTPException as e:
+        raise e
+
+
 @core_router.get("/{repo_name}/job-progress", include_in_schema=False)
 def get_job_progress(repo_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Return current job progress with real work-based metrics."""
