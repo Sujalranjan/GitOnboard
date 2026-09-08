@@ -1457,3 +1457,307 @@ def _serialize_run_detail(run: AgentRun) -> AgentRunDetailResponse:
         events=events,
         metadata=run.metadata_json or {},
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AGENT TOOLS: Repository Intelligence Tools for LLM Agents
+# ──────────────────────────────────────────────────────────────────────────────
+# These are LLM-friendly wrappers around pipeline tools (#2, #3, #4)
+# Allows agents to query repository information during runs
+
+
+class FileContentRequest(BaseModel):
+    """Request to read file content from repository."""
+    repo_hash: str = Field(description="Repository UUID hash")
+    file_path: str = Field(description="Repository-relative file path")
+    start_line: Optional[int] = Field(default=None, description="Start line (1-indexed)")
+    end_line: Optional[int] = Field(default=None, description="End line (1-indexed)")
+
+
+class FileContentResponse(BaseModel):
+    """Response with file content."""
+    file_path: str
+    content: str
+    total_lines: int
+    returned_lines: int
+    start_line: Optional[int]
+    end_line: Optional[int]
+
+
+@router.post("/repository-tools/read-file", response_model=FileContentResponse)
+def agent_read_file(
+    req: FileContentRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FileContentResponse:
+    """
+    AGENT TOOL: Read file content from repository (Agent version of Tool #2).
+
+    Allows agents to read source files from the repository during analysis.
+    Uses Azure Blob Storage with UUID-based identification.
+    """
+    from backend.routers.repo.services.hash_resolution import get_latest_analysis_by_hash
+    from backend.models.fact_store import FactFile
+    from backend.storage import get_storage
+    from backend.utils.repo_paths import normalize_relative, PathTraversalError
+
+    try:
+        # Get repository and analysis by hash
+        repo, analysis = get_latest_analysis_by_hash(req.repo_hash, db, current_user)
+
+        # Normalize file path
+        try:
+            clean_path = normalize_relative(req.file_path)
+        except PathTraversalError:
+            raise HTTPException(status_code=400, detail=f"Invalid path: {req.file_path}")
+
+        # Query FactFile
+        fact_file = db.query(FactFile).filter(
+            FactFile.analysis_id == analysis.id,
+            FactFile.path == clean_path
+        ).first()
+
+        if not fact_file:
+            raise HTTPException(status_code=404, detail=f"File not found: {clean_path}")
+
+        if not fact_file.blob_name:
+            raise HTTPException(status_code=500, detail="File content unavailable")
+
+        # Read from blob storage
+        storage = get_storage()
+        full_content = storage.get_object_text(fact_file.blob_name)
+
+        if not full_content:
+            raise HTTPException(status_code=500, detail="Failed to read file content")
+
+        lines = full_content.split('\n')
+        total_lines = len(lines)
+
+        # Handle line range
+        start = (req.start_line - 1) if req.start_line else 0
+        end = req.end_line if req.end_line else total_lines
+
+        if start < 0 or start >= total_lines:
+            raise HTTPException(status_code=400, detail=f"Invalid start_line: {req.start_line}")
+        if end < start or end > total_lines:
+            raise HTTPException(status_code=400, detail=f"Invalid end_line: {req.end_line}")
+
+        content = '\n'.join(lines[start:end])
+
+        return FileContentResponse(
+            file_path=clean_path,
+            content=content,
+            total_lines=total_lines,
+            returned_lines=end - start,
+            start_line=req.start_line,
+            end_line=req.end_line
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reading file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SymbolGraphQueryRequest(BaseModel):
+    """Request to query symbol relationships."""
+    repo_hash: str = Field(description="Repository UUID hash")
+    symbol_id: str = Field(description="Symbol ID to query")
+    direction: str = Field(default="both", description="incoming, outgoing, or both")
+    depth: int = Field(default=1, description="How many levels deep (1-10)")
+
+
+class SymbolGraphNode(BaseModel):
+    """A node in the symbol graph."""
+    symbol_id: str
+    name: str
+    symbol_type: str
+    file_path: str
+
+
+class SymbolGraphEdge(BaseModel):
+    """An edge in the symbol graph."""
+    from_id: str
+    to_id: str
+    rel_type: str
+
+
+class SymbolGraphQueryResponse(BaseModel):
+    """Response with symbol relationships."""
+    nodes: List[SymbolGraphNode]
+    edges: List[SymbolGraphEdge]
+    center_symbol: str
+
+
+@router.post("/repository-tools/query-graph", response_model=SymbolGraphQueryResponse)
+def agent_query_symbol_graph(
+    req: SymbolGraphQueryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SymbolGraphQueryResponse:
+    """
+    AGENT TOOL: Query symbol relationships (Agent version of Tool #3).
+
+    Allows agents to explore the call graph and relationships between symbols.
+    """
+    from backend.routers.repo.services.hash_resolution import get_latest_analysis_by_hash
+    from backend.models.fact_store import FactSymbol, FactRelationship, FactFile
+
+    try:
+        repo, analysis = get_latest_analysis_by_hash(req.repo_hash, db, current_user)
+
+        # Find center symbol
+        center_sym = db.query(FactSymbol).filter(
+            FactSymbol.analysis_id == analysis.id,
+            FactSymbol.id == req.symbol_id
+        ).first()
+
+        if not center_sym:
+            raise HTTPException(status_code=404, detail=f"Symbol not found: {req.symbol_id}")
+
+        nodes = {}
+        edges = []
+
+        # Build node from center symbol
+        file_obj = db.query(FactFile).filter(FactFile.id == center_sym.file_id).first()
+        nodes[center_sym.id] = SymbolGraphNode(
+            symbol_id=center_sym.id,
+            name=center_sym.name,
+            symbol_type=center_sym.symbol_type,
+            file_path=file_obj.path if file_obj else ""
+        )
+
+        # Query relationships
+        if req.direction in ["outgoing", "both"]:
+            outgoing = db.query(FactRelationship).filter(
+                FactRelationship.analysis_id == analysis.id,
+                FactRelationship.from_symbol_id == center_sym.id
+            ).limit(50).all()
+
+            for rel in outgoing:
+                to_sym = db.query(FactSymbol).filter(FactSymbol.id == rel.to_symbol_id).first()
+                if to_sym:
+                    file_obj = db.query(FactFile).filter(FactFile.id == to_sym.file_id).first()
+                    if rel.to_symbol_id not in nodes:
+                        nodes[rel.to_symbol_id] = SymbolGraphNode(
+                            symbol_id=to_sym.id,
+                            name=to_sym.name,
+                            symbol_type=to_sym.symbol_type,
+                            file_path=file_obj.path if file_obj else ""
+                        )
+                    edges.append(SymbolGraphEdge(
+                        from_id=center_sym.id,
+                        to_id=rel.to_symbol_id,
+                        rel_type=rel.rel_type
+                    ))
+
+        if req.direction in ["incoming", "both"]:
+            incoming = db.query(FactRelationship).filter(
+                FactRelationship.analysis_id == analysis.id,
+                FactRelationship.to_symbol_id == center_sym.id
+            ).limit(50).all()
+
+            for rel in incoming:
+                from_sym = db.query(FactSymbol).filter(FactSymbol.id == rel.from_symbol_id).first()
+                if from_sym:
+                    file_obj = db.query(FactFile).filter(FactFile.id == from_sym.file_id).first()
+                    if rel.from_symbol_id not in nodes:
+                        nodes[rel.from_symbol_id] = SymbolGraphNode(
+                            symbol_id=from_sym.id,
+                            name=from_sym.name,
+                            symbol_type=from_sym.symbol_type,
+                            file_path=file_obj.path if file_obj else ""
+                        )
+                    edges.append(SymbolGraphEdge(
+                        from_id=rel.from_symbol_id,
+                        to_id=center_sym.id,
+                        rel_type=rel.rel_type
+                    ))
+
+        return SymbolGraphQueryResponse(
+            nodes=list(nodes.values()),
+            edges=edges,
+            center_symbol=center_sym.name
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error querying graph: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ExplainSymbolRequest(BaseModel):
+    """Request to explain a symbol."""
+    repo_hash: str = Field(description="Repository UUID hash")
+    symbol_id: str = Field(description="Symbol ID to explain")
+
+
+class SymbolExplanation(BaseModel):
+    """Symbol explanation."""
+    symbol_id: str
+    name: str
+    symbol_type: str
+    file_path: str
+    explanation: Optional[str] = None
+    cached: bool = False
+
+
+@router.post("/repository-tools/explain-symbol", response_model=SymbolExplanation)
+def agent_explain_symbol(
+    req: ExplainSymbolRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SymbolExplanation:
+    """
+    AGENT TOOL: Explain a symbol (Agent version of Tool #4).
+
+    Allows agents to get explanations of what symbols do.
+    """
+    from backend.routers.repo.services.hash_resolution import get_latest_analysis_by_hash
+    from backend.models.fact_store import FactSymbol, FactFile
+
+    try:
+        repo, analysis = get_latest_analysis_by_hash(req.repo_hash, db, current_user)
+
+        # Find symbol
+        sym = db.query(FactSymbol).filter(
+            FactSymbol.analysis_id == analysis.id,
+            FactSymbol.id == req.symbol_id
+        ).first()
+
+        if not sym:
+            raise HTTPException(status_code=404, detail=f"Symbol not found: {req.symbol_id}")
+
+        file_obj = db.query(FactFile).filter(FactFile.id == sym.file_id).first()
+        file_path = file_obj.path if file_obj else ""
+
+        # Check for cached explanation
+        meta = dict(sym.metadata_json or {})
+        cached_exp = meta.get("ai_explanation")
+
+        explanation = None
+        cached = False
+
+        if cached_exp:
+            explanation = cached_exp.get("summary")
+            cached = True
+        else:
+            # Return signature or metadata as fallback
+            explanation = meta.get("signature") or f"{sym.symbol_type} {sym.name}"
+
+        return SymbolExplanation(
+            symbol_id=sym.id,
+            name=sym.name,
+            symbol_type=sym.symbol_type,
+            file_path=file_path,
+            explanation=explanation,
+            cached=cached
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error explaining symbol: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
