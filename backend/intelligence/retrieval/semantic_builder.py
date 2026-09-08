@@ -133,15 +133,16 @@ class SemanticIndexBuilder:
                     return None
 
                 # Add documents to collection (Chroma handles embedding)
-                logger.debug(f"Embedding {len(documents)} entities for semantic search...")
+                logger.info(f"[SEMANTIC_INDEX] Starting embedding of {len(documents)} entities...")
                 collection.add(
                     ids=ids,
                     documents=documents,
                     metadatas=metadatas
                 )
+                logger.info(f"[SEMANTIC_INDEX] Embedding complete")
 
                 # Serialize Chroma database to bytes
-                logger.debug(f"Serializing Chroma index ({len(documents)} entities)...")
+                logger.info(f"[SEMANTIC_INDEX] Serializing Chroma index ({len(documents)} entities)...")
                 import zipfile
                 import io
 
@@ -153,7 +154,7 @@ class SemanticIndexBuilder:
                             zf.write(file_path, arcname=arcname)
 
                 result = zip_buffer.getvalue()
-                logger.debug(f"Semantic index built: {len(result)} bytes compressed")
+                logger.info(f"[SEMANTIC_INDEX] Semantic index built: {len(result)} bytes compressed")
                 return result
 
             finally:

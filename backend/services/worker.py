@@ -18,6 +18,73 @@ from backend.intelligence.stages.metrics_stage import MetricsStage
 
 logger = logging.getLogger(__name__)
 
+def cleanup_orphaned_blobs(repo_id: int, snapshot_id: str = ""):
+    """
+    Remove orphaned blobs from Azure if repository/analysis is deleted.
+    Prevents desynchronization between database and blob storage.
+    """
+    try:
+        from backend.storage import get_storage
+        storage = get_storage()
+        container_client = storage.service_client.get_container_client(storage.container_name)
+
+        # If snapshot_id is empty, search all snapshots for this repo
+        if snapshot_id:
+            prefix = f"repositories/{repo_id}/snapshots/{snapshot_id}"
+        else:
+            prefix = f"repositories/{repo_id}/snapshots/"
+
+        blobs_to_delete = list(container_client.list_blobs(name_starts_with=prefix))
+
+        if blobs_to_delete:
+            logger.info(f"[DESYNC_CLEANUP] Found {len(blobs_to_delete)} orphaned blobs for repo {repo_id}")
+
+            # Delete blobs
+            for blob in blobs_to_delete:
+                try:
+                    container_client.delete_blob(blob.name)
+                    logger.debug(f"[DESYNC_CLEANUP] Deleted blob: {blob.name}")
+                except Exception as blob_err:
+                    logger.warning(f"[DESYNC_CLEANUP] Failed to delete blob {blob.name}: {blob_err}")
+
+            logger.info(f"[DESYNC_CLEANUP] Cleaned up {len(blobs_to_delete)} orphaned blobs from Azure")
+        else:
+            logger.info(f"[DESYNC_CLEANUP] No orphaned blobs found for repo {repo_id}")
+
+    except Exception as e:
+        logger.error(f"[DESYNC_CLEANUP] Failed to clean up orphaned blobs: {e}", exc_info=True)
+
+def cleanup_orphaned_database_records(analysis_id: int, job_id: int):
+    """
+    Remove orphaned database records if blob upload or analysis fails.
+    Prevents desynchronization between database and blob storage.
+    """
+    try:
+        db = SessionLocal()
+
+        logger.info(f"[DESYNC_CLEANUP] Cleaning orphaned database records for Analysis {analysis_id}")
+
+        # Delete job
+        db.query(AnalysisJob).filter(AnalysisJob.id == job_id).delete()
+
+        # Delete analysis (and related fact store records via cascade)
+        db.query(Analysis).filter(Analysis.id == analysis_id).delete()
+
+        db.commit()
+        logger.info(f"[DESYNC_CLEANUP] Deleted orphaned Analysis {analysis_id} and Job {job_id} from database")
+
+    except Exception as e:
+        logger.error(f"[DESYNC_CLEANUP] Failed to clean up database records: {e}", exc_info=True)
+        try:
+            db.rollback()
+        except:
+            pass
+    finally:
+        try:
+            db.close()
+        except:
+            pass
+
 def _serialize_dataclass(obj):
     import dataclasses
     from enum import Enum
@@ -54,6 +121,39 @@ class AnalysisWorker(WorkerInterface):
 
             repo = db.query(Repository).filter(Repository.id == analysis.repository_id).first()
 
+            # FIX: Verify repository exists before proceeding
+            if not repo:
+                logger.error(f"[DESYNC_CLEANUP] Repository ID {analysis.repository_id} not found in database")
+                logger.error(f"[DESYNC_CLEANUP] Analysis {job.analysis_id} exists but Repository doesn't")
+                logger.error(f"[DESYNC_CLEANUP] Initiating cleanup of orphaned data...")
+
+                repo_id = analysis.repository_id
+
+                # Delete orphaned database records (Analysis and Job)
+                try:
+                    db.query(AnalysisJob).filter(AnalysisJob.analysis_id == analysis.id).delete()
+                    db.query(Analysis).filter(Analysis.id == analysis.id).delete()
+                    db.commit()
+                    logger.info(f"[DESYNC_CLEANUP] Deleted orphaned Analysis {analysis.id} and Job {job.id} from database")
+                except Exception as cleanup_err:
+                    logger.error(f"[DESYNC_CLEANUP] Failed to clean up database records: {cleanup_err}")
+                    db.rollback()
+
+                # Delete orphaned blobs from Azure (try both possible snapshot IDs)
+                for snapshot_id in [f"snap_{analysis.id}", ""]:
+                    cleanup_orphaned_blobs(repo_id, snapshot_id)
+
+                raise Exception(f"Repository {repo_id} missing - all orphaned data cleaned up from database and blob storage")
+
+            # FIX: Verify analysis record is still accessible after loading
+            analysis_check = db.query(Analysis).filter(Analysis.id == job.analysis_id).first()
+            if not analysis_check:
+                logger.error(f"[DESYNC_BUG] Analysis {job.analysis_id} is no longer accessible from database")
+                job.status = "Failed"
+                job.error = "Analysis record not accessible - database issue"
+                db.commit()
+                raise Exception(f"Analysis {job.analysis_id} not accessible - cannot proceed")
+
             # Parse owner/repo from url early so we can use repo_name for notifications
             # e.g., https://github.com/owner/repo
             parts = repo.url.rstrip('/').split('/')
@@ -81,6 +181,9 @@ class AnalysisWorker(WorkerInterface):
             target_dir = base_tmp / f"job_{job_id}_{repo_name}"
 
             start_time = datetime.now(timezone.utc)
+            repo_id = repo.id
+            snapshot_id = None
+
             try:
                 # 1. Download
                 try:
@@ -89,6 +192,8 @@ class AnalysisWorker(WorkerInterface):
                         timeout=120.0
                     )
                     commit_info = download_result.get("commit_info")
+                    # Capture snapshot_id for cleanup if needed later
+                    snapshot_id = commit_info.get("hash") if commit_info else f"snap_{analysis.id}"
                 except asyncio.TimeoutError:
                     raise Exception("Download timed out after 120 seconds")
 
@@ -505,11 +610,11 @@ class AnalysisWorker(WorkerInterface):
                     import threading
                     semantic_bg_thread = threading.Thread(
                         target=self._build_semantic_index_background,
-                        args=(analysis.id, db),
-                        daemon=True
+                        args=(analysis.id,),  # Don't pass stale db session
+                        daemon=False  # FIX: Make it non-daemon so it completes
                     )
                     semantic_bg_thread.start()
-                    logger.debug(f"Analysis {analysis.id}: Semantic indexing queued for background processing")
+                    logger.info(f"Analysis {analysis.id}: Semantic indexing queued for background processing")
 
                 # Notify SSE subscribers of completion
                 from backend.task_manager import task_manager
@@ -527,11 +632,76 @@ class AnalysisWorker(WorkerInterface):
             except Exception as e:
                 import traceback
                 logger.error(f"Job {job_id} failed: {traceback.format_exc()}")
-                job.status = "Failed"
-                job.error = str(e)
-                job.completed_at = datetime.now(timezone.utc)
-                analysis.status = "Failed"  # Already set above, just confirming
-                db.commit()
+
+                # DESYNC CLEANUP: Handle different failure scenarios
+                error_msg = str(e)
+
+                # Scenario 1: Blob upload/analysis failed → Clean both database and blobs
+                if "Blob" in error_msg or "blob" in error_msg or "Azure" in error_msg or "storage" in error_msg:
+                    logger.error(f"[DESYNC_CLEANUP] Blob storage error detected - cleaning up orphaned data...")
+
+                    # Clean database records
+                    if 'analysis' in locals() and analysis:
+                        try:
+                            db.query(AnalysisJob).filter(AnalysisJob.id == job_id).delete()
+                            db.query(Analysis).filter(Analysis.id == analysis.id).delete()
+                            db.commit()
+                            logger.info(f"[DESYNC_CLEANUP] Deleted orphaned Analysis {analysis.id} from database")
+                        except Exception as cleanup_err:
+                            logger.error(f"[DESYNC_CLEANUP] Failed to clean database: {cleanup_err}")
+                            db.rollback()
+
+                    # Clean blobs from Azure
+                    if snapshot_id and repo_id:
+                        cleanup_orphaned_blobs(repo_id, snapshot_id)
+
+                # Scenario 2: Database/persistence error → Clean database records and blobs
+                elif "database" in error_msg.lower() or "persist" in error_msg.lower() or "commit" in error_msg.lower():
+                    logger.error(f"[DESYNC_CLEANUP] Database error detected - cleaning up orphaned data...")
+
+                    # Clean database records
+                    if 'analysis' in locals() and analysis:
+                        try:
+                            db.query(AnalysisJob).filter(AnalysisJob.id == job_id).delete()
+                            db.query(Analysis).filter(Analysis.id == analysis.id).delete()
+                            db.commit()
+                            logger.info(f"[DESYNC_CLEANUP] Deleted orphaned Analysis {analysis.id} from database")
+                        except Exception as cleanup_err:
+                            logger.error(f"[DESYNC_CLEANUP] Failed to clean database: {cleanup_err}")
+                            db.rollback()
+
+                    # Clean blobs from Azure
+                    if repo_id:
+                        cleanup_orphaned_blobs(repo_id, snapshot_id or "")
+
+                # Scenario 3: Any other error → Try to clean both
+                else:
+                    logger.warning(f"[DESYNC_CLEANUP] Unknown error type - attempting comprehensive cleanup...")
+
+                    # Clean database
+                    if 'analysis' in locals() and analysis:
+                        try:
+                            db.query(AnalysisJob).filter(AnalysisJob.id == job_id).delete()
+                            db.query(Analysis).filter(Analysis.id == analysis.id).delete()
+                            db.commit()
+                            logger.info(f"[DESYNC_CLEANUP] Deleted orphaned Analysis {analysis.id} from database")
+                        except Exception as cleanup_err:
+                            logger.error(f"[DESYNC_CLEANUP] Failed to clean database: {cleanup_err}")
+                            db.rollback()
+
+                    # Clean blobs
+                    if repo_id:
+                        cleanup_orphaned_blobs(repo_id, snapshot_id or "")
+
+                # Update job status after cleanup
+                try:
+                    job.status = "Failed"
+                    job.error = str(e)
+                    job.completed_at = datetime.now(timezone.utc)
+                    analysis.status = "Failed"
+                    db.commit()
+                except:
+                    pass
 
                 # Notify SSE subscribers of failure
                 from backend.task_manager import task_manager
@@ -563,7 +733,7 @@ class AnalysisWorker(WorkerInterface):
         finally:
             db.close()
 
-    def _build_semantic_index_background(self, analysis_id: int, db: Session):
+    def _build_semantic_index_background(self, analysis_id: int):
         """
         Build semantic (Chroma) index in background thread.
 
@@ -571,20 +741,26 @@ class AnalysisWorker(WorkerInterface):
         Runs after analysis is marked COMPLETED, non-blocking.
         Stores semantic index in analysis_artifacts when complete.
         """
-        logger.info(f"Analysis {analysis_id}: Background semantic indexing started")
+        logger.info(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Background semantic indexing started")
+        db_session = None
         try:
             from backend.intelligence.retrieval.semantic_builder import SemanticIndexBuilder
             from backend.models.repository import AnalysisArtifact
             from backend.models.fact_store import FactSymbol
 
+            # FIX: Create fresh session (don't use stale worker session)
+            db_session = SessionLocal()
+
             # Load entities fresh from FactStore (not stale in-memory dict)
-            entities_from_db = db.query(FactSymbol).filter(
+            entities_from_db = db_session.query(FactSymbol).filter(
                 FactSymbol.analysis_id == analysis_id
             ).all()
 
             if not entities_from_db:
-                logger.debug(f"Analysis {analysis_id}: No symbols in FactStore, skipping semantic indexing")
+                logger.info(f"[SEMANTIC_INDEX] Analysis {analysis_id}: No symbols, skipping")
                 return
+
+            logger.info(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Found {len(entities_from_db)} symbols")
 
             # Convert FactSymbol records to dict format for semantic builder
             entities_dict = {}
@@ -600,8 +776,7 @@ class AnalysisWorker(WorkerInterface):
             chroma_bytes = builder.build_index_from_symbols(entities_dict)
 
             if chroma_bytes:
-                # Store in database
-                db_session = SessionLocal()
+                # Store in database using existing session
                 try:
                     artifact = AnalysisArtifact(
                         analysis_id=analysis_id,
@@ -611,15 +786,13 @@ class AnalysisWorker(WorkerInterface):
                     )
                     db_session.add(artifact)
                     db_session.commit()
-                    logger.info(f"Analysis {analysis_id}: Semantic index built and stored ({len(chroma_bytes)} bytes)")
+                    logger.info(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Stored ({len(chroma_bytes)} bytes)")
                 except Exception as db_err:
-                    logger.warning(f"Analysis {analysis_id}: Failed to store semantic index: {db_err}")
+                    logger.error(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Failed to store: {db_err}")
                     db_session.rollback()
-                finally:
-                    db_session.close()
             else:
-                logger.debug(f"Analysis {analysis_id}: Semantic index build returned None")
-        except ImportError:
-            logger.debug(f"Analysis {analysis_id}: chromadb not available for semantic indexing")
+                logger.error(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Build returned None")
+        except ImportError as ie:
+            logger.error(f"[SEMANTIC_INDEX] Analysis {analysis_id}: chromadb unavailable: {ie}")
         except Exception as bg_err:
-            logger.debug(f"Analysis {analysis_id}: Background semantic indexing error: {bg_err}")
+            logger.error(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Error: {bg_err}", exc_info=True)
