@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, MessageCircle, CheckCircle2 } from 'lucide-react';
+import { Zap, MessageCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 interface Message {
   type: 'user-query' | 'llm-thinking' | 'tool-searching' | 'tool-found' | 'tool-analyzing' | 'tool-reading' | 'final-answer';
@@ -17,6 +17,7 @@ export const LLMConversationFlow: React.FC = () => {
   const [totalData, setTotalData] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [done, setDone] = useState(false);
+  const [showToolDetails, setShowToolDetails] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
 
@@ -37,7 +38,7 @@ export const LLMConversationFlow: React.FC = () => {
     setDone(false);
     startTimeRef.current = Date.now();
 
-    const flowSteps = [
+    const flowSteps: Array<any> = [
       {
         type: 'user-query' as const,
         content: userQuery,
@@ -55,11 +56,15 @@ export const LLMConversationFlow: React.FC = () => {
         toolCall: true,
         data: 8.2,
       },
-      {
+      ...(showToolDetails ? [{
+        type: 'tool-found' as const,
+        content: '📊 Tool Response:\n• Searched 1,200+ code symbols\n• Found 186 matching results\n• Query time: 87ms\n• Data: 8.2 KB\n\nKey findings:\n• get_current_user (FUNCTION)\n• TokenUsage (CLASS)\n• verify_token (FUNCTION)\n• github_oauth (MODULE)',
+        delay: 3200,
+      }] : [{
         type: 'tool-found' as const,
         content: '✓ Found 186 relevant symbols including key components and their relationships',
-        delay: 3500,
-      },
+        delay: 3200,
+      }]),
       {
         type: 'tool-analyzing' as const,
         content: 'Understanding how components interact with each other...',
@@ -67,17 +72,27 @@ export const LLMConversationFlow: React.FC = () => {
         toolCall: true,
         data: 4.1,
       },
+      ...(showToolDetails ? [{
+        type: 'tool-found' as const,
+        content: '🔗 Tool Response:\n• Analyzed relationship graph\n• Time: 94ms\n• Data: 4.1 KB\n\nRelationships found:\n• 12+ route handlers call this function\n• Calls: jwt.decode(), User.query(), HTTPException\n• Central component in auth flow',
+        delay: 5800,
+      }] : []),
       {
         type: 'tool-reading' as const,
         content: 'Reading implementation details and source code...',
-        delay: 6000,
+        delay: 6700,
         toolCall: true,
         data: 2.8,
       },
+      ...(showToolDetails ? [{
+        type: 'tool-found' as const,
+        content: '💾 Tool Response:\n• Read source code file\n• Lines: 1-40\n• Time: 412ms\n• Data: 2.8 KB\n\nCode preview:\ndef get_current_user(token: str, db: Session):\n    payload = jwt.decode(token, SECRET_KEY)\n    user_id = payload.get("sub")\n    user = db.query(User).filter(...).first()\n    if not user:\n        raise HTTPException(status_code=401)\n    return user',
+        delay: 8000,
+      }] : []),
       {
         type: 'final-answer' as const,
         content: generateAnswer(userQuery),
-        delay: 8000,
+        delay: showToolDetails ? 9200 : 8000,
       },
     ];
 
@@ -175,9 +190,27 @@ The codebase is well-structured with clear patterns and proper separation of con
               Repository Assistant
             </h1>
           </div>
-          <p className="text-slate-600 dark:text-slate-400 text-lg">
+          <p className="text-slate-600 dark:text-slate-400 text-lg mb-4">
             Ask questions about your codebase and get instant answers
           </p>
+
+          {/* Toggle Tools Details */}
+          <button
+            onClick={() => setShowToolDetails(!showToolDetails)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors text-sm font-medium"
+          >
+            {showToolDetails ? (
+              <>
+                <Eye className="w-4 h-4" />
+                Hide Tool Details
+              </>
+            ) : (
+              <>
+                <EyeOff className="w-4 h-4" />
+                Show Tool Details
+              </>
+            )}
+          </button>
         </div>
 
         {/* Chat Area */}
