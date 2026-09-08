@@ -1,5 +1,6 @@
+'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
-import styled from 'styled-components';
 
 interface ConversationMessage {
   type: 'user' | 'llm-call' | 'tool-request' | 'tool-response' | 'llm-processing' | 'final-answer';
@@ -126,174 +127,6 @@ Tools used: 3 | Data transferred: 15.1 KB | Time: 0.8 seconds`,
   },
 ];
 
-const Container = styled.div`
-  max-width: 1000px;
-  margin: 0 auto;
-`;
-
-const Header = styled.div`
-  text-align: center;
-  margin-bottom: 40px;
-  padding: 30px;
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.1) 0%, rgba(13, 182, 204, 0.1) 100%);
-  border: 2px solid rgba(45, 53, 97, 0.5);
-  border-radius: 12px;
-
-  h1 {
-    margin: 0 0 10px 0;
-    font-size: 2em;
-    background: linear-gradient(135deg, #00d4ff 0%, #a78bfa 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  p {
-    margin: 5px 0;
-    color: #8b92b5;
-  }
-`;
-
-const Controls = styled.div`
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-bottom: 30px;
-`;
-
-const Button = styled.button<{ running?: boolean }>`
-  padding: 12px 24px;
-  background: ${(props) => (props.running ? '#00ff88' : '#1a1f3a')};
-  border: 2px solid ${(props) => (props.running ? '#00ff88' : '#2d3561')};
-  color: ${(props) => (props.running ? '#0a0e27' : '#e8eef7')};
-  border-radius: 6px;
-  cursor: ${(props) => (props.running ? 'not-allowed' : 'pointer')};
-  font-weight: 600;
-  transition: all 0.3s;
-
-  &:hover:not(:disabled) {
-    border-color: #00d4ff;
-    background: rgba(0, 212, 255, 0.1);
-  }
-`;
-
-const Status = styled.div<{ done?: boolean }>`
-  text-align: center;
-  margin-top: 20px;
-  color: ${(props) => (props.done ? '#00ff88' : '#8b92b5')};
-  font-size: 0.9em;
-`;
-
-const Conversation = styled.div`
-  background: #1a1f3a;
-  border: 2px solid #2d3561;
-  border-radius: 12px;
-  padding: 30px;
-  font-size: 0.95em;
-  line-height: 1.8;
-  max-height: 65vh;
-  overflow-y: auto;
-  margin-bottom: 20px;
-  font-family: 'Monaco', 'Courier New', monospace;
-`;
-
-const Message = styled.div<{ type: string }>`
-  margin-bottom: 20px;
-  opacity: 0;
-  animation: fadeIn 0.4s ease forwards;
-  border-left: 3px solid;
-  padding-left: 15px;
-
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  ${(props) => {
-    switch (props.type) {
-      case 'user':
-        return `
-          color: #00d4ff;
-          border-color: #00d4ff;
-        `;
-      case 'llm-call':
-      case 'llm-processing':
-        return `
-          color: #a78bfa;
-          border-color: #a78bfa;
-          font-style: italic;
-          opacity: 0.9;
-        `;
-      case 'tool-request':
-        return `
-          color: #06b6d4;
-          border-color: #06b6d4;
-          background: rgba(6, 182, 204, 0.05);
-          padding: 12px;
-          border-radius: 4px;
-          margin: 10px 0;
-          font-size: 0.9em;
-          white-space: pre-wrap;
-        `;
-      case 'tool-response':
-        return `
-          color: #00ff88;
-          border-color: #00ff88;
-          background: rgba(0, 255, 136, 0.05);
-          padding: 12px;
-          border-radius: 4px;
-          margin: 10px 0;
-          font-size: 0.9em;
-          white-space: pre-wrap;
-        `;
-      case 'final-answer':
-        return `
-          color: #00d4ff;
-          border-color: #00d4ff;
-          background: rgba(0, 212, 255, 0.1);
-          padding: 15px;
-          border-radius: 4px;
-          margin-top: 20px;
-          white-space: pre-wrap;
-        `;
-      default:
-        return '';
-    }
-  }}
-`;
-
-const Metrics = styled.div<{ visible: boolean }>`
-  display: ${(props) => (props.visible ? 'grid' : 'none')};
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 15px;
-  margin-top: 30px;
-`;
-
-const MetricCard = styled.div`
-  background: #1a1f3a;
-  border: 1px solid #2d3561;
-  border-radius: 6px;
-  padding: 15px;
-  text-align: center;
-`;
-
-const MetricValue = styled.div`
-  font-size: 1.8em;
-  font-weight: bold;
-  color: #00d4ff;
-  font-family: monospace;
-`;
-
-const MetricLabel = styled.div`
-  font-size: 0.85em;
-  color: #8b92b5;
-  margin-top: 5px;
-`;
-
 export const LLMConversationFlow: React.FC = () => {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [running, setRunning] = useState(false);
@@ -349,59 +182,125 @@ export const LLMConversationFlow: React.FC = () => {
     setDone(false);
   };
 
+  const getMessageClasses = (type: string): string => {
+    const baseClasses = 'mb-5 opacity-0 animate-fade-in border-l-4 pl-4';
+    switch (type) {
+      case 'user':
+        return `${baseClasses} border-blue-500 text-blue-600 dark:text-blue-400`;
+      case 'llm-call':
+      case 'llm-processing':
+        return `${baseClasses} border-purple-500 text-purple-600 dark:text-purple-400 italic opacity-90`;
+      case 'tool-request':
+        return `${baseClasses} border-cyan-500 text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/30 p-3 rounded my-2 text-sm font-mono whitespace-pre-wrap`;
+      case 'tool-response':
+        return `${baseClasses} border-green-500 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 p-3 rounded my-2 text-sm font-mono whitespace-pre-wrap`;
+      case 'final-answer':
+        return `${baseClasses} border-blue-500 text-slate-900 dark:text-slate-100 bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg mt-5 whitespace-pre-wrap`;
+      default:
+        return baseClasses;
+    }
+  };
+
   return (
-    <Container>
-      <Header>
-        <h1>🤖 LLM Conversation Flow</h1>
-        <p>Real query → tool calls → responses → final answer</p>
-      </Header>
+    <div className="max-w-3xl mx-auto">
+      {/* Header */}
+      <div className="text-center mb-10 p-8 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30 border border-slate-200 dark:border-slate-700 rounded-lg">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+          🤖 LLM Conversation Flow
+        </h1>
+        <p className="text-slate-600 dark:text-slate-400">
+          Real query → tool calls → responses → final answer
+        </p>
+      </div>
 
-      <Controls>
-        <Button onClick={startConversation} disabled={running} running={running}>
+      {/* Controls */}
+      <div className="flex gap-3 justify-center mb-6">
+        <button
+          onClick={startConversation}
+          disabled={running}
+          className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+            running
+              ? 'bg-green-500 text-white cursor-not-allowed'
+              : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 border-2 border-slate-800 dark:border-slate-100'
+          }`}
+        >
           ▶ Run Query
-        </Button>
-        <Button onClick={resetConversation}>↺ Reset</Button>
-      </Controls>
+        </button>
+        <button
+          onClick={resetConversation}
+          className="px-6 py-2 rounded-lg font-semibold bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-slate-600 transition-all border-2 border-slate-300 dark:border-slate-600"
+        >
+          ↺ Reset
+        </button>
+      </div>
 
-      <Status done={done}>
+      {/* Status */}
+      <div className="text-center mb-6 text-sm text-slate-600 dark:text-slate-400 min-h-5">
         {running ? (
           <>
-            <span style={{ marginRight: '8px' }}>●</span> Running conversation...
+            <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+            Running conversation...
           </>
         ) : done ? (
           <>
-            <span style={{ color: '#00ff88', marginRight: '8px' }}>✅</span> Conversation Complete!
+            <span className="text-green-600 dark:text-green-400">✅ Conversation Complete!</span>
           </>
         ) : (
           'Ready to run...'
         )}
-      </Status>
+      </div>
 
-      <Conversation ref={convRef}>
+      {/* Conversation */}
+      <div
+        ref={convRef}
+        className="bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-lg p-6 font-mono text-sm leading-relaxed max-h-96 overflow-y-auto mb-6"
+      >
         {messages.map((msg, idx) => (
-          <Message key={idx} type={msg.type}>
+          <div key={idx} className={getMessageClasses(msg.type)}>
             {msg.text}
-          </Message>
+          </div>
         ))}
-      </Conversation>
+      </div>
 
+      {/* Metrics */}
       {(messages.length > 0 || done) && (
-        <Metrics visible={true}>
-          <MetricCard>
-            <MetricValue>{toolCalls}</MetricValue>
-            <MetricLabel>Tool Calls</MetricLabel>
-          </MetricCard>
-          <MetricCard>
-            <MetricValue>{totalData.toFixed(1)} KB</MetricValue>
-            <MetricLabel>Data Transferred</MetricLabel>
-          </MetricCard>
-          <MetricCard>
-            <MetricValue>{elapsed.toFixed(2)}s</MetricValue>
-            <MetricLabel>Total Time</MetricLabel>
-          </MetricCard>
-        </Metrics>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg text-center">
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 font-mono">
+              {toolCalls}
+            </div>
+            <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">Tool Calls</div>
+          </div>
+          <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg text-center">
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400 font-mono">
+              {totalData.toFixed(1)} KB
+            </div>
+            <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">Data Transferred</div>
+          </div>
+          <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg text-center">
+            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400 font-mono">
+              {elapsed.toFixed(2)}s
+            </div>
+            <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">Total Time</div>
+          </div>
+        </div>
       )}
-    </Container>
+
+      <style jsx>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        .animate-fade-in {
+          animation: fade-in 0.4s ease-in-out forwards;
+        }
+      `}</style>
+    </div>
   );
 };
 
