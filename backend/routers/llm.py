@@ -431,6 +431,10 @@ You MUST respond with ONLY a JSON object in ONE of two formats:
 4. When you have enough information, use "complete" action
 5. Never guess - if you can't find something, try alternative searches
 6. If a search returns no results, try related terms before giving up
+7. **CRITICAL: DO NOT REPEAT THE SAME TOOL CALL TWICE** - Track what you've already tried
+8. If you already searched for "authentication", don't search again - try "auth", "oauth", etc. instead
+9. If you already read a file, don't read it again - read a different file or use a different tool
+10. Vary your approach: use different search terms, read different files, use analyze_relationships
 
 ## Smart Fallback Strategy
 CRITICAL: If search_symbols returns "No symbols found", DO NOT GIVE UP!
@@ -464,10 +468,21 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
             max_iterations = 10  # Increased for more thorough exploration
             iteration = 0
             final_answer = None
+            attempted_calls = []  # Track what we've already tried
 
             # 5. Tool-calling loop
             while iteration < max_iterations:
                 iteration += 1
+
+                # If we have attempted calls, remind LLM what NOT to repeat
+                if attempted_calls:
+                    attempted_summary = "\n".join([f"- {call}" for call in attempted_calls[-5:]])  # Last 5 attempts
+                    messages.append(
+                        Message(
+                            role=MessageRole.USER,
+                            content=f"IMPORTANT: You've already tried these calls, DO NOT REPEAT them:\n{attempted_summary}\n\nTry a DIFFERENT approach: different search terms, different files, or a different tool."
+                        )
+                    )
 
                 # If approaching limit, tell LLM to wrap up
                 if iteration >= max_iterations - 1:
@@ -512,6 +527,16 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
                     # Execute tool
                     tool_name = action_data.get("tool_name", "")
                     arguments = action_data.get("arguments", {})
+
+                    # Track this attempt
+                    if tool_name == "search_symbols":
+                        call_desc = f'search_symbols("{arguments.get("query", "")}")'
+                    elif tool_name == "read_file":
+                        call_desc = f'read_file("{arguments.get("file_path", "")}")'
+                    else:
+                        call_desc = f'{tool_name}({arguments})'
+
+                    attempted_calls.append(call_desc)
 
                     # Stream the tool call
                     yield f"data: {json.dumps({'type': 'tool-call', 'content': f'Calling {tool_name} with: {json.dumps(arguments)}', 'tool_name': tool_name, 'timestamp': (datetime.now() - start_time).total_seconds()})}\n\n"
