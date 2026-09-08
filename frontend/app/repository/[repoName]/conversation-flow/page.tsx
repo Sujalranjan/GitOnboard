@@ -12,7 +12,7 @@ import LLMConversationFlow from '@/components/LLMConversationFlow';
 
 export default function ConversationFlowPage() {
   return (
-    <div style={{ padding: '20px' }}>
+    <div className="flex flex-col h-full w-full">
       <LLMConversationFlow />
     </div>
   );
