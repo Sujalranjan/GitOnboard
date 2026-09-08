@@ -17,10 +17,8 @@ logger = logging.getLogger(__name__)
 def inspect_symbol(
     file_path: str,
     symbol_name: str,
-    repo_name: str = "default",
+    repo_hash: str,
     db: Optional[Session] = None,
-    repo_root: Optional[str] = None,
-    user_id: Optional[int] = None,
 ) -> InspectSymbolResult:
     """
     Return metadata about ONE symbol without reading its source.
@@ -32,25 +30,17 @@ def inspect_symbol(
     Args:
         file_path: Repository-relative path to file
         symbol_name: Name of symbol to inspect
-        repo_name: Repository name for lookup
+        repo_hash: UUID v4 of repository (unambiguous)
         db: SQLAlchemy session for DB queries
-        repo_root: Optional repository root path
-        user_id: User ID for multi-tenant scenarios
 
     Returns:
         InspectSymbolResult with symbol metadata and relationships
     """
     try:
-        # Initialize RepositoryToolLayer
-        tool_layer = RepositoryToolLayer(
-            repo_name=repo_name,
-            db=db,
-            repo_root=repo_root,
-            user_id=user_id,
-        )
+        from backend.models.repository import Repository, Analysis
 
         # Query for symbols matching file_path + symbol_name
-        if not db or not tool_layer.analysis_id:
+        if not db:
             return InspectSymbolResult(
                 symbol_id="",
                 name=symbol_name,
@@ -61,14 +51,55 @@ def inspect_symbol(
                 line_end=0,
                 language=detect_language(file_path),
                 success=False,
-                error="Database session or analysis_id not available",
+                error="Database session not available",
             )
+
+        # Get repository by hash (unambiguous)
+        repo = db.query(Repository).filter(
+            Repository.repository_hash == repo_hash
+        ).first()
+
+        if not repo:
+            return InspectSymbolResult(
+                symbol_id="",
+                name=symbol_name,
+                qualified_name=symbol_name,
+                symbol_type="unknown",
+                file_path=file_path,
+                line_start=0,
+                line_end=0,
+                language=detect_language(file_path),
+                success=False,
+                error=f"Repository not found: {repo_hash}",
+            )
+
+        # Get latest completed analysis
+        analysis = db.query(Analysis).filter(
+            Analysis.repository_id == repo.id,
+            Analysis.status == "Completed"
+        ).order_by(Analysis.created_at.desc()).first()
+
+        if not analysis:
+            return InspectSymbolResult(
+                symbol_id="",
+                name=symbol_name,
+                qualified_name=symbol_name,
+                symbol_type="unknown",
+                file_path=file_path,
+                line_start=0,
+                line_end=0,
+                language=detect_language(file_path),
+                success=False,
+                error=f"No completed analysis for repository: {repo_hash}",
+            )
+
+        analysis_id = analysis.id
 
         # Look up FactFile first
         fact_file = (
             db.query(FactFile)
             .filter(
-                FactFile.analysis_id == tool_layer.analysis_id,
+                FactFile.analysis_id == analysis_id,
                 FactFile.path == file_path,
             )
             .first()
@@ -92,7 +123,7 @@ def inspect_symbol(
         symbols = (
             db.query(FactSymbol)
             .filter(
-                FactSymbol.analysis_id == tool_layer.analysis_id,
+                FactSymbol.analysis_id == analysis_id,
                 FactSymbol.file_id == fact_file.id,
                 FactSymbol.name == symbol_name,  # Exact name match
             )
@@ -153,7 +184,7 @@ def inspect_symbol(
         relationships = _get_symbol_relationships(
             db=db,
             symbol_id=symbol.id,
-            analysis_id=tool_layer.analysis_id,
+            analysis_id=analysis_id,
         )
 
         return InspectSymbolResult(

@@ -398,7 +398,7 @@ def get_architecture(repo_name: str, node_id: str = "root", db: Session = Depend
 
 @structure_router.get("/{repo_name}/file")
 async def get_raw_file(
-    repo_name: str,
+    repo_hash: str,
     path: str,
     start_line: int = None,
     end_line: int = None,
@@ -406,18 +406,19 @@ async def get_raw_file(
     current_user: User = Depends(get_current_user),
 ):
     from fastapi import HTTPException
+    from backend.routers.repo.services.hash_resolution import get_latest_analysis_by_hash
 
     if not path or not path.strip():
         raise HTTPException(status_code=400, detail="Invalid empty file path")
 
-    repo, analysis = get_latest_analysis(repo_name, db, current_user)
+    repo, analysis = get_latest_analysis_by_hash(repo_hash, db, current_user)
     from backend.models.fact_store import FactFile
     from backend.storage import get_storage
 
-    logger.info(f"[FILE_API] GET /{repo_name}/file?path={path}")
+    logger.info(f"[FILE_API] GET /{repo_hash}/file?path={path}")
     if start_line or end_line:
         logger.info(f"[FILE_API] Line range: {start_line}-{end_line}")
-    logger.info(f"[FILE_API] Analysis ID: {analysis.id}, Repo ID: {repo.id}")
+    logger.info(f"[FILE_API] Analysis ID: {analysis.id}, Repo ID: {repo.id}, Repo Hash: {repo_hash}")
 
     # Validate path format
     try:

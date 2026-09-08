@@ -11,6 +11,7 @@ class Repository(Base):
     __tablename__ = "repositories"
 
     id = Column(Integer, primary_key=True, index=True)
+    repository_hash = Column(String(36), index=True, nullable=False, unique=True)  # UUID v4
     github_repo_id = Column(String, index=True, nullable=True)
     url = Column(String, index=True, nullable=False)
     default_branch = Column(String, nullable=True)
@@ -19,9 +20,15 @@ class Repository(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "url", name="uq_user_repo_url"),
         UniqueConstraint("user_id", "github_repo_id", name="uq_user_github_repo"),
+        UniqueConstraint("repository_hash", name="uq_repository_hash"),
     )
-    
+
     analyses = relationship("Analysis", back_populates="repository", cascade="all, delete-orphan")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.repository_hash:
+            self.repository_hash = str(uuid.uuid4())
 
 class Analysis(Base):
     __tablename__ = "analyses"
