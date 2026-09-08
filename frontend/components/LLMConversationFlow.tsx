@@ -92,12 +92,14 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
   useEffect(() => {
     const lookupRepoHash = async () => {
       try {
-        const response = await fetch(`/api/repos?search=${encodeURIComponent(repoName)}`);
+        const response = await fetch(`/api/repos/lookup-hash?name=${encodeURIComponent(repoName)}`);
         if (response.ok) {
           const data = await response.json();
-          if (data.repositories && data.repositories.length > 0) {
-            setRepoHash(data.repositories[0].repository_hash);
+          if (data.repository_hash) {
+            setRepoHash(data.repository_hash);
           }
+        } else {
+          console.error('Failed to look up repository hash:', response.statusText);
         }
       } catch (error) {
         console.error('Failed to look up repository hash:', error);
