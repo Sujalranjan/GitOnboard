@@ -1,143 +1,34 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { Zap, MessageCircle, CheckCircle2 } from 'lucide-react';
 
-interface ConversationMessage {
-  type: 'user' | 'llm-call' | 'tool-request' | 'tool-response' | 'llm-processing' | 'final-answer';
-  text: string;
-  dataSize?: number;
-  toolCall?: boolean;
+interface Message {
+  type: 'user-query' | 'llm-thinking' | 'tool-searching' | 'tool-found' | 'tool-analyzing' | 'tool-reading' | 'final-answer';
+  content: string;
+  icon?: React.ReactNode;
 }
 
-const conversationFlow: ConversationMessage[] = [
-  {
-    type: 'user',
-    text: 'How does authentication work in this repository?',
-  },
-  {
-    type: 'llm-call',
-    text: '[LLM: I need to find auth-related symbols. Calling Tool #3...]',
-  },
-  {
-    type: 'tool-request',
-    text: `POST /api/v1/agent/repository-tools/query-graph
-{
-  "repo_hash": "30afa414-86ab-46ec-a90e-6b21f3ddfd0d",
-  "query": "auth, current_user, verify, token"
-}`,
-  },
-  {
-    type: 'tool-response',
-    text: `✅ RESPONSE (87ms, 8.2KB):
-186 symbols found:
-• get_current_user (FUNCTION)
-• TokenUsage (CLASS)
-• verify_token (FUNCTION)
-• github_oauth (MODULE)
-... 182 more`,
-    dataSize: 8.2,
-    toolCall: true,
-  },
-  {
-    type: 'llm-processing',
-    text: '[LLM: Good! get_current_user seems central. Need to understand its relationships...]',
-  },
-  {
-    type: 'llm-call',
-    text: '[LLM: Calling Tool #3 again for relationships...]',
-  },
-  {
-    type: 'tool-request',
-    text: `POST /api/v1/agent/repository-tools/query-graph
-{
-  "symbol_id": "get_current_user",
-  "direction": "both",
-  "depth": 2
-}`,
-  },
-  {
-    type: 'tool-response',
-    text: `✅ RESPONSE (94ms, 4.1KB):
-INCOMING: 12+ route handlers call it
-OUTGOING:
-→ jwt.decode()
-→ User.query()
-→ HTTPException`,
-    dataSize: 4.1,
-    toolCall: true,
-  },
-  {
-    type: 'llm-processing',
-    text: '[LLM: Perfect! Now I see the architecture. Need actual code to explain implementation...]',
-  },
-  {
-    type: 'llm-call',
-    text: '[LLM: Calling Tool #2 to read source code...]',
-  },
-  {
-    type: 'tool-request',
-    text: `POST /api/v1/agent/repository-tools/read-file
-{
-  "repo_hash": "30afa414-86ab-46ec-a90e-6b21f3ddfd0d",
-  "file_path": "backend/dependencies/auth.py",
-  "start_line": 1,
-  "end_line": 40
-}`,
-  },
-  {
-    type: 'tool-response',
-    text: `✅ RESPONSE (412ms, 2.8KB):
-def get_current_user(token: str, db: Session):
-    payload = jwt.decode(token, SECRET_KEY)
-    user_id = payload.get("sub")
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=401)
-    return user`,
-    dataSize: 2.8,
-    toolCall: true,
-  },
-  {
-    type: 'llm-processing',
-    text: '[LLM: Complete! I have all the information. Generating comprehensive answer...]',
-  },
-  {
-    type: 'final-answer',
-    text: `✨ FINAL ANSWER:
-
-Authentication in GitOnBoard uses JWT tokens with FastAPI dependency injection:
-
-1. Token extracted from Authorization header
-2. jwt.decode() verifies signature using SECRET_KEY (HS256)
-3. User ID extracted from token payload
-4. Database lookup validates the user exists
-5. FastAPI injects User object into endpoint handler
-6. 401 HTTPException raised for invalid tokens
-
-Key Flow:
-Request → Middleware → JWT verify → DB lookup → Dependency injection → Handler
-
-Security:
-✓ Stateless token-based auth
-✓ Cryptographic verification
-✓ Database validation prevents forgery
-✓ Automatic enforcement before handler
-
-Tools used: 3 | Data transferred: 15.1 KB | Time: 0.8 seconds`,
-  },
-];
-
 export const LLMConversationFlow: React.FC = () => {
-  const [messages, setMessages] = useState<ConversationMessage[]>([]);
+  const [query, setQuery] = useState('');
   const [running, setRunning] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [toolCalls, setToolCalls] = useState(0);
   const [totalData, setTotalData] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [done, setDone] = useState(false);
-  const convRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
 
-  const startConversation = async () => {
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const simulateQuery = async (userQuery: string) => {
     setRunning(true);
     setMessages([]);
     setToolCalls(0);
@@ -146,158 +37,311 @@ export const LLMConversationFlow: React.FC = () => {
     setDone(false);
     startTimeRef.current = Date.now();
 
-    for (let i = 0; i < conversationFlow.length; i++) {
-      const msg = conversationFlow[i];
+    const flowSteps = [
+      {
+        type: 'user-query' as const,
+        content: userQuery,
+        delay: 0,
+      },
+      {
+        type: 'llm-thinking' as const,
+        content: 'Analyzing your question... I need to search for relevant code patterns and understand the architecture.',
+        delay: 1000,
+      },
+      {
+        type: 'tool-searching' as const,
+        content: 'Searching repository for related symbols and components...',
+        delay: 2000,
+        toolCall: true,
+        data: 8.2,
+      },
+      {
+        type: 'tool-found' as const,
+        content: '✓ Found 186 relevant symbols including key components and their relationships',
+        delay: 3500,
+      },
+      {
+        type: 'tool-analyzing' as const,
+        content: 'Understanding how components interact with each other...',
+        delay: 4500,
+        toolCall: true,
+        data: 4.1,
+      },
+      {
+        type: 'tool-reading' as const,
+        content: 'Reading implementation details and source code...',
+        delay: 6000,
+        toolCall: true,
+        data: 2.8,
+      },
+      {
+        type: 'final-answer' as const,
+        content: generateAnswer(userQuery),
+        delay: 8000,
+      },
+    ];
 
-      setMessages((prev) => [...prev, msg]);
+    for (const step of flowSteps) {
+      await new Promise(resolve => setTimeout(resolve, step.delay));
 
-      if (msg.toolCall) {
-        setToolCalls((prev) => prev + 1);
-        setTotalData((prev) => prev + (msg.dataSize || 0));
+      setMessages(prev => [...prev, {
+        type: step.type,
+        content: step.content,
+      }]);
+
+      if ('toolCall' in step && step.toolCall) {
+        setToolCalls(prev => prev + 1);
+        setTotalData(prev => prev + (step.data || 0));
       }
 
-      // Update elapsed time
       setElapsed((Date.now() - startTimeRef.current) / 1000);
-
-      // Auto-scroll
-      setTimeout(() => {
-        if (convRef.current) {
-          convRef.current.scrollTop = convRef.current.scrollHeight;
-        }
-      }, 0);
-
-      await new Promise((resolve) => setTimeout(resolve, 600));
     }
 
     setRunning(false);
     setDone(true);
   };
 
-  const resetConversation = () => {
-    setMessages([]);
-    setRunning(false);
-    setToolCalls(0);
-    setTotalData(0);
-    setElapsed(0);
-    setDone(false);
+  const generateAnswer = (userQuery: string) => {
+    const answers: Record<string, string> = {
+      auth: `Authentication is handled through JWT tokens with FastAPI dependency injection. Here's how it works:
+
+1. Users send requests with JWT tokens in the Authorization header
+2. The system verifies the token signature using a secret key
+3. Valid tokens are decoded to extract the user ID
+4. The system validates that the user exists in the database
+5. The user object is automatically injected into request handlers
+
+This creates a secure, stateless authentication system that validates on every request.`,
+
+      architecture: `The repository uses a layered architecture:
+
+Frontend Layer: React/Next.js handles the UI
+API Layer: FastAPI provides REST endpoints
+Business Logic: Python handles analysis and processing
+Data Layer: PostgreSQL stores the repository data
+Storage: Azure Blob Storage holds file contents
+
+Components communicate through well-defined APIs with clear separation of concerns.`,
+
+      database: `The database stores repository data in a normalized schema:
+
+- Repositories: Core metadata and identification
+- Symbols: Functions, classes, and variables discovered during analysis
+- Relationships: How symbols call or reference each other
+- Files: Source code file metadata and content pointers
+- Analysis: Results from code parsing and analysis runs
+
+This structure enables fast querying of code relationships.`,
+
+      default: `Analysis of your query is complete! The system has:
+
+• Searched through 186+ relevant code symbols
+• Analyzed relationships and dependencies
+• Retrieved source code implementations
+• Built a comprehensive understanding
+
+The codebase is well-structured with clear patterns and proper separation of concerns.`,
+    };
+
+    const lowerQuery = userQuery.toLowerCase();
+    for (const [key, answer] of Object.entries(answers)) {
+      if (lowerQuery.includes(key)) return answer;
+    }
+    return answers.default;
   };
 
-  const getMessageClasses = (type: string): string => {
-    const baseClasses = 'mb-5 opacity-0 animate-fade-in border-l-4 pl-4';
-    switch (type) {
-      case 'user':
-        return `${baseClasses} border-blue-500 text-blue-600 dark:text-blue-400`;
-      case 'llm-call':
-      case 'llm-processing':
-        return `${baseClasses} border-purple-500 text-purple-600 dark:text-purple-400 italic opacity-90`;
-      case 'tool-request':
-        return `${baseClasses} border-cyan-500 text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/30 p-3 rounded my-2 text-sm font-mono whitespace-pre-wrap`;
-      case 'tool-response':
-        return `${baseClasses} border-green-500 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 p-3 rounded my-2 text-sm font-mono whitespace-pre-wrap`;
-      case 'final-answer':
-        return `${baseClasses} border-blue-500 text-slate-900 dark:text-slate-100 bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg mt-5 whitespace-pre-wrap`;
-      default:
-        return baseClasses;
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (query.trim() && !running) {
+      simulateQuery(query);
     }
   };
 
+  const suggestedQueries = [
+    'How does authentication work?',
+    'What is the system architecture?',
+    'How is data stored?',
+    'What are the key components?',
+  ];
+
   return (
-    <div className="max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="text-center mb-10 p-8 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30 border border-slate-200 dark:border-slate-700 rounded-lg">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-          🤖 LLM Conversation Flow
-        </h1>
-        <p className="text-slate-600 dark:text-slate-400">
-          Real query → tool calls → responses → final answer
-        </p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-4 sm:p-6">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <MessageCircle className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">
+              Repository Assistant
+            </h1>
+          </div>
+          <p className="text-slate-600 dark:text-slate-400 text-lg">
+            Ask questions about your codebase and get instant answers
+          </p>
+        </div>
 
-      {/* Controls */}
-      <div className="flex gap-3 justify-center mb-6">
-        <button
-          onClick={startConversation}
-          disabled={running}
-          className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-            running
-              ? 'bg-green-500 text-white cursor-not-allowed'
-              : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 border-2 border-slate-800 dark:border-slate-100'
-          }`}
-        >
-          ▶ Run Query
-        </button>
-        <button
-          onClick={resetConversation}
-          className="px-6 py-2 rounded-lg font-semibold bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-slate-600 transition-all border-2 border-slate-300 dark:border-slate-600"
-        >
-          ↺ Reset
-        </button>
-      </div>
+        {/* Chat Area */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 mb-6 min-h-96 max-h-96 overflow-y-auto space-y-4">
+          {messages.length === 0 && !running && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <MessageCircle className="w-16 h-16 text-slate-300 dark:text-slate-600 mb-4" />
+              <p className="text-slate-500 dark:text-slate-400">
+                Ask a question to get started
+              </p>
+            </div>
+          )}
 
-      {/* Status */}
-      <div className="text-center mb-6 text-sm text-slate-600 dark:text-slate-400 min-h-5">
-        {running ? (
-          <>
-            <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-            Running conversation...
-          </>
-        ) : done ? (
-          <>
-            <span className="text-green-600 dark:text-green-400">✅ Conversation Complete!</span>
-          </>
-        ) : (
-          'Ready to run...'
+          {messages.map((msg, idx) => (
+            <div
+              key={idx}
+              className={`animate-slide-up ${
+                msg.type === 'user-query'
+                  ? 'flex justify-end'
+                  : 'flex justify-start'
+              }`}
+            >
+              <div
+                className={`max-w-xs sm:max-w-sm lg:max-w-md px-4 py-3 rounded-lg ${
+                  msg.type === 'user-query'
+                    ? 'bg-blue-600 text-white rounded-br-none'
+                    : msg.type === 'final-answer'
+                      ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-2 border-green-200 dark:border-green-800 text-slate-900 dark:text-white rounded-bl-none'
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-bl-none'
+                }`}
+              >
+                {msg.type === 'tool-searching' && (
+                  <div className="flex items-center gap-2 mb-1">
+                    <Zap className="w-4 h-4 animate-pulse" />
+                    <span className="text-xs font-semibold">Searching</span>
+                  </div>
+                )}
+                {msg.type === 'tool-analyzing' && (
+                  <div className="flex items-center gap-2 mb-1">
+                    <Zap className="w-4 h-4 animate-pulse" />
+                    <span className="text-xs font-semibold">Analyzing</span>
+                  </div>
+                )}
+                {msg.type === 'tool-reading' && (
+                  <div className="flex items-center gap-2 mb-1">
+                    <Zap className="w-4 h-4 animate-pulse" />
+                    <span className="text-xs font-semibold">Reading Code</span>
+                  </div>
+                )}
+                {msg.type === 'final-answer' && (
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    <span className="text-sm font-semibold text-green-700 dark:text-green-400">Answer</span>
+                  </div>
+                )}
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {msg.content}
+                </p>
+              </div>
+            </div>
+          ))}
+
+          {running && messages.length > 0 && (
+            <div className="flex justify-start">
+              <div className="bg-slate-100 dark:bg-slate-700 px-4 py-3 rounded-lg rounded-bl-none">
+                <div className="flex gap-2">
+                  <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" />
+                  <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                  <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Metrics */}
+        {done && (
+          <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="bg-blue-100 dark:bg-blue-950/50 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{toolCalls}</div>
+              <div className="text-xs text-blue-700 dark:text-blue-300">Searches</div>
+            </div>
+            <div className="bg-green-100 dark:bg-green-950/50 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{totalData.toFixed(1)} KB</div>
+              <div className="text-xs text-green-700 dark:text-green-300">Data Analyzed</div>
+            </div>
+            <div className="bg-purple-100 dark:bg-purple-950/50 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{elapsed.toFixed(2)}s</div>
+              <div className="text-xs text-purple-700 dark:text-purple-300">Response Time</div>
+            </div>
+          </div>
+        )}
+
+        {/* Input Area */}
+        <form onSubmit={handleSubmit} className="mb-6">
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Ask about your codebase..."
+              disabled={running}
+              className="flex-1 px-4 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={running || !query.trim()}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {running ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span className="hidden sm:inline">Analyzing</span>
+                </>
+              ) : (
+                <>
+                  <span className="hidden sm:inline">Ask</span>
+                  <span className="sm:hidden">→</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+
+        {/* Suggested Queries */}
+        {messages.length === 0 && !running && (
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-3 uppercase">
+              Try asking about:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {suggestedQueries.map((q, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    setQuery(q);
+                    setTimeout(() => simulateQuery(q), 0);
+                  }}
+                  className="text-left px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 text-sm transition-colors"
+                >
+                  → {q}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Conversation */}
-      <div
-        ref={convRef}
-        className="bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-lg p-6 font-mono text-sm leading-relaxed max-h-96 overflow-y-auto mb-6"
-      >
-        {messages.map((msg, idx) => (
-          <div key={idx} className={getMessageClasses(msg.type)}>
-            {msg.text}
-          </div>
-        ))}
-      </div>
-
-      {/* Metrics */}
-      {(messages.length > 0 || done) && (
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 font-mono">
-              {toolCalls}
-            </div>
-            <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">Tool Calls</div>
-          </div>
-          <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400 font-mono">
-              {totalData.toFixed(1)} KB
-            </div>
-            <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">Data Transferred</div>
-          </div>
-          <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400 font-mono">
-              {elapsed.toFixed(2)}s
-            </div>
-            <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">Total Time</div>
-          </div>
-        </div>
-      )}
-
       <style jsx>{`
-        @keyframes fade-in {
+        @keyframes slide-up {
           from {
             opacity: 0;
+            transform: translateY(10px);
           }
           to {
             opacity: 1;
+            transform: translateY(0);
           }
         }
 
-        .animate-fade-in {
-          animation: fade-in 0.4s ease-in-out forwards;
+        .animate-slide-up {
+          animation: slide-up 0.3s ease-out;
         }
       `}</style>
     </div>
