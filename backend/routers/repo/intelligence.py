@@ -126,11 +126,36 @@ def search_symbols(repo_name: str, q: str, db: Session = Depends(get_db), curren
     from backend.intelligence.rim.enums import EntityType
     for e in query_layer.model.entities.values():
         if q_lower in e.name.lower():
+            file_path = e.metadata.get("file_id", e.location.repository_path)
+            qualified_name = e.metadata.get("qualified_name", e.name)
             if e.type == EntityType.CLASS:
-                results.append({"id": e.id, "type": "Class", "name": e.name, "file_path": e.metadata.get("file_id", e.location.repository_path), "line_number": e.location.start_line})
+                results.append({
+                    "id": e.id,
+                    "type": "Class",
+                    "name": e.name,
+                    "qualified_name": qualified_name,
+                    "file_path": file_path,
+                    "line_number": e.location.start_line
+                })
             elif e.type == EntityType.FUNCTION:
-                results.append({"id": e.id, "type": "Function", "name": e.name, "file_path": e.metadata.get("file_id", e.location.repository_path), "line_number": e.location.start_line})
-    return {"results": results}
+                results.append({
+                    "id": e.id,
+                    "type": "Function",
+                    "name": e.name,
+                    "qualified_name": qualified_name,
+                    "file_path": file_path,
+                    "line_number": e.location.start_line
+                })
+
+    # Check if ambiguous (multiple results with same name)
+    is_ambiguous = len(results) > 1 and len(set(r["name"] for r in results)) < len(results)
+
+    return {
+        "results": results,
+        "total": len(results),
+        "ambiguous": is_ambiguous,
+        "message": f"Found {len(results)} matches" + (" (ambiguous - use qualified_name to disambiguate)" if is_ambiguous else "")
+    }
 
 @intelligence_router.api_route("/{repo_name}/context", methods=["GET", "POST"], include_in_schema=False)
 def build_context_pack(
