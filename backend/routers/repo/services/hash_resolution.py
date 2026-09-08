@@ -46,6 +46,38 @@ def get_repo_by_hash(repo_hash: str, db: Session, current_user: User) -> Reposit
     return repo
 
 
+def get_repo_by_name_or_hash(identifier: str, db: Session, current_user: User) -> Repository:
+    """
+    Resolve repository by name or hash - backwards compatible.
+
+    Tries hash lookup first (fast), then falls back to name resolution.
+
+    Args:
+        identifier: Repository UUID hash or user-friendly name
+        db: Database session
+        current_user: Authenticated user
+
+    Returns:
+        Repository object
+
+    Raises:
+        HTTPException 404/400: If not found or ambiguous
+    """
+    # Try hash lookup first (fast path)
+    repo = db.query(Repository).filter(
+        Repository.repository_hash == identifier
+    ).first()
+
+    if repo:
+        if repo.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied to this repository")
+        return repo
+
+    # Fall back to name resolution (slower, but backward compatible)
+    from backend.routers.repo.services.analysis import resolve_repository
+    return resolve_repository(identifier, db, current_user)
+
+
 def get_latest_analysis_by_hash(
     repo_hash: str,
     db: Session,
