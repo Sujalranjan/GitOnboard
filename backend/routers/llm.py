@@ -512,10 +512,22 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
                             response_text = json_match.group(1).strip()
 
                     action_data = json.loads(response_text)
-                except json.JSONDecodeError:
-                    logger.warning(f"Failed to parse LLM JSON response: {response_text[:100]}")
-                    yield f"data: {json.dumps({'type': 'tool-response', 'content': 'Error: Invalid JSON response from LLM', 'timestamp': (datetime.now() - start_time).total_seconds()})}\n\n"
-                    break
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse LLM JSON response. Raw: {response_text[:200]}")
+
+                    # If response looks like a final answer (not a tool call), treat it as completion
+                    if len(response_text) > 50 and not "tool_name" in response_text.lower():
+                        logger.info("LLM provided non-JSON response, treating as final answer")
+                        final_answer = response_text
+                        break
+                    else:
+                        # Only break if it's a short response or looks malformed
+                        logger.warning(f"Invalid JSON and not a complete answer. Error: {e}")
+                        # Try one more time with a clearer instruction
+                        messages.append(
+                            Message(role=MessageRole.USER, content="Your previous response was not in valid JSON format. Please respond with ONLY a JSON object like this: {\"action\": \"complete\", \"content\": \"your answer here\"}")
+                        )
+                        continue  # Try again instead of breaking
 
                 # Handle actions
                 if action_data.get("action") == "complete":
@@ -586,7 +598,13 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
             # Use final answer from LLM or synthesize from findings
             if not final_answer:
                 # Synthesize answer from the collected tool results
-                synthesis_prompt = f"Based on all the information gathered through {iteration - 1} tool searches, provide a final comprehensive answer to the original question: {request.query}"
+                synthesis_prompt = f"""Based on all the information gathered, provide a final comprehensive answer to the user's original question: "{request.query}"
+
+Instructions:
+- Synthesize findings from the tool results above
+- Format as clear, readable markdown
+- Include key findings with bullet points if relevant
+- Keep the answer focused and practical"""
                 messages.append(Message(role=MessageRole.USER, content=synthesis_prompt))
 
                 # Final synthesis call
@@ -602,9 +620,18 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
                 try:
                     final_response = await llm_service.generate(final_llm_request)
                     final_answer = final_response.content.strip()
+
+                    # Clean up the response if it contains JSON formatting
+                    if final_answer.startswith('{'):
+                        try:
+                            data = json.loads(final_answer)
+                            final_answer = data.get('content', final_answer)
+                        except:
+                            pass  # Keep original if not JSON
+
                 except Exception as e:
                     logger.warning(f"Failed to generate synthesis: {e}")
-                    final_answer = "Analysis complete. See tool results above for findings."
+                    final_answer = f"Analysis complete based on {iteration - 1} tool explorations. See tool results above for detailed findings about: {request.query}"
 
             # 6. Stream final answer
             elapsed = (datetime.now() - start_time).total_seconds()
