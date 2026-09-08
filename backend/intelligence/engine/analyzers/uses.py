@@ -271,7 +271,7 @@ class UsesAnalyzer(BaseAnalyzer):
         import logging
         logger = logging.getLogger(__name__)
 
-        logger.info(f"[UsesAnalyzer] Starting with {len(repository.relationships)} existing relationships")
+        logger.debug(f"[UsesAnalyzer] Starting with {len(repository.relationships)} existing relationships")
         index = SymbolIndex(repository)
 
         for file_path, parsed in asts.items():
@@ -282,17 +282,17 @@ class UsesAnalyzer(BaseAnalyzer):
                 if parsed.language == "Python":
                     visitor = PythonUsesVisitor(file_path, repository, index)
                     visitor.visit(parsed.ast)
-                    logger.info(f"[UsesAnalyzer] Python {file_path}: extracted {len(visitor.relationships)} relationships")
+                    logger.debug(f"[UsesAnalyzer] Python {file_path}: extracted {len(visitor.relationships)} relationships")
                     for rel in visitor.relationships:
                         repository.relationships[rel.id] = rel
 
                 elif parsed.language in ("TypeScript", "JavaScript"):
                     visitor = TypeScriptUsesVisitor(file_path, parsed.source, repository, index)
                     visitor.visit(parsed.ast.root_node)
-                    logger.info(f"[UsesAnalyzer] TS/JS {file_path}: extracted {len(visitor.relationships)} relationships")
+                    logger.debug(f"[UsesAnalyzer] TS/JS {file_path}: extracted {len(visitor.relationships)} relationships")
                     for rel in visitor.relationships:
                         repository.relationships[rel.id] = rel
             except Exception as e:
                 logger.error(f"[UsesAnalyzer] Error processing {file_path}: {e}", exc_info=True)
 
-        logger.info(f"[UsesAnalyzer] Complete with {len(repository.relationships)} total relationships")
+        logger.debug(f"[UsesAnalyzer] Complete with {len(repository.relationships)} total relationships")

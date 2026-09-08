@@ -29,7 +29,7 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
     Persists an in-memory RepositoryModel into canonical relational PostgreSQL Fact Store tables.
     Clears any prior facts for this analysis_id to allow idempotent re-analysis.
     """
-    logger.info(f"Saving RIM facts to canonical PostgreSQL Fact Store for analysis_id={analysis_id}...")
+    logger.debug(f"Saving RIM facts to canonical PostgreSQL Fact Store for analysis_id={analysis_id}...")
 
     # Detect orphaned relationships (references to non-existent entities)
     # Warn but don't fail - persistence logic will skip them
@@ -238,9 +238,9 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
             # Log blob verification before committing to database
             blob_count = sum(1 for f in file_records if f.blob_name)
             no_blob_count = sum(1 for f in file_records if not f.blob_name)
-            logger.info(f"[FACT_STORE] Saving {len(file_records)} FactFile records:")
-            logger.info(f"  - {blob_count} files WITH blob_name (uploaded to Azure)")
-            logger.info(f"  - {no_blob_count} files WITHOUT blob_name (upload failed or skipped)")
+            logger.debug(f"[FACT_STORE] Saving {len(file_records)} FactFile records:")
+            logger.debug(f"  - {blob_count} files WITH blob_name (uploaded to Azure)")
+            logger.debug(f"  - {no_blob_count} files WITHOUT blob_name (upload failed or skipped)")
 
             if no_blob_count > 0:
                 no_blob_files = [f.path for f in file_records if not f.blob_name]
@@ -249,7 +249,7 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
 
             db.add_all(file_records)
             db.flush()
-            logger.info(f"[FACT_STORE] FactFile records committed to database")
+            logger.debug(f"[FACT_STORE] FactFile records committed to database")
 
         # 2. Save Code Symbols (including FILE entities to support relationship references)
         seen_symbol_ids = set()
@@ -351,7 +351,7 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                     if not target_exists:
                         logger.debug(f"Skipping relationship {rel.id}: target {rel.target_id} not found")
 
-        logger.info(f"Saved {len(rel_records)} relationships (skipped {skipped_rels} due to missing entities)")
+        logger.debug(f"Saved {len(rel_records)} relationships (skipped {skipped_rels} due to missing entities)")
         if rel_records:
             db.add_all(rel_records)
             db.flush()
@@ -475,7 +475,7 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
                         db.add(member_rec)
 
         db.commit()
-        logger.info(f"Successfully saved {len(file_records)} files, {len(symbol_records)} symbols, and {len(rel_records)} relationships to Fact Store.")
+        logger.debug(f"Successfully saved {len(file_records)} files, {len(symbol_records)} symbols, and {len(rel_records)} relationships to Fact Store.")
     except Exception as e:
         db.rollback()
         logger.error(f"Error persisting RIM facts to Fact Store for analysis_id={analysis_id}: {e}", exc_info=True)
@@ -486,7 +486,7 @@ def load_rim_from_fact_store(db: Session, analysis_id: int) -> RepositoryModel:
     """
     Reconstructs an in-memory RepositoryModel directly by querying canonical PostgreSQL Fact Store tables.
     """
-    logger.info(f"Reconstructing RIM from canonical Fact Store for analysis_id={analysis_id}...")
+    logger.debug(f"Reconstructing RIM from canonical Fact Store for analysis_id={analysis_id}...")
 
     # Query tables
     file_records = db.query(FactFile).filter(FactFile.analysis_id == analysis_id).all()

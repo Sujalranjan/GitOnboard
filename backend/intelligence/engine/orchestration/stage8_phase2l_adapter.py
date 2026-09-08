@@ -107,7 +107,7 @@ class Phase2LToolWrapper:
             details=details or {},
         )
         self.events.append(event)
-        logger.info(f"[Research Event] {event_type.value}: {description}")
+        logger.debug(f"[Research Event] {event_type.value}: {description}")
         return event
 
     def inspect_file_tool(self, file_path: str) -> Dict[str, Any]:

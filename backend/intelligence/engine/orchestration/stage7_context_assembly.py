@@ -201,7 +201,7 @@ class ContextAssembler7:
         graph_symbols_added = 0
 
         if graph_result.discovered_entities:
-            logger.info(f"[Stage 7] Integrating {len(graph_result.discovered_entities)} entities from Stage 6...")
+            logger.debug(f"[Stage 7] Integrating {len(graph_result.discovered_entities)} entities from Stage 6...")
 
             # Track which files/symbols we already have to avoid duplicates
             existing_files = set(context.relevant_files or [])
@@ -246,13 +246,13 @@ class ContextAssembler7:
                     continue
 
             if graph_files_added > 0 or graph_symbols_added > 0:
-                logger.info(f"[Stage 7] ✓ Integrated from graph results:")
-                logger.info(f"    Files added: {graph_files_added}")
-                logger.info(f"    Symbols added: {graph_symbols_added}")
-                logger.info(f"    Total files now: {len(context.relevant_files or [])}")
-                logger.info(f"    Total symbols now: {len(context.relevant_symbols or [])}")
+                logger.debug(f"[Stage 7] ✓ Integrated from graph results:")
+                logger.debug(f"    Files added: {graph_files_added}")
+                logger.debug(f"    Symbols added: {graph_symbols_added}")
+                logger.debug(f"    Total files now: {len(context.relevant_files or [])}")
+                logger.debug(f"    Total symbols now: {len(context.relevant_symbols or [])}")
             else:
-                logger.info(f"[Stage 7] No new files/symbols from graph entities")
+                logger.debug(f"[Stage 7] No new files/symbols from graph entities")
 
         # Validate assembled context
         validated, errors = self.validator.validate(context, graph_result, query)
@@ -261,37 +261,37 @@ class ContextAssembler7:
         # This ensures LLM gets real code, not just metadata
         # Read files including those added from graph results
         if context.relevant_files:
-            logger.info(f"[Stage 7] Reading actual file content for {len(context.relevant_files)} files (including {graph_files_added} from graph)...")
+            logger.debug(f"[Stage 7] Reading actual file content for {len(context.relevant_files)} files (including {graph_files_added} from graph)...")
             file_contents = {}
             total_content_size = 0
             max_content_size = 200_000  # 200KB total for file contents
 
             for file_path in context.relevant_files:  # Read all selected files
                 if total_content_size > max_content_size:
-                    logger.info(f"[Stage 7] Reached max content size ({max_content_size} bytes), stopping file reads")
+                    logger.debug(f"[Stage 7] Reached max content size ({max_content_size} bytes), stopping file reads")
                     break
 
-                logger.info(f"  Attempting to read: {file_path}")
+                logger.debug(f"  Attempting to read: {file_path}")
                 content = self._read_file_content(file_path, max_lines=200)
                 if content:
                     file_contents[file_path] = content
                     total_content_size += len(content)
-                    logger.info(f"  ✓ {file_path} - {len(content)} chars, {len(content.split(chr(10)))} lines (total: {total_content_size})")
+                    logger.debug(f"  ✓ {file_path} - {len(content)} chars, {len(content.split(chr(10)))} lines (total: {total_content_size})")
                 else:
                     logger.warning(f"  ✗ {file_path} - Failed to read or file empty")
 
             # Add file contents to context evidence
-            logger.info(f"[Stage 7] Successfully read {len(file_contents)} files, adding to evidence...")
+            logger.debug(f"[Stage 7] Successfully read {len(file_contents)} files, adding to evidence...")
             if file_contents:
                 for file_path, content in file_contents.items():
                     # LOG EXACT CONTENT BEING ADDED
                     content_lines = content.split('\n')
-                    logger.info(f"\n[Stage 7] ADDING FILE CONTENT TO CONTEXT:")
-                    logger.info(f"  File: {file_path}")
-                    logger.info(f"  Total chars: {len(content)}")
-                    logger.info(f"  Total lines: {len(content_lines)}")
-                    logger.info(f"  First 500 chars:\n{content[:500]}")
-                    logger.info(f"  Last 200 chars:\n{content[-200:]}")
+                    logger.debug(f"\n[Stage 7] ADDING FILE CONTENT TO CONTEXT:")
+                    logger.debug(f"  File: {file_path}")
+                    logger.debug(f"  Total chars: {len(content)}")
+                    logger.debug(f"  Total lines: {len(content_lines)}")
+                    logger.debug(f"  First 500 chars:\n{content[:500]}")
+                    logger.debug(f"  Last 200 chars:\n{content[-200:]}")
 
                     # Create evidence item with actual code in 'data' field
                     code_evidence = ContextEvidence(
@@ -317,13 +317,13 @@ class ContextAssembler7:
 
                     # VERIFY IT WAS ADDED
                     added_evidence = context.evidence[-1]
-                    logger.info(f"  ✓ VERIFIED in context.evidence[{len(context.evidence)-1}]:")
-                    logger.info(f"    - source_type: {added_evidence.source_type}")
-                    logger.info(f"    - source_id: {added_evidence.source_id}")
-                    logger.info(f"    - data['content'] length: {len(added_evidence.data.get('content', ''))}")
-                    logger.info(f"    - data['content'] first 200 chars: {added_evidence.data.get('content', '')[:200]}")
+                    logger.debug(f"  ✓ VERIFIED in context.evidence[{len(context.evidence)-1}]:")
+                    logger.debug(f"    - source_type: {added_evidence.source_type}")
+                    logger.debug(f"    - source_id: {added_evidence.source_id}")
+                    logger.debug(f"    - data['content'] length: {len(added_evidence.data.get('content', ''))}")
+                    logger.debug(f"    - data['content'] first 200 chars: {added_evidence.data.get('content', '')[:200]}")
 
-                logger.info(f"\n[Stage 7] ✓ COMPLETE: Added {len(file_contents)} files to evidence (total items: {len(context.evidence)})")
+                logger.debug(f"\n[Stage 7] ✓ COMPLETE: Added {len(file_contents)} files to evidence (total items: {len(context.evidence)})")
             else:
                 logger.warning(f"[Stage 7] ✗ No files were successfully read!")
 

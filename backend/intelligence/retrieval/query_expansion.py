@@ -159,7 +159,7 @@ class RetrievalFallbackStrategy:
         Returns list of RetrieverResult objects.
         """
         strategy = QueryExpander.generate_retrieval_strategy(query)
-        self.logger.info(f"[Retrieval] Executing strategy for: {query}")
+        self.logger.debug(f"[Retrieval] Executing strategy for: {query}")
 
         # Level 1: Try exact query
         results = self.retriever.retrieve(
@@ -169,10 +169,10 @@ class RetrievalFallbackStrategy:
         )
 
         if results:
-            self.logger.info(f"[Retrieval] Level 1 (exact) found {len(results)} results")
+            self.logger.debug(f"[Retrieval] Level 1 (exact) found {len(results)} results")
             return results
 
-        self.logger.info("[Retrieval] Level 1 (exact) returned empty, trying Level 2 (key terms)")
+        self.logger.debug("[Retrieval] Level 1 (exact) returned empty, trying Level 2 (key terms)")
 
         # Level 2: Try individual key terms
         primary_terms, _ = QueryExpander.decompose_query(query)
@@ -194,10 +194,10 @@ class RetrievalFallbackStrategy:
                 if rid not in seen_ids:
                     seen_ids.add(rid)
                     deduped.append(r)
-            self.logger.info(f"[Retrieval] Level 2 (key terms) found {len(deduped)} results")
+            self.logger.debug(f"[Retrieval] Level 2 (key terms) found {len(deduped)} results")
             return deduped[:top_k]
 
-        self.logger.info("[Retrieval] Level 2 (key terms) returned empty, trying Level 3 (substrings)")
+        self.logger.debug("[Retrieval] Level 2 (key terms) returned empty, trying Level 3 (substrings)")
 
         # Level 3: Try substring matching via modified queries
         _, fallback_terms = QueryExpander.decompose_query(query)
@@ -218,8 +218,8 @@ class RetrievalFallbackStrategy:
                 if rid not in seen_ids:
                     seen_ids.add(rid)
                     deduped.append(r)
-            self.logger.info(f"[Retrieval] Level 3 (substrings) found {len(deduped)} results")
+            self.logger.debug(f"[Retrieval] Level 3 (substrings) found {len(deduped)} results")
             return deduped[:top_k]
 
-        self.logger.info("[Retrieval] All lexical strategies returned empty, would try Level 4 (semantic) if available")
+        self.logger.debug("[Retrieval] All lexical strategies returned empty, would try Level 4 (semantic) if available")
         return []

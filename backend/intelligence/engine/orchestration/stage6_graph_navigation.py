@@ -127,7 +127,7 @@ class GraphNavigator:
             result.traversal_time = time.time() - start_time
             return result
 
-        logger.info(f"[Stage 6] Starting traversal from {len(seed_entity_ids)} seed entities")
+        logger.debug(f"[Stage 6] Starting traversal from {len(seed_entity_ids)} seed entities")
 
         # BFS with depth tracking
         visited: Set[str] = set()
@@ -206,7 +206,7 @@ class GraphNavigator:
         result.edge_count = len(result.traversal_edges)
         result.traversal_time = time.time() - start_time
 
-        logger.info(
+        logger.debug(
             f"[Stage 6] Traversal complete: {result.entity_count} entities, "
             f"{result.edge_count} edges, depth {result.traversal_depth}, "
             f"time {result.traversal_time:.2f}s"

@@ -40,7 +40,7 @@ class SemanticIndexBuilder:
             return None
 
         if not model_entities:
-            logger.info("No entities to index for semantic search")
+            logger.debug("No entities to index for semantic search")
             return None
 
         try:
@@ -86,11 +86,11 @@ class SemanticIndexBuilder:
                         continue
 
                 if not documents:
-                    logger.info("No documents to embed for semantic index")
+                    logger.debug("No documents to embed for semantic index")
                     return None
 
                 # Add documents to collection (Chroma handles embedding)
-                logger.info(f"Embedding {len(documents)} entities for semantic search...")
+                logger.debug(f"Embedding {len(documents)} entities for semantic search...")
                 collection.add(
                     ids=ids,
                     documents=documents,
@@ -98,7 +98,7 @@ class SemanticIndexBuilder:
                 )
 
                 # Serialize Chroma database to bytes
-                logger.info(f"Serializing Chroma index ({len(documents)} entities)...")
+                logger.debug(f"Serializing Chroma index ({len(documents)} entities)...")
                 import zipfile
                 import io
 
@@ -110,7 +110,7 @@ class SemanticIndexBuilder:
                             zf.write(file_path, arcname=arcname)
 
                 result = zip_buffer.getvalue()
-                logger.info(f"Semantic index built: {len(result)} bytes compressed")
+                logger.debug(f"Semantic index built: {len(result)} bytes compressed")
                 return result
 
             finally:

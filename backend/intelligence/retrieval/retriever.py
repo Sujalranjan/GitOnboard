@@ -113,7 +113,7 @@ class HybridRetriever:
                     index.corpus_size = bm25_data.get("corpus_size", 0)
                     index.avg_doc_len = bm25_data.get("avg_doc_len", 0.0)
                     self.bm25_index = index
-                    logger.info(f"Loaded fresh BM25 index for analysis {self.analysis_id} (version={current_fact_store_version[:8] if current_fact_store_version else 'unknown'}...)")
+                    logger.debug(f"Loaded fresh BM25 index for analysis {self.analysis_id} (version={current_fact_store_version[:8] if current_fact_store_version else 'unknown'}...)")
                     return
                 except Exception as e:
                     logger.warning(f"Failed to rebuild BM25 from artifact: {e}")
@@ -165,7 +165,7 @@ class HybridRetriever:
                 )
 
                 if success:
-                    logger.info(
+                    logger.debug(
                         f"[BM25_LIFECYCLE_COMPLETE] Rebuilt and persisted BM25 for analysis {self.analysis_id} "
                         f"version {analysis.fact_store_version[:8]}..."
                     )
@@ -334,7 +334,7 @@ class HybridRetriever:
                     # Load from extracted directory
                     client = chromadb.PersistentClient(path=temp_dir)
                     self.chroma_collection = client.get_collection(name="semantic_index")
-                    logger.info(f"Loaded semantic index for analysis {self.analysis_id}")
+                    logger.debug(f"Loaded semantic index for analysis {self.analysis_id}")
                 except Exception as e:
                     self.semantic_degradation = f"load_error: {str(e)[:50]}"
                     logger.warning(f"Failed to load semantic index from artifact: {e}")
@@ -591,7 +591,7 @@ class HybridRetriever:
                 )
 
         if filtered_count > 0:
-            logger.info(
+            logger.debug(
                 f"[Retrieval] Validation filtered {filtered_count} invalid files from "
                 f"{len(candidates)} candidates (kept {len(valid_candidates)})"
             )
@@ -647,7 +647,7 @@ class HybridRetriever:
 
         # If primary returned empty and fallback enabled, try alternatives
         if enable_fallback:
-            logger.info(f"[Retrieval] Primary strategies found nothing for '{q}', attempting fallback...")
+            logger.debug(f"[Retrieval] Primary strategies found nothing for '{q}', attempting fallback...")
             results = self._retrieve_with_fallback(
                 q, top_k, expand_with_fact_store, enable_graph_expansion
             )
@@ -701,7 +701,7 @@ class HybridRetriever:
         # Step 5: Expansion strategy
         if enable_graph_expansion and self.analysis_id:
             # Use bounded graph expansion for connected subgraphs
-            logger.info(f"[Retrieval] Using bounded graph expansion for query: {query[:50]}...")
+            logger.debug(f"[Retrieval] Using bounded graph expansion for query: {query[:50]}...")
             graph_expander = BoundedGraphExpander(
                 self.db,
                 self.analysis_id,
@@ -712,7 +712,7 @@ class HybridRetriever:
             fused = graph_expander.expand_candidates(fused)
         elif expand_with_fact_store and self.analysis_id:
             # Use traditional fact store expansion for backward compatibility
-            logger.info(f"[Retrieval] Using traditional fact store expansion for query: {query[:50]}...")
+            logger.debug(f"[Retrieval] Using traditional fact store expansion for query: {query[:50]}...")
             expander = FactStoreExpander(self.db, self.analysis_id, max_expansions_per_seed=2, max_total_context=top_k)
             fused = expander.expand_candidates(fused)
 
@@ -753,7 +753,7 @@ class HybridRetriever:
                     all_results[rid] = r
 
         if all_results:
-            logger.info(f"[Retrieval] Fallback found {len(all_results)} results via key term decomposition")
+            logger.debug(f"[Retrieval] Fallback found {len(all_results)} results via key term decomposition")
             return list(all_results.values())[:top_k]
 
         # Try substrings
@@ -767,10 +767,10 @@ class HybridRetriever:
                     all_results[rid] = r
 
         if all_results:
-            logger.info(f"[Retrieval] Fallback found {len(all_results)} results via substring matching")
+            logger.debug(f"[Retrieval] Fallback found {len(all_results)} results via substring matching")
             return list(all_results.values())[:top_k]
 
-        logger.info(f"[Retrieval] All fallback strategies failed for '{query}'")
+        logger.debug(f"[Retrieval] All fallback strategies failed for '{query}'")
         return []
 
     def _convert_to_schema(self, docs: List[dict]) -> List[RetrieverResult]:

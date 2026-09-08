@@ -132,9 +132,9 @@ class FailClosedBenchmarkRunner:
         assert checks["analysis_symbol_count"] > 0, \
             f"ANALYSIS_ISOLATION_FAILURE: Analysis {self.required_analysis_id} has no symbols"
 
-        logger.info(f"✅ Database guard passed for Analysis {self.required_analysis_id}")
-        logger.info(f"   Files: {checks['analysis_file_count']}")
-        logger.info(f"   Symbols: {checks['analysis_symbol_count']}")
+        logger.debug(f"✅ Database guard passed for Analysis {self.required_analysis_id}")
+        logger.debug(f"   Files: {checks['analysis_file_count']}")
+        logger.debug(f"   Symbols: {checks['analysis_symbol_count']}")
 
         return checks
 
@@ -167,7 +167,7 @@ class FailClosedBenchmarkRunner:
             f"ANALYSIS_ISOLATION_FAILURE: Retrieval returned {checks['mismatched_count']} " \
             f"candidates with analysis_id != {self.required_analysis_id}: {checks['mismatches']}"
 
-        logger.info(f"✅ Retrieval isolation verified: {checks['candidates_count']} candidates")
+        logger.debug(f"✅ Retrieval isolation verified: {checks['candidates_count']} candidates")
         return checks
 
     def verify_graph_isolation(self, entities: list) -> dict:
@@ -199,7 +199,7 @@ class FailClosedBenchmarkRunner:
             f"ANALYSIS_ISOLATION_FAILURE: Graph returned {checks['mismatched_count']} " \
             f"entities with analysis_id != {self.required_analysis_id}: {checks['mismatches']}"
 
-        logger.info(f"✅ Graph isolation verified: {checks['entities_count']} entities")
+        logger.debug(f"✅ Graph isolation verified: {checks['entities_count']} entities")
         return checks
 
     def verify_context_isolation(self, context_items: list) -> dict:
@@ -231,7 +231,7 @@ class FailClosedBenchmarkRunner:
             f"ANALYSIS_ISOLATION_FAILURE: Context returned {checks['mismatched_count']} " \
             f"items with analysis_id != {self.required_analysis_id}: {checks['mismatches']}"
 
-        logger.info(f"✅ Context isolation verified: {checks['items_count']} items")
+        logger.debug(f"✅ Context isolation verified: {checks['items_count']} items")
         return checks
 
     def verify_qa_loop_result(self, qa_result) -> dict:
@@ -248,7 +248,7 @@ class FailClosedBenchmarkRunner:
             "integrity_check": "pending"  # Can't fully verify without DB access in result
         }
 
-        logger.info(f"✅ QA loop result inspection: {len(checks['files_read'])} files, "
+        logger.debug(f"✅ QA loop result inspection: {len(checks['files_read'])} files, "
                    f"{len(checks['symbols_read'])} symbols")
         return checks
 
@@ -294,7 +294,7 @@ async def benchmark_fail_closed(
         )
 
         # PART C: Database guard - verify analysis exists and is complete
-        logger.info(f"[FailClosed] Running database guard for Analysis {req.required_analysis_id}...")
+        logger.debug(f"[FailClosed] Running database guard for Analysis {req.required_analysis_id}...")
         db_guard = runner.verify_database_guard()
         isolation_checks["database_guard"] = db_guard
 
@@ -359,7 +359,7 @@ async def benchmark_fail_closed(
         # Build RIM metadata if needed
         rim_metadata_text = None
         if include_rim_metadata:
-            logger.info(f"[FailClosed] Building RIM metadata for condition {req.condition}")
+            logger.debug(f"[FailClosed] Building RIM metadata for condition {req.condition}")
             t0 = time.perf_counter()
             rim_metadata = build_rim_metadata_block(
                 db, analysis_id, req.question, retriever,
@@ -367,7 +367,7 @@ async def benchmark_fail_closed(
             )
             metadata_elapsed_ms = (time.perf_counter() - t0) * 1000
             rim_metadata_text = rim_metadata.text
-            logger.info(f"[FailClosed] RIM metadata built in {metadata_elapsed_ms:.1f}ms")
+            logger.debug(f"[FailClosed] RIM metadata built in {metadata_elapsed_ms:.1f}ms")
 
         # Build tool dispatch table with/without query_rim
         if include_query_rim:
@@ -385,7 +385,7 @@ async def benchmark_fail_closed(
         )
 
         # Run the Q&A loop
-        logger.info(f"[FailClosed] Running condition {req.condition} for: {req.question}")
+        logger.debug(f"[FailClosed] Running condition {req.condition} for: {req.question}")
         qa_loop = RIMQALoop(
             llm_service=llm_service,
             tool_dispatch=tool_dispatch,
@@ -401,7 +401,7 @@ async def benchmark_fail_closed(
         result = await qa_loop.run(req.question)
         elapsed_ms = (time.perf_counter() - t0) * 1000
 
-        logger.info(
+        logger.debug(
             f"[FailClosed] Condition {req.condition} complete: {len(result.turns)} turns, "
             f"{result.tool_call_count} tool calls, stop_reason={result.stop_reason}"
         )

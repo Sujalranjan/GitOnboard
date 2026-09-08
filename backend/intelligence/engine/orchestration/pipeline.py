@@ -103,7 +103,7 @@ class AnalysisEngine:
                     "files"
                 )
 
-        logger.info(f"[PIPELINE] Parsed {len(asts)} ASTs from {total_files} analyzable files")
+        logger.debug(f"[PIPELINE] Parsed {len(asts)} ASTs from {total_files} analyzable files")
         
         # 3. Execute Analyzers
         # Analyzers should ideally be topologically sorted based on dependencies.
@@ -140,7 +140,7 @@ class AnalysisEngine:
                 "total_relationships": relationships_after
             }
 
-            logger.info(f"[PROFILE] {analyzer_name}: {duration:.2f}s (entities: +{entities_after - entities_before}, rels: +{relationships_after - relationships_before})")
+            logger.debug(f"[PROFILE] {analyzer_name}: {duration:.2f}s (entities: +{entities_after - entities_before}, rels: +{relationships_after - relationships_before})")
 
             # Update progress during analyzer execution
             if progress:
@@ -190,8 +190,8 @@ class AnalysisEngine:
                 "total_relationships": len(model.relationships)
             }, f, indent=2)
 
-        logger.info(f"[PIPELINE] Analysis complete: {len(model.entities)} entities, {len(model.relationships)} relationships")
-        logger.info(f"[PIPELINE] Profile saved to {timing_file}")
+        logger.debug(f"[PIPELINE] Analysis complete: {len(model.entities)} entities, {len(model.relationships)} relationships")
+        logger.debug(f"[PIPELINE] Profile saved to {timing_file}")
 
         # Store timings in model for retrieval
         model._analyzer_timings = analyzer_timings
