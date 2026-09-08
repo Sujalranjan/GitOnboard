@@ -30,13 +30,12 @@ class RepositoryBuilder:
         self.repo_name = repo_name
         self.target_dir = target_dir
         # Ignore common build/cache/version-control directories
+        # Skip only system directories; store everything else including dot-folders
         self.ignored_dirs = {
-            ".git", ".gitignore", ".github",
-            "node_modules", "venv", ".venv", ".env",
+            ".git", "node_modules", "venv", ".venv",
             "build", "dist", "out", "target",
             "__pycache__", ".pytest_cache", ".tox", ".mypy_cache",
-            ".vscode", ".idea", ".venv", "env",
-            ".next", ".nuxt", "coverage", ".coverage"
+            "coverage", ".coverage"
         }
         self.parser = LanguageParser()
 
@@ -51,8 +50,8 @@ class RepositoryBuilder:
         entities = RepositoryEntities()
         
         for root, dirs, files in os.walk(self.target_dir):
-            # Skip ignored directories and dot-folders
-            dirs[:] = [d for d in dirs if d not in self.ignored_dirs and not d.startswith(".")]
+            # Skip ignored directories only (not dot-folders — we store those to Azure)
+            dirs[:] = [d for d in dirs if d not in self.ignored_dirs]
 
             rel_root = str(Path(root).relative_to(self.target_dir)).replace("\\", "/")
             if rel_root != ".":
@@ -64,17 +63,9 @@ class RepositoryBuilder:
                 )
 
             for file in files:
-                # Skip hidden files and non-code files
-                if file.startswith("."):
-                    continue
-
+                # Store ALL files to Azure, but only INDEX code files
                 pf = Path(root) / file
                 ext = pf.suffix.lower()
-
-                # Only index code files (Python, JavaScript, TypeScript)
-                if ext not in self.CODE_EXTENSIONS:
-                    continue
-
                 rel_path = str(pf.relative_to(self.target_dir)).replace("\\", "/")
                 file_id = rel_path
 
@@ -83,6 +74,8 @@ class RepositoryBuilder:
                 except Exception:
                     size = 0
 
+                # Only INDEX code files (skip hidden files and non-code files)
+                is_code_file = not file.startswith(".") and ext in self.CODE_EXTENSIONS
                 is_python = ext == ".py"
 
                 entities.files[file_id] = FileNode(

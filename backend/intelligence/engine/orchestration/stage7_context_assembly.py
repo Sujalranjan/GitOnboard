@@ -194,13 +194,74 @@ class ContextAssembler7:
             logger.error(f"[Stage 7] ContextAssembler failed: {e}")
             raise
 
+        # CRITICAL FIX: Integrate graph results into context
+        # The underlying ContextAssembler only knows about keywords, not graph entities.
+        # Stage 6 discovered entities with precise relationships - we must use them!
+        graph_files_added = 0
+        graph_symbols_added = 0
+
+        if graph_result.discovered_entities:
+            logger.info(f"[Stage 7] Integrating {len(graph_result.discovered_entities)} entities from Stage 6...")
+
+            # Track which files/symbols we already have to avoid duplicates
+            existing_files = set(context.relevant_files or [])
+            existing_symbols = {s.get("name", "") for s in (context.relevant_symbols or [])}
+
+            for entity_id, entity in graph_result.discovered_entities.items():
+                try:
+                    # Extract file path from entity location
+                    file_path = entity.location.repository_path if entity.location else None
+
+                    if not file_path:
+                        continue
+
+                    # Add file if not already present
+                    if file_path not in existing_files:
+                        if not context.relevant_files:
+                            context.relevant_files = []
+                        context.relevant_files.append(file_path)
+                        existing_files.add(file_path)
+                        graph_files_added += 1
+                        logger.debug(f"  Added file from graph: {file_path}")
+
+                    # For symbol-like entities, also add to symbols list
+                    if entity.type.value in ("FUNCTION", "METHOD", "CLASS", "INTERFACE", "ENUM", "VARIABLE", "CONSTANT"):
+                        symbol_name = entity.name
+                        if symbol_name not in existing_symbols:
+                            if not context.relevant_symbols:
+                                context.relevant_symbols = []
+                            context.relevant_symbols.append({
+                                "name": symbol_name,
+                                "file_path": file_path,
+                                "kind": entity.type.value,
+                                "symbol_type": entity.type.value,
+                                "line_start": entity.location.start_line if entity.location else 1,
+                            })
+                            existing_symbols.add(symbol_name)
+                            graph_symbols_added += 1
+                            logger.debug(f"  Added symbol from graph: {symbol_name} ({entity.type.value})")
+
+                except Exception as e:
+                    logger.warning(f"[Stage 7] Error processing graph entity {entity_id}: {e}")
+                    continue
+
+            if graph_files_added > 0 or graph_symbols_added > 0:
+                logger.info(f"[Stage 7] ✓ Integrated from graph results:")
+                logger.info(f"    Files added: {graph_files_added}")
+                logger.info(f"    Symbols added: {graph_symbols_added}")
+                logger.info(f"    Total files now: {len(context.relevant_files or [])}")
+                logger.info(f"    Total symbols now: {len(context.relevant_symbols or [])}")
+            else:
+                logger.info(f"[Stage 7] No new files/symbols from graph entities")
+
         # Validate assembled context
         validated, errors = self.validator.validate(context, graph_result, query)
 
         # ENHANCEMENT: Add actual file content to context
         # This ensures LLM gets real code, not just metadata
+        # Read files including those added from graph results
         if context.relevant_files:
-            logger.info(f"[Stage 7] Reading actual file content for {len(context.relevant_files)} files...")
+            logger.info(f"[Stage 7] Reading actual file content for {len(context.relevant_files)} files (including {graph_files_added} from graph)...")
             file_contents = {}
             total_content_size = 0
             max_content_size = 200_000  # 200KB total for file contents

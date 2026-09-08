@@ -137,28 +137,24 @@ class AnalysisWorker(WorkerInterface):
                             if p:
                                 file_entities_by_path[p] = e
 
-                    # Only upload code files, skip dot-folders and build artifacts
+                    # Skip critical system dirs (but store non-code files like .gitignore, .env.example, docs)
                     ignored_dirs = {
-                        ".git", ".gitignore", ".github",
-                        "node_modules", "venv", ".venv", ".env",
+                        ".git", "node_modules", "venv", ".venv",
                         "build", "dist", "out", "target",
                         "__pycache__", ".pytest_cache", ".tox", ".mypy_cache",
-                        ".vscode", ".idea", ".next", ".nuxt", "coverage", ".coverage"
+                        "coverage", ".coverage"
                     }
                     code_extensions = {".py", ".js", ".ts", ".tsx", ".jsx"}
 
-                    # Count total files for progress tracking (code files only)
+                    # Collect ALL files (including non-code), but skip system dirs
                     all_files = []
                     for root, dirs, files in os.walk(target_dir):
-                        # Skip ignored directories and dot-folders
-                        dirs[:] = [d for d in dirs if d not in ignored_dirs and not d.startswith(".")]
+                        # Skip ignored system directories only
+                        dirs[:] = [d for d in dirs if d not in ignored_dirs]
                         for f in files:
-                            # Skip hidden files and non-code files
-                            if f.startswith("."):
-                                continue
                             full_p = Path(root) / f
-                            # Only upload code files
-                            if full_p.suffix.lower() in code_extensions and full_p.is_file():
+                            # Store ALL files to Azure (including hidden files and non-code)
+                            if full_p.is_file():
                                 all_files.append(full_p)
 
                     progress = ProgressTracker(db, analysis.id)
