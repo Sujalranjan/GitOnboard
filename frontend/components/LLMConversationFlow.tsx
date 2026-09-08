@@ -55,6 +55,8 @@ export const LLMConversationFlow: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState<string>('qwen2.5-coder:7b');
   const [changingModel, setChangingModel] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [totalTokens, setTotalTokens] = useState(0);
+  const [modelUsed, setModelUsed] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -155,8 +157,10 @@ export const LLMConversationFlow: React.FC = () => {
               const data = JSON.parse(line.slice(6));
 
               if (data.type === 'completed') {
-                // Stream finished
+                // Stream finished - capture metrics
                 setDone(true);
+                setTotalTokens(data.total_tokens || 0);
+                setModelUsed(data.model_used || selectedModel);
               } else if (data.type === 'error') {
                 setMessages(prev => [...prev, {
                   type: 'final-answer' as const,
@@ -351,26 +355,38 @@ export const LLMConversationFlow: React.FC = () => {
         <div className="max-w-3xl mx-auto">
           {/* Metrics */}
           {(done || running) && (
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg p-2 text-center">
-                <div className="text-lg font-bold text-amber-400">{toolCalls}</div>
-                <div className="text-xs text-amber-300">Tools</div>
-              </div>
-              <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-2 text-center">
-                <div className="text-lg font-bold text-blue-400">{Math.floor(elapsed)}</div>
-                <div className="text-xs text-blue-300">Seconds</div>
-              </div>
-              <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-2 text-center">
-                <div className="text-lg font-bold text-green-400">{messages.length}</div>
-                <div className="text-xs text-green-300">Messages</div>
-              </div>
-              <div className={`rounded-lg p-2 text-center border ${done ? 'bg-green-900/30 border-green-700/50' : 'bg-slate-700/30 border-slate-600/50'}`}>
-                <div className={`text-sm font-bold ${done ? 'text-green-400' : 'text-slate-400'}`}>
-                  {done ? '✓ Done' : 'Running'}
+            <>
+              <div className="grid grid-cols-5 gap-2 mb-4">
+                <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg p-2 text-center">
+                  <div className="text-lg font-bold text-amber-400">{toolCalls}</div>
+                  <div className="text-xs text-amber-300">Tools</div>
                 </div>
-                <div className={`text-xs ${done ? 'text-green-300' : 'text-slate-400'}`}>Status</div>
+                <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-2 text-center">
+                  <div className="text-lg font-bold text-blue-400">{Math.floor(elapsed)}</div>
+                  <div className="text-xs text-blue-300">Seconds</div>
+                </div>
+                <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-2 text-center">
+                  <div className="text-lg font-bold text-green-400">{messages.length}</div>
+                  <div className="text-xs text-green-300">Messages</div>
+                </div>
+                <div className="bg-purple-900/30 border border-purple-700/50 rounded-lg p-2 text-center">
+                  <div className="text-lg font-bold text-purple-400">{totalTokens.toLocaleString()}</div>
+                  <div className="text-xs text-purple-300">Tokens</div>
+                </div>
+                <div className={`rounded-lg p-2 text-center border ${done ? 'bg-green-900/30 border-green-700/50' : 'bg-slate-700/30 border-slate-600/50'}`}>
+                  <div className={`text-sm font-bold ${done ? 'text-green-400' : 'text-slate-400'}`}>
+                    {done ? '✓ Done' : 'Running'}
+                  </div>
+                  <div className={`text-xs ${done ? 'text-green-300' : 'text-slate-400'}`}>Status</div>
+                </div>
               </div>
-            </div>
+              {modelUsed && (
+                <div className="text-center text-xs text-slate-400 mb-3">
+                  Model: <span className="text-slate-300 font-semibold">{modelUsed}</span> •
+                  Rate: <span className="text-slate-300 font-semibold">{totalTokens > 0 && elapsed > 0 ? Math.round((totalTokens / elapsed) * 10) / 10 : 0} tokens/sec</span>
+                </div>
+              )}
+            </>
           )}
 
           {/* Input Area */}
