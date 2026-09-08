@@ -174,43 +174,62 @@ function DashboardContent() {
     return projectName.includes(query) || repoPath.includes(query);
   });
 
-  const handleDelete = async (e: React.MouseEvent, repoName: string) => {
+  const handleDelete = async (e: React.MouseEvent, repoName: string, repoId?: number) => {
     e.preventDefault();
     if (!window.confirm(`Are you sure you want to delete ${repoName}?`)) return;
-    
+
     try {
-      await repositoryService.delete(repoName);
+      const identifier = repoId ? String(repoId) : repoName;
+      await repositoryService.delete(identifier);
       fetchRepos();
     } catch (err) {
       console.error("Failed to delete repo", err);
-      alert("Error deleting repository.");
+      const errorMsg = (err as any)?.message || "Failed to delete repository.";
+      if (errorMsg.includes("Ambiguous")) {
+        alert(`Multiple repositories found with this name. Use the Repository ID to disambiguate. ID: ${repoId}`);
+      } else {
+        alert(`Error deleting repository: ${errorMsg}`);
+      }
     }
   };
 
-  const handleReanalyze = async (e: React.MouseEvent, repoName: string) => {
+  const handleReanalyze = async (e: React.MouseEvent, repoName: string, repoId?: number) => {
     e.preventDefault();
     setAnalyzingRepo(repoName);
     try {
-      await repositoryService.reanalyze(repoName);
+      // Use repository ID if available (avoids ambiguity for repos with same slug)
+      const identifier = repoId ? String(repoId) : repoName;
+      await repositoryService.reanalyze(identifier);
       // Let's refetch repos immediately to show the "Queued" status
       fetchRepos();
     } catch (err) {
       console.error("Failed to re-analyze repo", err);
-      alert("Error re-analyzing repository.");
+      const errorMsg = (err as any)?.message || "Failed to re-analyze repository.";
+      if (errorMsg.includes("Ambiguous")) {
+        alert(`Multiple repositories found with this name. Use the Repository ID to disambiguate. ID: ${repoId}`);
+      } else {
+        alert(`Error re-analyzing repository: ${errorMsg}`);
+      }
     } finally {
       setAnalyzingRepo(null);
     }
   };
 
-  const handleCancel = async (e: React.MouseEvent, repoName: string) => {
+  const handleCancel = async (e: React.MouseEvent, repoName: string, repoId?: number) => {
     e.preventDefault();
     setCancelingRepo(repoName);
     try {
-      await repositoryService.cancel(repoName);
+      const identifier = repoId ? String(repoId) : repoName;
+      await repositoryService.cancel(identifier);
     } catch (err) {
       console.error("Failed to cancel repo analysis", err);
-      if ((err as any).message !== "No active analysis to cancel.") {
-        alert("Error canceling repository analysis: " + (err as any).message);
+      const errorMsg = (err as any)?.message || "";
+      if (errorMsg !== "No active analysis to cancel.") {
+        if (errorMsg.includes("Ambiguous")) {
+          alert(`Multiple repositories found with this name. Use the Repository ID to disambiguate. ID: ${repoId}`);
+        } else {
+          alert("Error canceling repository analysis: " + errorMsg);
+        }
       }
     } finally {
       fetchRepos();
@@ -298,6 +317,23 @@ function DashboardContent() {
                 
                 <div className="space-y-4 flex-grow">
                   <div>
+                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Repository ID</span>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-slate-700 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/80 p-2 rounded flex-1">{repo.id}</p>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          navigator.clipboard.writeText(String(repo.id));
+                        }}
+                        className="px-2 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                        title="Copy repository ID"
+                      >
+                        📋
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
                     <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Path</span>
                     <p className="text-sm text-slate-600 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/80 p-2 rounded line-clamp-1">{getRepositoryPath(repo)}</p>
                   </div>
@@ -363,24 +399,24 @@ function DashboardContent() {
 
                 <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
                   {['Queued', 'Downloading', 'Analyzing', 'Saving', 'Processing'].includes(repo.status) || ['Queued', 'Downloading', 'Analyzing', 'Saving'].includes(repo.job_status) ? (
-                    <button 
-                      onClick={(e) => handleCancel(e, repo.project_name)}
+                    <button
+                      onClick={(e) => handleCancel(e, repo.project_name, repo.id)}
                       disabled={cancelingRepo === repo.project_name}
                       className="text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/40 disabled:opacity-50"
                     >
                       {cancelingRepo === repo.project_name ? "Canceling..." : "Cancel"}
                     </button>
                   ) : (
-                    <button 
-                      onClick={(e) => handleReanalyze(e, repo.project_name)}
+                    <button
+                      onClick={(e) => handleReanalyze(e, repo.project_name, repo.id)}
                       disabled={analyzingRepo === repo.project_name}
                       className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50"
                     >
                       {analyzingRepo === repo.project_name ? "Starting..." : "Re-analyze"}
                     </button>
                   )}
-                  <button  
-                    onClick={(e) => handleDelete(e, repo.project_name)}
+                  <button
+                    onClick={(e) => handleDelete(e, repo.project_name, repo.id)}
                     className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm font-medium flex items-center transition-colors px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/40"
                   >
                     Delete
