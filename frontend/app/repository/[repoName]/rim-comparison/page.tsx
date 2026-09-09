@@ -336,6 +336,35 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                   </div>
                 </div>
               </div>
+
+              {/* Tool Calls */}
+              {withoutRim.tool_call_transcript && withoutRim.tool_call_transcript.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2 text-sm">Tool Calls ({withoutRim.tool_call_transcript.length})</h4>
+                  <div className="space-y-2 text-xs">
+                    {withoutRim.tool_call_transcript.map((call, idx) => (
+                      <div key={idx} className="bg-slate-100 dark:bg-slate-700/50 rounded p-3 border border-slate-200 dark:border-slate-600">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-semibold text-slate-900 dark:text-slate-100">
+                            [{call.turn}] {call.tool_name}
+                          </span>
+                        </div>
+                        {call.arguments && Object.keys(call.arguments).length > 0 && (
+                          <div className="bg-slate-900 dark:bg-slate-900 text-slate-100 p-2 rounded text-xs font-mono mb-2 overflow-x-auto max-h-24 overflow-y-auto">
+                            <pre>{JSON.stringify(call.arguments, null, 2)}</pre>
+                          </div>
+                        )}
+                        {call.observation_summary && (
+                          <div className="text-slate-700 dark:text-slate-300 italic">
+                            Result: {call.observation_summary.substring(0, 200)}
+                            {call.observation_summary.length > 200 ? '...' : ''}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : null}
         </Card>
@@ -403,6 +432,35 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                   </div>
                 </div>
               </div>
+
+              {/* Tool Calls */}
+              {withRim.tool_call_transcript && withRim.tool_call_transcript.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2 text-sm">Tool Calls ({withRim.tool_call_transcript.length})</h4>
+                  <div className="space-y-2 text-xs">
+                    {withRim.tool_call_transcript.map((call, idx) => (
+                      <div key={idx} className="bg-slate-100 dark:bg-slate-700/50 rounded p-3 border border-slate-200 dark:border-slate-600">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-semibold text-slate-900 dark:text-slate-100">
+                            [{call.turn}] {call.tool_name}
+                          </span>
+                        </div>
+                        {call.arguments && Object.keys(call.arguments).length > 0 && (
+                          <div className="bg-slate-900 dark:bg-slate-900 text-slate-100 p-2 rounded text-xs font-mono mb-2 overflow-x-auto max-h-24 overflow-y-auto">
+                            <pre>{JSON.stringify(call.arguments, null, 2)}</pre>
+                          </div>
+                        )}
+                        {call.observation_summary && (
+                          <div className="text-slate-700 dark:text-slate-300 italic">
+                            Result: {call.observation_summary.substring(0, 200)}
+                            {call.observation_summary.length > 200 ? '...' : ''}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : null}
         </Card>
