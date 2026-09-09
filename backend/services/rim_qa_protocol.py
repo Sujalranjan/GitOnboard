@@ -108,7 +108,11 @@ Repository Intelligence Graph facts (structural relationships):
 
 {rim_metadata_block}
 
-Use these facts to understand the repository structure. Query the `query_rim` tool for additional details."""
+**IMPORTANT: RIM is a reference only** - use it to cross-check findings. Always follow this workflow:
+1. Search for relevant code using search_repository or find_files
+2. Read the actual source files using read_file
+3. Use query_rim ONLY to understand specific relationships between entities you've found (e.g., "what calls this function?", "what files import this?")
+4. Provide your answer based on what you've READ, not just RIM relationships"""
         else:
             rim_section = ""  # baseline gets no RIM section at all
 
