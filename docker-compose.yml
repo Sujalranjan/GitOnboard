@@ -93,3 +93,8 @@ volumes:
       device: ./postgres_data
   chroma_cache:
   azurite_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./azurite_data
