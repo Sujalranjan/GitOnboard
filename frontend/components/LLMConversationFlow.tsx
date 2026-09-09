@@ -152,13 +152,26 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
     setDone(false);
     startTimeRef.current = Date.now();
 
+    // Immediately show user query and initial thinking message
+    setMessages([
+      {
+        type: 'user-query' as const,
+        content: userQuery,
+      },
+      {
+        type: 'llm-thinking' as const,
+        content: 'Sending your query to the LLM...',
+      },
+    ]);
+
     try {
       if (!repoHash) {
-        setMessages([{
-          type: 'final-answer',
-          content: 'Error: Repository not found. Please wait while we load the repository information.',
+        setMessages(prev => [...prev, {
+          type: 'final-answer' as const,
+          content: '❌ No repository selected.\n\nPlease:\n1. Go to Dashboard\n2. Import a repository\n3. Then come back to ask questions\n\nOnce a repository is imported and indexed, you\'ll be able to analyze its codebase here.',
         }]);
         setRunning(false);
+        setDone(true);
         return;
       }
 
@@ -260,7 +273,9 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (query.trim() && !running) {
-      simulateQuery(query);
+      const userQuery = query;
+      setQuery(''); // Clear input immediately for UX feedback
+      simulateQuery(userQuery);
     }
   };
 
