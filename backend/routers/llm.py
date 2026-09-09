@@ -272,6 +272,35 @@ async def execute_analyze_relationships(query: str, db: Session, analysis_id: Op
         logger.error(f"Error analyzing relationships: {e}")
         return f"Error analyzing relationships: {str(e)}"
 
+
+async def execute_list_file_symbols(file_path: str, db: Session, analysis_id: Optional[int] = None) -> str:
+    """List all symbols (functions, classes, etc.) in a specific file with line numbers."""
+    try:
+        if not analysis_id:
+            return f"Cannot list symbols without analysis context"
+
+        # Query all symbols in this file
+        symbols = db.query(FactSymbol).filter(
+            FactSymbol.file_path == file_path,
+            FactSymbol.analysis_id == analysis_id
+        ).all()
+
+        if not symbols:
+            return f"No symbols found in file: {file_path}"
+
+        output = f"Symbols in {file_path}:\n"
+        for sym in sorted(symbols, key=lambda s: s.start_line or 0):
+            sym_type = getattr(sym, 'symbol_type', 'unknown').upper()
+            start_line = getattr(sym, 'start_line', '?')
+            end_line = getattr(sym, 'end_line', '?')
+            output += f"- {sym.name} ({sym_type}) [lines {start_line}-{end_line}]\n"
+
+        output += f"\n💡 Use: read_file(file_path=\"{file_path}\", start_line=X, end_line=Y) to fetch specific symbol code"
+        return output
+    except Exception as e:
+        logger.error(f"Error listing file symbols: {e}")
+        return f"Error listing file symbols: {str(e)}"
+
 VALID_MODELS = {
     "qwen3:4b-instruct": "Qwen 3 4B (Fast)",
     "qwen2.5-coder:7b": "Qwen 2.5 Coder 7B (Quality)",
@@ -442,7 +471,8 @@ The "action" field determines what happens NEXT. It has ONLY 2 possible values:
 Examples of CORRECT tool calls:
 ```json
 {{"action": "tool_call", "tool_name": "search_symbols", "arguments": {{"query": "authentication"}}}}
-{{"action": "tool_call", "tool_name": "read_file", "arguments": {{"file_path": "backend/auth.py"}}}}
+{{"action": "tool_call", "tool_name": "list_file_symbols", "arguments": {{"file_path": "backend/auth.py"}}}}
+{{"action": "tool_call", "tool_name": "read_file", "arguments": {{"file_path": "backend/auth.py", "start_line": 10, "end_line": 25}}}}
 {{"action": "tool_call", "tool_name": "analyze_relationships", "arguments": {{"query": "authenticate"}}}}
 ```
 
@@ -467,7 +497,7 @@ Examples of WRONG format (NEVER do this):
 ## Critical Rules
 1. **ONLY JSON** - Your entire response must be valid JSON. Nothing else.
 2. **"action" field is ALWAYS "tool_call" OR "complete"** - Never anything else.
-3. **"tool_name" field (when action is tool_call)** - Must be one of: search_symbols, read_file, analyze_relationships
+3. **"tool_name" field (when action is tool_call)** - Must be one of: search_symbols, read_file, list_file_symbols, analyze_relationships
 4. **DO NOT REPEAT** the same tool call twice (line 379-382 below explain this in detail)
 5. Use tools to gather real data before answering
 6. Stream of work: Tool → Tool → Tool → Complete
@@ -491,9 +521,69 @@ Continue searching with different terms until you either:
 Do NOT complete prematurely - try at least 3-5 different search terms before giving up!
 
 ## Available Tools
-- search_symbols: Find code symbols (name or pattern) - use varied search terms!
-- read_file: Read file contents
-- analyze_relationships: Understand component connections"""
+
+### 1. search_symbols(query: string)
+**Purpose:** Find code symbols matching your search query.
+**Returns:** List of symbol names and their file locations.
+**IMPORTANT:** Returns file paths, NOT line numbers or code content!
+**When to use:** First step - locate files containing relevant code.
+**Example workflow:**
+  1. Call: search_symbols(query="authenticate")
+  2. Get back: [AuthenticationModule (backend/auth.py), verify_password (backend/auth/service.py), ...]
+  3. Then: Use read_file to fetch actual code
+
+**Optimization tip:** If search returns 0 results, try synonyms (auth, login, signin, token, jwt, etc.)
+
+### 2. read_file(file_path: string, start_line?: int, end_line?: int)
+**Purpose:** Read file contents from repository (supports line-range fetching).
+**Parameters:**
+  - file_path (required): Full path like "backend/auth.py"
+  - start_line (optional, default 1): Starting line number (1-based)
+  - end_line (optional, default 50): Ending line number
+**Returns:** File content (truncated to 2000 chars if too long).
+**IMPORTANT:** Use start_line/end_line to fetch ONLY relevant portions!
+**When to use:** After search_symbols finds a file, read specific sections.
+**Example workflow:**
+  1. search_symbols found: "authenticate function in backend/auth.py"
+  2. Call: read_file(file_path="backend/auth.py", start_line=1, end_line=50)
+  3. Read the code to understand implementation
+**❌ DO NOT:** Fetch entire large files - specify line ranges!
+
+### 3. list_file_symbols(file_path: string)
+**Purpose:** List all symbols (functions, classes, methods) in a specific file with line numbers.
+**Returns:** Symbol name, type (FUNCTION/CLASS/METHOD), and start-end line numbers.
+**When to use:** Before read_file - see what's available in a file, pick specific symbols to read.
+**Example workflow:**
+  1. search_symbols found: "backend/auth.py contains authentication code"
+  2. Call: list_file_symbols(file_path="backend/auth.py")
+  3. Get: [login (FUNCTION) lines 10-25, verify_password (FUNCTION) lines 27-40, ...]
+  4. Call: read_file(file_path="backend/auth.py", start_line=10, end_line=25)  ← Read only login function!
+**❌ DO NOT:** Use read_file to fetch entire files blindly
+**✓ DO:** Use list_file_symbols first to see what's available, then read specific sections!
+
+### 4. analyze_relationships(query: string)
+**Purpose:** Find components related to a symbol or concept.
+**Returns:** Functions/classes that call, depend on, or relate to the query.
+**When to use:** After understanding one piece, find connected components.
+**Example workflow:**
+  1. Understood authentication in auth.py
+  2. Call: analyze_relationships(query="authenticate")
+  3. Get: [verify_password, hash_password, login_handler, ...]
+  4. Then: read_file on interesting related components
+
+## RECOMMENDED WORKFLOW (Efficient)
+1. **search_symbols(query)** → Find files with relevant code
+2. **list_file_symbols(file)** → See what's available in that file (line numbers)
+3. **read_file(file, start_line, end_line)** → Read SPECIFIC symbol sections (not entire files!)
+4. **analyze_relationships(query)** → Find connected pieces if needed
+5. **Loop:** If needed, repeat steps 1-4 with related symbols
+6. **complete** → Synthesize findings into answer
+
+⚠️ ANTI-PATTERN (Inefficient):
+   search_symbols → read_file(entire file, no line ranges) → repeat → hit token limit
+
+✓ PATTERN (Efficient):
+   search_symbols → list_file_symbols → read_file(lines 10-25) → analyze_relationships → read_file(lines 50-75) → complete"""
 
             # Build conversation with tool loop
             messages = [
@@ -642,6 +732,12 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
                             )
                         elif tool_name == "read_file":
                             tool_result = await execute_read_file(
+                                arguments.get("file_path", ""),
+                                db,
+                                analysis_id
+                            )
+                        elif tool_name == "list_file_symbols":
+                            tool_result = await execute_list_file_symbols(
                                 arguments.get("file_path", ""),
                                 db,
                                 analysis_id
