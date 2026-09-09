@@ -151,9 +151,13 @@ async def execute_search_symbols(query: str, db: Session, analysis_id: Optional[
     Supports multiple queries: "auth,login,verify" → searches all at once, returns grouped results.
     """
     try:
+        # Sanitize query to handle special characters
+        if not query or not isinstance(query, str):
+            return "Invalid query format provided"
+
         # Split comma-separated queries and clean them
         queries = [q.strip() for q in query.split(",") if q.strip()]
-        logger.debug(f"[SEARCH] execute_search_symbols called with {len(queries)} query(ies): {queries}, analysis_id={analysis_id}")
+        logger.debug("[SEARCH] execute_search_symbols called with %d query(ies), analysis_id=%s", len(queries), analysis_id)
 
         if not queries:
             return "No search query provided"
@@ -166,7 +170,7 @@ async def execute_search_symbols(query: str, db: Session, analysis_id: Optional[
         total_files = set()  # Track unique files across all queries
 
         for q in queries:
-            logger.debug(f"[SEARCH] Searching for: '{q}'")
+            logger.debug("[SEARCH] Searching for query: %s", q)
             results = retriever.retrieve(q, top_k=5)
             all_results[q] = results
 
