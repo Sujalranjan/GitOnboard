@@ -31,11 +31,29 @@ def handle_search_code(args: Dict[str, Any], context: AgentToolContext) -> Dict[
 
 
 def handle_search_symbols(args: Dict[str, Any], context: AgentToolContext) -> Dict[str, Any]:
-    tool_layer = _get_tool_layer(context)
+    """Search for code symbols matching the pattern using HybridRetriever."""
     pattern = args.get("pattern", "*")
     limit = args.get("limit", 20)
-    files = tool_layer.find_files(pattern=pattern, limit=limit)
-    return {"pattern": pattern, "files_found": files}
+
+    # If no analysis_id, we can't search the FactStore
+    if not context.analysis_id or not context.db:
+        return {"pattern": pattern, "symbols_found": []}
+
+    # Use HybridRetriever for symbol search (handles exact, BM25, semantic)
+    from backend.intelligence.retrieval.retriever import HybridRetriever
+    retriever = HybridRetriever(context.db, analysis_id=context.analysis_id)
+    results = retriever.retrieve(pattern, top_k=limit)
+
+    # Convert to simple format for tool response
+    symbols_found = []
+    for result in results:
+        symbols_found.append({
+            "name": result.entity_name,
+            "type": result.entity_type.value if hasattr(result.entity_type, 'value') else str(result.entity_type),
+            "file": result.file_path,
+        })
+
+    return {"pattern": pattern, "symbols_found": symbols_found}
 
 
 def handle_get_symbol(args: Dict[str, Any], context: AgentToolContext) -> Dict[str, Any]:
