@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Zap, MessageCircle, CheckCircle2, Eye, EyeOff, Send, Settings } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 interface ToolArguments {
   [key: string]: string | number | boolean | null | undefined;
@@ -449,9 +450,26 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                           <CheckCircle2 className="w-5 h-5 text-green-400" />
                           <span className="text-sm font-semibold text-green-400">Answer</span>
                         </div>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                          {msg.content}
-                        </p>
+                        <div className="text-sm leading-relaxed prose prose-invert max-w-none">
+                          <ReactMarkdown
+                            components={{
+                              h1: ({ children }) => <h1 className="text-xl font-bold mt-4 mb-2 text-white">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-lg font-bold mt-3 mb-2 text-white">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-base font-bold mt-2 mb-1 text-slate-200">{children}</h3>,
+                              p: ({ children }) => <p className="mb-2 text-slate-300">{children}</p>,
+                              ul: ({ children }) => <ul className="list-disc list-inside mb-2 ml-2 text-slate-300">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal list-inside mb-2 ml-2 text-slate-300">{children}</ol>,
+                              li: ({ children }) => <li className="mb-1">{children}</li>,
+                              code: ({ children }) => <code className="bg-slate-800 px-2 py-1 rounded text-slate-200 font-mono text-xs">{children}</code>,
+                              pre: ({ children }) => <pre className="bg-slate-900 p-3 rounded mb-2 overflow-x-auto text-slate-200 text-xs">{children}</pre>,
+                              blockquote: ({ children }) => <blockquote className="border-l-4 border-slate-600 pl-4 italic text-slate-400 my-2">{children}</blockquote>,
+                              strong: ({ children }) => <strong className="font-bold text-slate-100">{children}</strong>,
+                              em: ({ children }) => <em className="italic text-slate-300">{children}</em>,
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
                       </div>
                     )}
 
