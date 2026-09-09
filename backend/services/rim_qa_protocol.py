@@ -69,10 +69,17 @@ RULES:
 7. JSON ONLY: Output ONLY the JSON object, with NO text before or after it
 8. NO EXPLANATIONS: Do not add "Let me search..." or "I found..." - just output the JSON
 
+SEARCH BEST PRACTICES:
+- search_repository: Use SIMPLE CODE TERMS like "login", "auth.js", symbol names - NOT descriptions
+- BAD: "login route or endpoint" or "auth controller login function"
+- GOOD: "login", "route", "auth", "controller"
+- If search returns 0 results with first query, try simpler terms or use get_callers/get_callees
+- Then read the actual files to understand the code
+
 Example flow:
-Turn 0: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "login authentication"}}
-Turn 1: {"action": "tool_call", "tool_name": "read_file", "arguments": {"path": "src/auth.py", "start_line": 1, "end_line": 50}}
-Turn 2: {"action": "final_answer", "answer": "Based on examining src/auth.py, the login process..."}"""
+Turn 0: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "login"}}
+Turn 1: {"action": "tool_call", "tool_name": "read_file", "arguments": {"path": "src/auth.js", "start_line": 1, "end_line": 50}}
+Turn 2: {"action": "final_answer", "answer": "Based on examining src/auth.js, the login process..."}"""
 
     def build_system_prompt(self, tool_specs: List[ToolSpec], rim_metadata_block: Optional[str]) -> SystemPromptParts:
         """
