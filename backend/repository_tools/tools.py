@@ -77,37 +77,13 @@ class RepositoryToolLayer:
         end_line: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Safely reads a slice of a file.
-        Priority:
-          1. Active temporary worktree (if repo_root is provided and exists)
-          2. Azure Blob Storage (via FactFile.blob_name)
+        Reads a slice of a file from Azure Blob Storage.
+        Worktrees are temporary and deleted after indexing.
+        All persistent file content is stored in blob storage.
         """
         clean_path = path.replace("\\", "/").removeprefix("./").lstrip("/")
 
-        # 1. Active Worktree (if present)
-        if self.repo_root and self.repo_root.exists():
-            try:
-                target_file = validate_repo_path(self.repo_root, path, allow_binary=False)
-                if target_file.exists() and target_file.stat().st_size > 0:  # Prefer files with actual content
-                    with open(target_file, "r", encoding="utf-8", errors="replace") as f:
-                        lines = f.readlines()
-                    total_lines = len(lines)
-                    s, e = clamp_line_range(total_lines, start_line, end_line)
-                    selected_lines = lines[s - 1 : e]
-                    numbered_content = "".join(f"{s + idx:4d} | {line}" for idx, line in enumerate(selected_lines))
-                    rel_path = str(target_file.relative_to(self.repo_root)).replace("\\", "/")
-                    return {
-                        "path": rel_path,
-                        "start_line": s,
-                        "end_line": e,
-                        "total_lines": total_lines,
-                        "content": numbered_content,
-                        "raw_text": "".join(selected_lines),
-                    }
-            except Exception as e:
-                logger.debug(f"Could not read from worktree {path}: {e}")
-
-        # 2. Azure Blob Storage (persistent repository snapshots)
+        # Azure Blob Storage (source of truth for all persistent file content)
         if self.db is not None and self.analysis_id is not None:
             fact_file = (
                 self.db.query(FactFile)
@@ -138,7 +114,10 @@ class RepositoryToolLayer:
                 except Exception as err:
                     logger.warning(f"Error reading blob {fact_file.blob_name}: {err}")
 
-        raise RepositorySecurityError(f"File not found in active worktree or Blob Storage: '{path}'")
+        raise RepositorySecurityError(
+            f"File not found in Blob Storage: '{path}'. "
+            f"Ensure indexing captured this file and stored it in Azure Blob Storage."
+        )
 
     # ──────────────────────────────────────────────────────────────────────────
     # 2. find_files
@@ -147,7 +126,8 @@ class RepositoryToolLayer:
     def find_files(self, pattern: str = "*", limit: int = 50) -> List[Dict[str, Any]]:
         """
         Finds files in the repository matching a glob pattern (e.g. '*.py', 'docs/**/*.md').
-        Uses Fact Store database manifest if available, with filesystem fallback.
+        Uses Fact Store database manifest (metadata from indexing).
+        Worktrees are temporary and deleted after indexing; all metadata is in the database.
         """
         results: List[Dict[str, Any]] = []
 
@@ -167,27 +147,6 @@ class RepositoryToolLayer:
                     })
                     if len(results) >= limit:
                         break
-            if results:
-                return results
-
-        # Fallback to filesystem scan
-        if self.repo_root and self.repo_root.exists():
-            for root, dirs, filenames in os.walk(self.repo_root):
-                # Prune common ignore dirs
-                dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", ".venv", "__pycache__", "dist", "build"}]
-                for fname in filenames:
-                    full_p = Path(root) / fname
-                    rel_p = str(full_p.relative_to(self.repo_root)).replace("\\", "/")
-                    if fnmatch.fnmatch(rel_p, pattern) or fnmatch.fnmatch(fname, pattern):
-                        results.append({
-                            "path": rel_p,
-                            "size": full_p.stat().st_size if full_p.exists() else 0,
-                            "is_binary": is_binary_file(full_p),
-                        })
-                        if len(results) >= limit:
-                            break
-                if len(results) >= limit:
-                    break
 
         return results
 
@@ -203,8 +162,8 @@ class RepositoryToolLayer:
         max_files_scanned: int = 40,
     ) -> List[Dict[str, Any]]:
         """
-        Performs lexical regex/substring search over source files in the repository.
-        Searches active worktree if present, or queries Blob Storage via FactStore metadata.
+        Performs lexical regex/substring search over source files in Azure Blob Storage.
+        Worktrees are temporary and deleted after indexing; all file content is persisted in blobs.
 
         Args:
             max_matches: Maximum number of match results to return
@@ -216,38 +175,7 @@ class RepositoryToolLayer:
         except re.error:
             pattern = re.compile(re.escape(query), re.IGNORECASE)
 
-        # 1. Active worktree search if available
-        if self.repo_root and self.repo_root.exists():
-            for root, dirs, files in os.walk(self.repo_root):
-                dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", ".venv", "__pycache__", "dist", "build"}]
-                for fname in files:
-                    full_path = Path(root) / fname
-                    rel_path = str(full_path.relative_to(self.repo_root)).replace("\\", "/")
-
-                    if file_pattern and not fnmatch.fnmatch(rel_path, file_pattern) and not fnmatch.fnmatch(fname, file_pattern):
-                        continue
-
-                    if is_binary_file(full_path):
-                        continue
-
-                    try:
-                        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
-                            for line_idx, line in enumerate(f, start=1):
-                                if pattern.search(line):
-                                    results.append({
-                                        "file": rel_path,
-                                        "line": line_idx,
-                                        "snippet": line.strip()[:200],
-                                        "match_type": "lexical",
-                                    })
-                                    if len(results) >= max_matches:
-                                        return results
-                    except Exception:
-                        continue
-            if results:
-                return results
-
-        # 2. Azure Blob Storage search via Fact Store manifest
+        # Search Azure Blob Storage via Fact Store manifest
         if self.db is not None and self.analysis_id is not None:
             files = (
                 self.db.query(FactFile)

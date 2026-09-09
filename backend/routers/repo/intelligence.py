@@ -1,4 +1,6 @@
 import logging
+import shutil
+from pathlib import Path
 from typing import Optional, Dict, Any
 from collections import Counter
 from fastapi import APIRouter, Depends, BackgroundTasks, Body
@@ -11,6 +13,17 @@ from backend.routers.repo.services.tasks import get_task_status, set_task_status
 from backend.intelligence.graphs.graph_query_service import GraphQueryService
 
 logger = logging.getLogger(__name__)
+
+
+def cleanup_worktree(repo_name: str) -> None:
+    """Remove worktree after indexing completes. All persistent data is in blob storage."""
+    try:
+        worktree_path = Path(f"/app/data/worktrees/{repo_name}")
+        if worktree_path.exists():
+            shutil.rmtree(worktree_path)
+            logger.info(f"Cleaned up worktree: {repo_name}")
+    except Exception as e:
+        logger.warning(f"Failed to cleanup worktree {repo_name}: {e}")
 
 intelligence_router = APIRouter(tags=["intelligence"])
 
@@ -30,6 +43,8 @@ def index_repo(repo_name: str, background_tasks: BackgroundTasks, db: Session = 
         try:
             query_layer = get_or_build_model(repo_name, bg_db, current_user)
             set_task_status(repo_name, "index", "completed", current_user, bg_db)
+            # Clean up worktree after indexing - all data is now in blob storage
+            cleanup_worktree(repo_name)
         except Exception as e:
             logger.error(f"Index failed: {e}")
             set_task_status(repo_name, "index", "failed", current_user, bg_db)
@@ -53,6 +68,8 @@ def index_symbols(repo_name: str, background_tasks: BackgroundTasks, db: Session
         try:
             query_layer = get_or_build_model(repo_name, bg_db, current_user)
             set_task_status(repo_name, "symbols_index", "completed", current_user, bg_db)
+            # Clean up worktree after indexing - all data is now in blob storage
+            cleanup_worktree(repo_name)
         except Exception as e:
             logger.error(f"Symbols index failed: {e}")
             set_task_status(repo_name, "symbols_index", "failed", current_user, bg_db)
