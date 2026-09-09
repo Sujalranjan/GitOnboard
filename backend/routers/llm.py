@@ -294,7 +294,7 @@ async def analyze_repository_stream(
                 max_tool_calls=15,
                 max_command_executions=0,
                 max_execution_seconds=180,
-                max_observation_bytes=8000,
+                max_observation_bytes=256000,  # 256KB - allow full file reads (typical files <250KB)
                 max_repeated_tool_calls=3,
             )
 

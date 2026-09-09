@@ -793,6 +793,10 @@ class QALoop:
 
         # Format with summary + actual data so LLM can use the results
         if tool_name == "read_file" and isinstance(data, dict):
+            # Check if data was truncated by sanitization
+            if data.get("_truncated"):
+                return f"[read_file] TRUNCATED: {data.get('warning', 'File content too large')}"
+
             path = data.get('path', '')
             start_line = data.get('start_line', 1)
             end_line = data.get('end_line')  # Don't default to 0 - let it be None if missing
