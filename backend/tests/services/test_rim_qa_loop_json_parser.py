@@ -5,19 +5,19 @@ This test suite validates that the JSON parser can handle nested objects
 in tool arguments (which the old regex-based parser failed on).
 """
 import pytest
-from backend.services.rim_qa_loop import RIMQALoop
+from backend.services.qa_loop import QALoop
 from backend.agent.loop.contracts import AgentLoopConfig
 from backend.ai.service import LLMService
-from backend.services.rim_tool_dispatch import ToolDispatchTable
-from backend.services.rim_qa_protocol import SystemPromptParts
+from backend.services.tool_dispatch import ToolDispatchTable
+from backend.services.qa_protocol import SystemPromptParts
 
 
 @pytest.fixture
 def dummy_loop():
-    """Create a RIMQALoop instance for testing (doesn't need real LLM/tools)."""
+    """Create a QALoop instance for testing (doesn't need real LLM/tools)."""
     # We only need to test _parse_response, which doesn't use these
     config = AgentLoopConfig()
-    loop = RIMQALoop(
+    loop = QALoop(
         llm_service=None,  # Not used in _parse_response
         tool_dispatch=None,  # Not used in _parse_response
         config=config,

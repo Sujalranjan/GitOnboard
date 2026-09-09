@@ -23,9 +23,9 @@ from backend.intelligence.retrieval.graph_traverser import FactStoreGraphTravers
 from backend.models.user import User
 from backend.repository_tools import resolve_repo_root, RepositoryToolLayer
 from backend.summary.audit import redact_secrets, sanitize_dict_or_list
-from backend.services.rim_qa_loop import RIMQALoop, QALoopResult
-from backend.services.rim_qa_protocol import QAProtocolAdapter
-from backend.services.rim_tool_dispatch import ToolDispatchTable, TargetEntityResolver
+from backend.services.qa_loop import QALoop, QALoopResult
+from backend.services.qa_protocol import QAProtocolAdapter
+from backend.services.tool_dispatch import ToolDispatchTable, TargetEntityResolver
 from backend.services.rim_metadata import build_rim_metadata_block
 from backend.logging import StructuredLogger
 from backend.agent.context.assembler import ContextAssembler
@@ -274,7 +274,7 @@ class RIMComparisonService:
             tool_specs=baseline_dispatch.specs(include_rim=False),
             rim_metadata_block=repository_context_block  # Inject formatted context
         )
-        baseline_loop = RIMQALoop(
+        baseline_loop = QALoop(
             llm_service=self.llm_service,
             tool_dispatch=baseline_dispatch,
             config=config,
@@ -318,7 +318,7 @@ class RIMComparisonService:
             tool_specs=rim_dispatch.specs(include_rim=True),
             rim_metadata_block=combined_rim_block
         )
-        rim_loop = RIMQALoop(
+        rim_loop = QALoop(
             llm_service=self.llm_service,
             tool_dispatch=rim_dispatch,
             config=config,

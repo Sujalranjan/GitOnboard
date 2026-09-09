@@ -11,8 +11,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from dataclasses import dataclass
 
-from backend.services.rim_qa_loop import RIMQALoop, SystemPromptParts
-from backend.services.rim_tool_dispatch import ToolDispatchTable
+from backend.services.qa_loop import QALoop, SystemPromptParts
+from backend.services.tool_dispatch import ToolDispatchTable
 from backend.agent.loop.contracts import AgentLoopConfig, ToolObservation
 from backend.ai.schemas import LLMResponse, TokenUsage
 
@@ -42,7 +42,7 @@ async def test_baseline_qa_flow():
         full_text="You are a repository analyzer. Use tools to explore the codebase.\nTools: read_file, search_repository, get_symbol, get_callers"
     )
 
-    loop = RIMQALoop(
+    loop = QALoop(
         llm_service=mock_llm_service,
         tool_dispatch=mock_tool_dispatch,
         config=config,
@@ -176,7 +176,7 @@ Repository Intelligence Graph facts:
 """
     )
 
-    loop = RIMQALoop(
+    loop = QALoop(
         llm_service=mock_llm_service,
         tool_dispatch=mock_tool_dispatch,
         config=config,

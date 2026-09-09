@@ -15,7 +15,7 @@ from backend.database import Base, SessionLocal, engine
 from backend.models.fact_store import FactCapability, FactFile, FactRoute, FactSymbol
 from backend.models.user import User
 from backend.models.repository import Analysis, Repository
-from backend.services.rim_qa_protocol import QAProtocolAdapter, ToolSpec
+from backend.services.qa_protocol import QAProtocolAdapter, ToolSpec
 
 
 @pytest.fixture(autouse=True)

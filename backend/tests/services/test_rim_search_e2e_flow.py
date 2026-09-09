@@ -24,8 +24,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from backend.repository_tools.tools import RepositoryToolLayer
-from backend.services.rim_tool_dispatch import ToolDispatchTable
-from backend.services.rim_qa_loop import RIMQALoop, SystemPromptParts
+from backend.services.tool_dispatch import ToolDispatchTable
+from backend.services.qa_loop import QALoop, SystemPromptParts
 from backend.agent.loop.guardrails import LoopGuardrails
 from backend.agent.loop.contracts import AgentLoopConfig, ToolObservation
 
@@ -131,7 +131,7 @@ def test_search_repository_complete_flow(test_repository):
         full_text="You are a code analyzer.\nTools: search_repository, read_file"
     )
 
-    loop = RIMQALoop(
+    loop = QALoop(
         llm_service=None,
         tool_dispatch=tool_dispatch,
         config=config,
@@ -226,7 +226,7 @@ def test_search_repository_invariant_nonzero_results():
             rim_metadata_text="",
             full_text="Test"
         )
-        loop = RIMQALoop(
+        loop = QALoop(
             llm_service=None,
             tool_dispatch=tool_dispatch,
             config=config,

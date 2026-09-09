@@ -12,8 +12,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import dataclass
 
-from backend.services.rim_qa_loop import RIMQALoop, QALoopResult, QALoopTurn, SystemPromptParts
-from backend.services.rim_tool_dispatch import ToolDispatchTable
+from backend.services.qa_loop import QALoop, QALoopResult, QALoopTurn, SystemPromptParts
+from backend.services.tool_dispatch import ToolDispatchTable
 from backend.agent.loop.contracts import AgentLoopConfig, ToolObservation
 from backend.ai.schemas import LLMResponse, TokenUsage
 
@@ -40,7 +40,7 @@ async def test_rim_qa_loop_builds_message_history():
         full_text="You are a test assistant.\nAvailable tools: read_file, search_repository"
     )
 
-    loop = RIMQALoop(
+    loop = QALoop(
         llm_service=mock_llm_service,
         tool_dispatch=mock_tool_dispatch,
         config=config,
@@ -114,7 +114,7 @@ async def test_rim_qa_loop_source_content_delivered():
         full_text="Test\nTools"
     )
 
-    loop = RIMQALoop(
+    loop = QALoop(
         llm_service=mock_llm_service,
         tool_dispatch=mock_tool_dispatch,
         config=config,
@@ -177,7 +177,7 @@ async def test_rim_qa_loop_query_rim_entities_delivered():
         full_text="Test\nTools"
     )
 
-    loop = RIMQALoop(
+    loop = QALoop(
         llm_service=mock_llm_service,
         tool_dispatch=mock_tool_dispatch,
         config=config,

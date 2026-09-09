@@ -1,20 +1,20 @@
 """
-Regression tests for RIMQALoop._format_tool_observation (search_repository).
+Regression tests for QALoop._format_tool_observation (search_repository).
 
 Ensures that search_repository results are properly formatted for LLM consumption.
 Prevents recurrence of the "?" field loss bug.
 """
 
 import pytest
-from backend.services.rim_qa_loop import RIMQALoop, SystemPromptParts
+from backend.services.qa_loop import QALoop, SystemPromptParts
 from backend.agent.loop.contracts import AgentLoopConfig, ToolObservation
-from backend.services.rim_tool_dispatch import ToolDispatchTable
+from backend.services.tool_dispatch import ToolDispatchTable
 from backend.repository_tools.tools import RepositoryToolLayer
 
 
 @pytest.fixture
 def rim_loop():
-    """Create a RIMQALoop instance for testing."""
+    """Create a QALoop instance for testing."""
     config = AgentLoopConfig(max_observation_bytes=8000)
     system_prompt_parts = SystemPromptParts(
         grounding_and_protocol_text="Test",
@@ -26,7 +26,7 @@ def rim_loop():
     # Mock tool dispatch
     mock_tool_layer = None  # Not used in formatter tests
 
-    return RIMQALoop(
+    return QALoop(
         llm_service=None,
         tool_dispatch=None,
         config=config,

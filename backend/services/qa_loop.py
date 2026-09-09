@@ -1,5 +1,5 @@
 """
-Agentic Q&A loop for RIM Comparison research — shared baseline/RIM infrastructure.
+Agentic Q&A loop — shared canonical tool-calling infrastructure for all agents.
 
 Single-turn-at-a-time loop: one LLM call → parse action → execute tool → repeat.
 Enforces one tool call per turn (files fetched one-at-a-time), never pre-fetches.
@@ -61,7 +61,7 @@ class SystemPromptParts:
     full_text: str  # concatenation sent to LLM
 
 
-class RIMQALoop:
+class QALoop:
     """
     Agentic Q&A loop: LLM decides what tools to call, executes them one-at-a-time,
     builds answer incrementally. No code-editing semantics, pure question-answering.
@@ -121,7 +121,7 @@ class RIMQALoop:
             # 1. Check guardrails BEFORE turn
             stop_reason = self.guardrails.check_pre_turn_limits()
             if stop_reason:
-                logger.info(f"[RIMQALoop] Guardrail limit hit: {stop_reason}; forcing final answer")
+                logger.info(f"[QALoop] Guardrail limit hit: {stop_reason}; forcing final answer")
                 result.stop_reason = stop_reason
                 # Force a final-answer turn: send current conversation + instruction to answer now
                 messages.append({
@@ -137,7 +137,7 @@ class RIMQALoop:
                 break
 
             # 2. Call LLM with current conversation
-            logger.debug(f"[RIMQALoop] Turn {turn_index}: calling LLM...")
+            logger.debug(f"[QALoop] Turn {turn_index}: calling LLM...")
             turn_start = time.perf_counter()
 
             try:
@@ -152,10 +152,10 @@ class RIMQALoop:
                         content = msg.get("content", "") if isinstance(msg, dict) else str(msg)
                         llm_messages.append(Message(role=role, content=content))
                     except Exception as msg_err:
-                        logger.error(f"[RIMQALoop] Error processing message: {msg_err}, msg type: {type(msg)}")
+                        logger.error(f"[QALoop] Error processing message: {msg_err}, msg type: {type(msg)}")
                         raise
 
-                logger.debug(f"[RIMQALoop] Turn {turn_index}: Built {len(llm_messages)} messages (system + {len(messages)} conversation)")
+                logger.debug(f"[QALoop] Turn {turn_index}: Built {len(llm_messages)} messages (system + {len(messages)} conversation)")
                 request = LLMRequest(
                     messages=llm_messages,
                     model=self.model,
@@ -163,9 +163,9 @@ class RIMQALoop:
                     max_tokens=4096,
                 )
                 llm_response = await self.llm_service.generate(request)
-                logger.debug(f"[RIMQALoop] Turn {turn_index}: LLM response ({len(llm_response.content)} chars)")
+                logger.debug(f"[QALoop] Turn {turn_index}: LLM response ({len(llm_response.content)} chars)")
             except Exception as e:
-                logger.error(f"[RIMQALoop] LLM call failed: {e}", exc_info=True)
+                logger.error(f"[QALoop] LLM call failed: {e}", exc_info=True)
                 result.stop_reason = StopReason.MODEL_ERROR
                 result.answer = f"[ERROR] LLM call failed: {str(e)}"
 
@@ -211,11 +211,11 @@ class RIMQALoop:
 
             # Log all details to debug for troubleshooting
             if parsed["action"] == "tool_call":
-                logger.debug(f"[RIMQALoop] Turn {turn_index}: tool={parsed.get('tool_name')}")
+                logger.debug(f"[QALoop] Turn {turn_index}: tool={parsed.get('tool_name')}")
             elif parsed["action"] == "final_answer":
-                logger.debug(f"[RIMQALoop] Turn {turn_index}: FINAL_ANSWER")
+                logger.debug(f"[QALoop] Turn {turn_index}: FINAL_ANSWER")
             else:
-                logger.debug(f"[RIMQALoop] Turn {turn_index}: MALFORMED - {parsed.get('error')} | {llm_response.content[:100]}...")
+                logger.debug(f"[QALoop] Turn {turn_index}: MALFORMED - {parsed.get('error')} | {llm_response.content[:100]}...")
 
             turn = QALoopTurn(
                 turn_index=turn_index,
@@ -251,7 +251,7 @@ class RIMQALoop:
                 result.answer = answer_candidate
                 result.stop_reason = StopReason.COMPLETED_FOR_VERIFICATION
                 result.turns.append(turn)
-                logger.info(f"[RIMQALoop] LLM provided final answer at turn {turn_index}")
+                logger.info(f"[QALoop] LLM provided final answer at turn {turn_index}")
                 break
 
             elif parsed["action"] == "tool_call":
@@ -261,7 +261,7 @@ class RIMQALoop:
                 # 5. Check guardrails on tool call
                 stop_reason, should_warn = self.guardrails.record_tool_call(tool_name, arguments)
                 if stop_reason:
-                    logger.warning(f"[RIMQALoop] Tool call limit hit: {stop_reason}")
+                    logger.warning(f"[QALoop] Tool call limit hit: {stop_reason}")
                     result.stop_reason = stop_reason
                     # Force final answer
                     messages.append({
@@ -281,13 +281,13 @@ class RIMQALoop:
                     break
 
                 # 6. Execute tool
-                logger.debug(f"[RIMQALoop] Turn {turn_index}: executing tool '{tool_name}'")
+                logger.debug(f"[QALoop] Turn {turn_index}: executing tool '{tool_name}'")
                 tool_start = time.perf_counter()
 
                 try:
                     tool_observation = self.tool_dispatch.dispatch(tool_name, arguments)
                 except Exception as e:
-                    logger.error(f"[RIMQALoop] Tool dispatch error: {e}", exc_info=True)
+                    logger.error(f"[QALoop] Tool dispatch error: {e}", exc_info=True)
                     tool_observation = ToolObservation(
                         tool_call_id=f"turn-{turn_index}",
                         tool_name=tool_name,
@@ -384,10 +384,10 @@ class RIMQALoop:
                 }
                 result.turns.append(turn)
                 result.tool_call_count += 1
-                logger.debug(f"[RIMQALoop] Turn {turn_index}: {tool_name} executed in {tool_elapsed*1000:.0f}ms")
+                logger.debug(f"[QALoop] Turn {turn_index}: {tool_name} executed in {tool_elapsed*1000:.0f}ms")
 
             else:  # malformed
-                logger.warning(f"[RIMQALoop] Malformed response: {parsed.get('error', 'unknown')}")
+                logger.warning(f"[QALoop] Malformed response: {parsed.get('error', 'unknown')}")
                 # Append response and ask LLM to clarify
                 messages.append({
                     "role": "assistant",
@@ -408,7 +408,7 @@ class RIMQALoop:
         }
 
         # Log completion - show critical summary
-        log_message = (f"[RIMQALoop] Completed {len(result.turns)} turns | "
+        log_message = (f"[QALoop] Completed {len(result.turns)} turns | "
                       f"{result.tool_call_count} tool calls | "
                       f"{result.stop_reason}")
 
@@ -438,7 +438,7 @@ class RIMQALoop:
                     content = msg.get("content", "") if isinstance(msg, dict) else str(msg)
                     llm_messages.append(Message(role=role, content=content))
                 except Exception as msg_err:
-                    logger.error(f"[RIMQALoop] Error processing message in final answer turn: {msg_err}")
+                    logger.error(f"[QALoop] Error processing message in final answer turn: {msg_err}")
                     raise
 
             request = LLMRequest(
@@ -449,7 +449,7 @@ class RIMQALoop:
             )
             llm_response = await self.llm_service.generate(request)
         except Exception as e:
-            logger.error(f"[RIMQALoop] Final answer LLM call failed: {e}", exc_info=True)
+            logger.error(f"[QALoop] Final answer LLM call failed: {e}", exc_info=True)
             return QALoopTurn(
                 turn_index=turn_index,
                 raw_model_output=f"[ERROR] Failed to generate answer: {str(e)}",

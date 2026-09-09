@@ -16,9 +16,9 @@ from backend.ai.service import get_llm_service
 from backend.intelligence.retrieval import HybridRetriever
 from backend.intelligence.retrieval.graph_traverser import FactStoreGraphTraverser
 from backend.repository_tools import resolve_repo_root, RepositoryToolLayer
-from backend.services.rim_qa_loop import RIMQALoop
-from backend.services.rim_qa_protocol import QAProtocolAdapter
-from backend.services.rim_tool_dispatch import ToolDispatchTable, TargetEntityResolver
+from backend.services.qa_loop import QALoop
+from backend.services.qa_protocol import QAProtocolAdapter
+from backend.services.tool_dispatch import ToolDispatchTable, TargetEntityResolver
 from backend.services.rim_metadata import build_rim_metadata_block
 from backend.logging import StructuredLogger
 from backend.services.crash_logger import get_crash_logger
@@ -170,7 +170,7 @@ async def pilot_benchmark(
 
         # Run the Q&A loop
         logger.info(f"[Pilot] Running condition {req.condition} for: {req.question}")
-        qa_loop = RIMQALoop(
+        qa_loop = QALoop(
             llm_service=llm_service,
             tool_dispatch=tool_dispatch,
             config=config,
