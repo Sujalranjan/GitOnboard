@@ -40,13 +40,16 @@ def trace_feature(
             pass
 
         from backend.routers.repo.services.analysis import get_latest_analysis
-        analysis_id = None
+
+        # CRITICAL: Must have analysis to perform tracing
         try:
             _, latest = get_latest_analysis(repo_name, db, current_user)
-            if latest:
-                analysis_id = latest.id
-        except Exception:
-            pass
+            analysis_id = latest.id
+        except HTTPException:
+            raise  # Re-raise auth/not-found errors
+        except Exception as e:
+            logger.error(f"Trace failed: could not get analysis: {e}")
+            return {"trace": None, "flow": []}
 
         from backend.intelligence.retrieval import HybridRetriever
         retriever = HybridRetriever(
