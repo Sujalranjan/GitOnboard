@@ -45,6 +45,7 @@ def trace_feature(
         try:
             _, latest = get_latest_analysis(repo_name, db, current_user)
             analysis_id = latest.id
+            logger.info(f"[TRACE] Got analysis_id={analysis_id} for repo '{repo_name}'")
         except HTTPException:
             raise  # Re-raise auth/not-found errors
         except Exception as e:
@@ -58,7 +59,10 @@ def trace_feature(
             chroma_collection=collection,
             rrf_k=60
         )
+        logger.info(f"[TRACE] HybridRetriever initialized. BM25 loaded: {retriever.bm25_index is not None}")
+
         retrieved_items = retriever.retrieve(query=search_q, top_k=10, expand_with_fact_store=False)
+        logger.info(f"[TRACE] Retrieved {len(retrieved_items)} results for query '{search_q}'")
 
         seed_nodes = []
         if retrieved_items:
@@ -74,23 +78,28 @@ def trace_feature(
                 name = item.get("match_name", item.get("name"))
                 typ = item.get("match_type", item.get("type"))
                 ent_id = None
+                logger.info(f"[TRACE] Processing item: name='{name}', fp='{fp}', type='{typ}'")
 
                 for e in query_layer.model.entities.values():
                     if e.name == name or (name and e.name.lower() == name.lower()):
                         if not fp or e.metadata.get("file_id") == fp or e.location.repository_path == fp or fp in e.location.repository_path or not e.location.repository_path:
                             ent_id = e.id
+                            logger.info(f"[TRACE] Found matching entity: id={ent_id}")
                             break
 
                 if not ent_id:
                     for e in query_layer.model.entities.values():
                         if e.name.lower() == str(name).lower():
                             ent_id = e.id
+                            logger.info(f"[TRACE] Found matching entity (fallback): id={ent_id}")
                             break
 
                 if ent_id:
                     item_dict = dict(item)
                     item_dict["id"] = ent_id
                     seed_nodes.append(item_dict)
+                else:
+                    logger.warning(f"[TRACE] No matching entity found for: {name}")
     except Exception as e:
         logger.error(f"Hybrid retrieval failed for trace: {e}")
         seed_nodes = []
