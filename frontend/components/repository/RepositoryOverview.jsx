@@ -6,16 +6,14 @@ import { Badge } from '../common/Badge';
 import { Button } from '../common/Button';
 import Link from 'next/link';
 import { PythonIcon, JavascriptIcon, TypescriptIcon, ReactIcon, JavaIcon } from '../common/LanguageIcons';
-import { 
-  Star, 
-  GitBranch, 
-  ShieldCheck, 
-  FileText, 
-  Code, 
-  Box, 
-  RefreshCw, 
+import {
+  Star,
+  GitBranch,
+  FileText,
+  Code,
+  Box,
+  RefreshCw,
   Download,
-  AlertTriangle,
   Info,
   ChevronRight,
   Sparkles,
@@ -38,9 +36,7 @@ const getLanguageConfig = (lang) => {
 };
 
 export default function RepositoryOverview({ repoName, data: scanData }) {
-  const [healthData, setHealthData] = useState(null);
   const [statsData, setStatsData] = useState(null);
-  const [findingsData, setFindingsData] = useState(null);
   const [featureData, setFeatureData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -48,16 +44,12 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
     const fetchRealData = async () => {
       setIsLoading(true);
       try {
-        const [healthRes, statsRes, findingsRes, featuresRes] = await Promise.all([
-          fetch(`/api/repos/${repoName}/health/scores`),
+        const [statsRes, featuresRes] = await Promise.all([
           fetch(`/api/repos/${repoName}/stats`),
-          fetch(`/api/repos/${repoName}/health/findings`),
           fetch(`/api/repos/${repoName}/features`)
         ]);
 
-        if (healthRes.ok) setHealthData(await healthRes.json());
         if (statsRes.ok) setStatsData(await statsRes.json());
-        if (findingsRes.ok) setFindingsData(await findingsRes.json());
         if (featuresRes.ok) setFeatureData(await featuresRes.json());
       } catch (err) {
         console.error("Failed to load overview data", err);
@@ -69,8 +61,6 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
   }, [repoName]);
 
   const overview = scanData?.overview || {};
-  const healthScore = healthData?.health_score || 0;
-  const status = healthData?.status || "Analyzing";
   
   const filesCount = overview.total_files || statsData?.total_files || 0;
   const funcsCount = overview.total_functions || statsData?.total_functions || 0;
@@ -80,20 +70,8 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
   const complexity = statsData?.average_functions_per_module ? statsData.average_functions_per_module.toFixed(1) : "0";
   const testCov = statsData?.custom_metrics?.test_coverage_approx_percent || "0%";
   const commentRatio = statsData?.custom_metrics?.documentation_coverage_percent ? `${statsData.custom_metrics.documentation_coverage_percent.toFixed(1)}%` : "0%";
-  
-  const findings = findingsData?.findings || [];
-  const topFindings = findings.slice(0, 3);
-  const discoveredFeatures = featureData?.features || [];
 
-  const getStatusColor = (statusText) => {
-    switch (statusText) {
-      case 'Excellent': return 'text-green-600 dark:text-green-400';
-      case 'Good': return 'text-blue-600 dark:text-blue-400';
-      case 'Fair': return 'text-amber-600 dark:text-amber-400';
-      case 'Needs Work': return 'text-red-600 dark:text-red-400';
-      default: return 'text-slate-600 dark:text-slate-400';
-    }
-  };
+  const discoveredFeatures = featureData?.features || [];
 
   const handleReanalyze = async () => {
     try {
@@ -146,13 +124,6 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2 shadow-sm">
             <div className="px-4 py-1 flex flex-col items-center border-r border-slate-100 dark:border-slate-800">
-              <div className={`flex items-center mb-1 ${getStatusColor(status)}`}>
-                <ShieldCheck className="w-4 h-4 mr-1" />
-                <span className="text-xs font-semibold uppercase tracking-wider">Health Score</span>
-              </div>
-              <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-none">{healthScore}</span>
-            </div>
-            <div className="px-4 py-1 flex flex-col items-center border-r border-slate-100 dark:border-slate-800">
               <div className="flex items-center text-blue-600 dark:text-blue-400 mb-1">
                 <FileText className="w-4 h-4 mr-1" />
                 <span className="text-lg font-bold text-slate-900 dark:text-slate-100 leading-none">{filesCount}</span>
@@ -182,8 +153,8 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
         {/* Overview Card */}
         <Card className="lg:col-span-1 flex flex-col" noPadding>
           <CardHeader title="Repository Overview" />
@@ -226,36 +197,6 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
           </div>
         </Card>
 
-        {/* Health Score Ring */}
-        <Card className="lg:col-span-1 flex flex-col items-center justify-center text-center">
-          <h3 className="font-semibold text-slate-800 dark:text-slate-100 w-full text-left mb-6">Health Score</h3>
-          <div className="relative w-40 h-40 flex items-center justify-center">
-            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-              <path
-                className="text-slate-100 dark:text-slate-800"
-                strokeWidth="3"
-                stroke="currentColor"
-                fill="none"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-              <path
-                className="text-blue-600 dark:text-blue-400"
-                strokeWidth="3"
-                strokeDasharray={`${healthScore}, 100`}
-                strokeLinecap="round"
-                stroke="currentColor"
-                fill="none"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-            </svg>
-            <div className="absolute flex flex-col items-center justify-center">
-              <span className="text-4xl font-bold text-slate-900 dark:text-slate-100">{healthScore}</span>
-              <span className="text-sm text-slate-500 dark:text-slate-400">/100</span>
-              <span className={`text-xs font-medium mt-1 ${getStatusColor(status)}`}>{status}</span>
-            </div>
-          </div>
-        </Card>
-
         {/* Key Metrics Grid */}
         <Card className="lg:col-span-1 flex flex-col bg-transparent shadow-none border-none" noPadding>
           <h3 className="font-semibold text-slate-800 dark:text-slate-100 mb-4 px-1">Key Metrics</h3>
@@ -281,8 +222,8 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
 
       </div>
       
-      {/* Bottom Section (Composition & Health Breakdown & Action Center) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Repository Composition Section */}
+      <div className="grid grid-cols-1 gap-6">
 
         {/* Repository Composition */}
         <Card className="lg:col-span-1 flex flex-col">
@@ -331,75 +272,10 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
             </div>
           </div>
         </Card>
-        
-        {/* Detailed Health Breakdown */}
-        <Card className="lg:col-span-1 flex flex-col">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center"><ShieldCheck className="w-4 h-4 mr-2 text-green-500 dark:text-green-400" /> Health Breakdown</h3>
-            <Link href={`/repository/${repoName}/health`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">Details &rarr;</Link>
-          </div>
-          
-          <div className="space-y-5 flex-1">
-            {[
-              { label: 'Maintainability', score: healthData?.categories?.maintainability?.score || 0, color: 'bg-emerald-500' },
-              { label: 'Reliability', score: healthData?.categories?.reliability?.score || 0, color: 'bg-blue-500' },
-              { label: 'Security', score: healthData?.categories?.security?.score || 0, color: 'bg-violet-500' }
-            ].map((cat, idx) => (
-              <div key={idx}>
-                <div className="flex justify-between text-sm mb-1.5">
-                  <span className="text-slate-700 dark:text-slate-300 font-medium">{cat.label}</span>
-                  <span className="text-slate-900 dark:text-slate-100 font-bold">{Math.round(cat.score)}/100</span>
-                </div>
-                <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${cat.color}`} style={{ width: `${Math.max(5, cat.score)}%` }} />
-                </div>
-              </div>
-            ))}
-            
-            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Your overall score of <span className="font-bold text-slate-900 dark:text-slate-100">{healthScore}</span> is weighted heavily towards maintainability and security. 
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        {/* Action Center */}
-        <Card className="lg:col-span-1 flex flex-col">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center"><AlertTriangle className="w-4 h-4 mr-2 text-amber-500 dark:text-amber-400" /> Action Center</h3>
-          </div>
-          
-          <div className="space-y-3 flex-1 flex flex-col">
-            {isLoading ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">Evaluating actions...</p>
-            ) : (
-              <>
-                {(() => {
-                  const critical = findings.filter(f => f.severity === 'CRITICAL' || f.severity === 'ERROR').length;
-                  const warning = findings.filter(f => f.severity === 'WARNING').length;
-                  
-                  if (critical === 0 && warning === 0) {
-                    return (
-                      <div className="flex flex-col items-center justify-center py-6 text-center h-full">
-                        <div className="w-12 h-12 rounded-full bg-green-50 dark:bg-green-950/60 flex items-center justify-center mb-3">
-                          <ShieldCheck className="w-6 h-6 text-green-500 dark:text-green-400" />
-                        </div>
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">All clear!</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">No major issues require your attention right now.</p>
-                      </div>
-                    );
-                  }
-                  
-                  return (
-                    <>
-                      {critical > 0 && (
-                        <div className="p-3 bg-red-50 dark:bg-red-950/60 border border-red-100 dark:border-red-900/60 rounded-lg flex items-start gap-3">
-                          <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm font-bold text-red-900 dark:text-red-200">{critical} Critical Issues</p>
-                            <p className="text-xs text-red-700 dark:text-red-300 mt-0.5">These vulnerabilities or bugs need immediate fixing.</p>
-                          </div>
+      </div>
+    </div>
+  );
+}
                         </div>
                       )}
                       
