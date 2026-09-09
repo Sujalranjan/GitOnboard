@@ -567,49 +567,60 @@ class RepositoryToolLayer:
         combined: List[Dict[str, Any]] = []
         seen_keys = set()
 
-        # 1. Symbol search
-        sym_matches = self.get_symbol(query)
-        for sym in sym_matches[:5]:
-            key = f"sym:{sym['file']}:{sym['name']}"
-            if key not in seen_keys:
-                seen_keys.add(key)
-                combined.append({
-                    "type": "symbol",
-                    "file": sym["file"],
-                    "symbol": sym["name"],
-                    "symbol_type": sym["symbol_type"],
-                    "lines": f"{sym['line_start']}-{sym['line_end']}",
-                    "match_source": "symbol_index",
-                    "score": 0,
-                })
+        # Split query on commas to support multi-query batching in fallback
+        sub_queries = [q.strip() for q in query.split(",") if q.strip()]
+        if not sub_queries:
+            return []
 
-        # 2. File path match
-        file_matches = self.find_files(f"*{query}*")
-        for f in file_matches[:5]:
-            key = f"file:{f['path']}"
-            if key not in seen_keys:
-                seen_keys.add(key)
-                combined.append({
-                    "type": "file",
-                    "file": f["path"],
-                    "size": f.get("size", 0),
-                    "match_source": "filename_manifest",
-                    "score": 0,
-                })
+        max_total = min(limit * len(sub_queries), 30)
 
-        # 3. Lexical search in source files
-        lex_matches = self.search_code(query, max_matches=5)
-        for lex in lex_matches:
-            key = f"lex:{lex['file']}:{lex['line']}"
-            if key not in seen_keys:
-                seen_keys.add(key)
-                combined.append({
-                    "type": "code",
-                    "file": lex["file"],
-                    "line": lex["line"],
-                    "snippet": lex["snippet"],
-                    "match_source": "lexical",
-                    "score": 0,
-                })
+        for sub_query in sub_queries:
+            # 1. Symbol search
+            sym_matches = self.get_symbol(sub_query)
+            for sym in sym_matches[:5]:
+                key = f"sym:{sym['file']}:{sym['name']}"
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    combined.append({
+                        "type": "symbol",
+                        "file": sym["file"],
+                        "symbol": sym["name"],
+                        "symbol_type": sym["symbol_type"],
+                        "lines": f"{sym['line_start']}-{sym['line_end']}",
+                        "query": sub_query,
+                        "match_source": "symbol_index",
+                        "score": 0,
+                    })
 
-        return combined[:limit]
+            # 2. File path match
+            file_matches = self.find_files(f"*{sub_query}*")
+            for f in file_matches[:5]:
+                key = f"file:{f['path']}"
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    combined.append({
+                        "type": "file",
+                        "file": f["path"],
+                        "size": f.get("size", 0),
+                        "query": sub_query,
+                        "match_source": "filename_manifest",
+                        "score": 0,
+                    })
+
+            # 3. Lexical search in source files
+            lex_matches = self.search_code(sub_query, max_matches=5)
+            for lex in lex_matches:
+                key = f"lex:{lex['file']}:{lex['line']}"
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    combined.append({
+                        "type": "code",
+                        "file": lex["file"],
+                        "line": lex["line"],
+                        "snippet": lex["snippet"],
+                        "query": sub_query,
+                        "match_source": "lexical",
+                        "score": 0,
+                    })
+
+        return combined[:max_total]
