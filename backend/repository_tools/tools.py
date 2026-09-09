@@ -391,16 +391,19 @@ class RepositoryToolLayer:
             .all()
         )
 
-        return [
-            {
+        results = []
+        for rel, name, sym_type in rel_rows:
+            item = {
                 "caller_symbol": name,
                 "symbol_type": sym_type,
                 "relationship": rel.rel_type,
-                "evidence_line": rel.evidence_line,
-                "snippet": rel.evidence_snippet,
             }
-            for rel, name, sym_type in rel_rows
-        ]
+            if rel.evidence_line is not None:
+                item["evidence_line"] = rel.evidence_line
+            if rel.evidence_snippet is not None:
+                item["snippet"] = rel.evidence_snippet
+            results.append(item)
+        return results
 
     def get_callees(self, symbol_name: str) -> List[Dict[str, Any]]:
         """Finds symbols that are called by the given symbol."""
@@ -434,16 +437,19 @@ class RepositoryToolLayer:
             .all()
         )
 
-        return [
-            {
+        results = []
+        for rel, name, sym_type in rel_rows:
+            item = {
                 "callee_symbol": name,
                 "symbol_type": sym_type,
                 "relationship": rel.rel_type,
-                "evidence_line": rel.evidence_line,
-                "snippet": rel.evidence_snippet,
             }
-            for rel, name, sym_type in rel_rows
-        ]
+            if rel.evidence_line is not None:
+                item["evidence_line"] = rel.evidence_line
+            if rel.evidence_snippet is not None:
+                item["snippet"] = rel.evidence_snippet
+            results.append(item)
+        return results
 
     def get_related_files(self, path: str) -> List[Dict[str, Any]]:
         """Finds files related via imports or function calls."""
