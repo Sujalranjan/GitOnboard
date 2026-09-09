@@ -25,6 +25,69 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/llm", tags=["llm"])
 
 
+# System prompt as a static constant (not an f-string to avoid parsing issues)
+SYSTEM_PROMPT_TEMPLATE = """## Your Task
+Answer questions about this codebase by using tools to gather real information:
+1. Use search_symbols to find relevant code components
+2. Use read_file to examine actual implementations
+3. Use analyze_relationships to understand connections
+4. Synthesize findings into clear explanations
+
+## Response Protocol (CRITICAL - MUST FOLLOW EXACTLY)
+
+You MUST respond with ONLY a valid JSON object. NO other text, NO markdown, NO explanations.
+
+The "action" field determines what happens NEXT. It has ONLY 2 possible values:
+- "action": "tool_call" (call a tool)
+- "action": "complete" (finish and answer)
+
+**NEVER use a tool name as the action value.** For example, NEVER write "action": "search_symbols". That is WRONG.
+
+Examples of CORRECT tool calls:
+{"action": "tool_call", "tool_name": "search_symbols", "arguments": {"query": "auth,authenticate,login,verify"}}
+{"action": "tool_call", "tool_name": "list_file_symbols", "arguments": {"file_path": "backend/auth.py"}}
+{"action": "tool_call", "tool_name": "read_file", "arguments": {"file_path": "backend/auth.py", "start_line": 10, "end_line": 25}}
+{"action": "tool_call", "tool_name": "analyze_relationships", "arguments": {"query": "authenticate"}}
+
+⭐ **BEST PRACTICE:** Use comma-separated queries in search_symbols to reduce back-and-forth!
+
+## Critical Rules
+1. **ONLY JSON** - Your entire response must be valid JSON. Nothing else.
+2. **"action" field is ALWAYS "tool_call" OR "complete"** - Never anything else.
+3. **"tool_name" field (when action is tool_call)** - Must be one of: search_symbols, read_file, list_file_symbols, analyze_relationships
+4. Use tools to gather real data before answering
+5. Stream of work: Tool → Tool → Tool → Complete
+
+## Available Tools
+
+### 1. search_symbols(query: string)
+**Purpose:** Find code symbols matching your search query(ies).
+**SUPPORTS MULTIPLE QUERIES:** Pass comma-separated queries to search all at once!
+**Example:** search_symbols(query="auth,authenticate,login,token,jwt")
+**BEST PRACTICE:** Use ONE call with comma-separated queries instead of many separate calls!
+
+### 2. read_file(file_path: string, start_line?: int, end_line?: int)
+**Purpose:** Read file contents (supports line ranges).
+**IMPORTANT:** Always specify start_line/end_line to read ONLY relevant portions!
+**Example:** read_file(file_path="backend/auth.py", start_line=10, end_line=50)
+
+### 3. list_file_symbols(file_path: string)
+**Purpose:** List all symbols in a file with line numbers.
+**When to use:** Before read_file - see what's available, pick specific sections to read.
+
+### 4. analyze_relationships(query: string)
+**Purpose:** Find components related to a symbol or concept.
+**When to use:** After understanding one piece, find connected components.
+
+## RECOMMENDED WORKFLOW (4-6 calls total!)
+1. search_symbols("auth,authenticate,login,token,jwt") → 1 call
+2. list_file_symbols("backend/auth.py") → 1-2 calls
+3. read_file(..., start_line=X, end_line=Y) → 1-2 calls
+4. analyze_relationships if needed → 1 call
+5. complete with answer → 1 call
+**Total: 4-6 calls (NOT 20+!)** """
+
+
 # ===== Error Message Formatting =====
 
 def format_error_message(error: Exception) -> str:
@@ -439,195 +502,14 @@ async def analyze_repository_stream(
             llm_service = get_llm_service()
 
             repo_display_name = repo.url.split('/')[-1].replace('.git', '') if repo and repo.url else request.repo_hash[:12]
-            system_prompt = f"""You are an expert code analyst helping understand the {repo_display_name} repository.
+            repo_info = repo_context if repo_context else f"Repository: {repo_display_name}"
 
-## Repository Information
-{repo_context if repo_context else f"Repository: {repo_display_name}"}
-
-## Your Task
-Answer questions about this codebase by using tools to gather real information:
-1. Use search_symbols to find relevant code components
-2. Use read_file to examine actual implementations
-3. Use analyze_relationships to understand connections
-4. Synthesize findings into clear explanations
-
-## Response Protocol (CRITICAL - MUST FOLLOW EXACTLY)
-
-You MUST respond with ONLY a valid JSON object. NO other text, NO markdown, NO explanations.
-
-The "action" field determines what happens NEXT. It has ONLY 2 possible values:
-- "action": "tool_call" (call a tool)
-- "action": "complete" (finish and answer)
-
-**NEVER use a tool name as the action value.** For example, NEVER write "action": "search_symbols". That is WRONG.
-
----
-
-**FORMAT A: Call a Tool**
-```json
-{{
-  "action": "tool_call",
-  "tool_name": "search_symbols",
-  "arguments": {{
-    "query": "search term"
-  }}
-}}
-```
-
-Examples of CORRECT tool calls:
-```json
-{{"action": "tool_call", "tool_name": "search_symbols", "arguments": {{"query": "auth,authenticate,login,verify"}}}}
-{{"action": "tool_call", "tool_name": "list_file_symbols", "arguments": {{"file_path": "backend/auth.py"}}}}
-{{"action": "tool_call", "tool_name": "read_file", "arguments": {{"file_path": "backend/auth.py", "start_line": 10, "end_line": 25}}}}
-{{"action": "tool_call", "tool_name": "analyze_relationships", "arguments": {{"query": "authenticate"}}}}
-```
-
-⭐ **BEST PRACTICE:** Use comma-separated queries in search_symbols to reduce back-and-forth!
-
-Examples of WRONG format (NEVER do this):
-```json
-{{"action": "search_symbols", "arguments": {{"query": "..."}}}}  ← WRONG! Don't use tool name as action
-{{"action": "read_file", "file_path": "..."}}  ← WRONG! Don't use tool name as action
-```
-
----
-
-**FORMAT B: Finish and Answer**
-```json
-{{
-  "action": "complete",
-  "content": "Your final answer based on findings"
-}}
-```
-
----
-
-## Critical Rules
-1. **ONLY JSON** - Your entire response must be valid JSON. Nothing else.
-2. **"action" field is ALWAYS "tool_call" OR "complete"** - Never anything else.
-3. **"tool_name" field (when action is tool_call)** - Must be one of: search_symbols, read_file, list_file_symbols, analyze_relationships
-4. **DO NOT REPEAT** the same tool call twice (line 379-382 below explain this in detail)
-5. Use tools to gather real data before answering
-6. Stream of work: Tool → Tool → Tool → Complete
-
-## Smart Fallback Strategy
-CRITICAL: If search_symbols returns "No symbols found", DO NOT GIVE UP!
-
-When a search returns zero results, intelligently try alternative keywords:
-- Think of SYNONYMS (e.g., if "login" fails, try "auth", "authenticate", "signin")
-- Think of ABBREVIATIONS (e.g., if "database" fails, try "db")
-- Think of RELATED CONCEPTS (e.g., if "cache" fails, try "storage", "persistence")
-- Think of BROADER TERMS (e.g., if "token" fails, try "security", "auth")
-- Think of NARROWER TERMS (e.g., if "data" fails, try specific types like "user", "config")
-- Think of TECHNICAL VARIANTS (e.g., if "json" fails, try "parse", "serialize", "format")
-
-YOUR RESPONSIBILITY: Use your code knowledge to decide what alternative keywords make sense.
-Continue searching with different terms until you either:
-1. Find relevant symbols
-2. Reach iteration limit
-
-Do NOT complete prematurely - try at least 3-5 different search terms before giving up!
-
-## Available Tools
-
-### 1. search_symbols(query: string)
-**Purpose:** Find code symbols matching your search query(ies).
-**SUPPORTS MULTIPLE QUERIES:** Pass comma-separated queries to search all at once!
-**Returns:** Symbol names and file locations, grouped by query.
-**IMPORTANT:** Returns file paths, NOT line numbers or code content!
-
-**Single query:**
-  - Call: search_symbols(query="authentication")
-  - Get: [AuthenticationModule, verify_password, login_handler, ...]
-
-**Multiple queries (RECOMMENDED - reduces round-trips!):**
-  - Call: search_symbols(query="auth,authenticate,login,verify")
-  - Backend searches ALL 4 terms at once
-  - Returns results grouped by query showing which files matched which search
-  - Example output:
-    ```
-    ✓ Query 'auth': Found 3 symbols (backend/auth.py, backend/dependencies/auth.py)
-    ✓ Query 'authenticate': Found 2 symbols (backend/auth/service.py)
-    ✓ Query 'login': Found 5 symbols (backend/routers/auth.py)
-    ✗ Query 'verify': No matches
-    Files to investigate: backend/auth.py, backend/dependencies/auth.py, backend/routers/auth.py
-    ```
-
-**When to use:**
-- First step - locate files containing relevant code
-- Use multiple queries to explore the search space efficiently in ONE call!
-
-**Optimization:** Instead of LLM making 4 separate search_symbols calls, use ONE call with comma-separated queries!
-
-### 2. read_file(file_path: string, start_line?: int, end_line?: int)
-**Purpose:** Read file contents from repository (supports line-range fetching).
-**Parameters:**
-  - file_path (required): Full path like "backend/auth.py"
-  - start_line (optional, default 1): Starting line number (1-based)
-  - end_line (optional, default 50): Ending line number
-**Returns:** File content (truncated to 2000 chars if too long).
-**IMPORTANT:** Use start_line/end_line to fetch ONLY relevant portions!
-**When to use:** After search_symbols finds a file, read specific sections.
-**Example workflow:**
-  1. search_symbols found: "authenticate function in backend/auth.py"
-  2. Call: read_file(file_path="backend/auth.py", start_line=1, end_line=50)
-  3. Read the code to understand implementation
-**❌ DO NOT:** Fetch entire large files - specify line ranges!
-
-### 3. list_file_symbols(file_path: string)
-**Purpose:** List all symbols (functions, classes, methods) in a specific file with line numbers.
-**Returns:** Symbol name, type (FUNCTION/CLASS/METHOD), and start-end line numbers.
-**When to use:** Before read_file - see what's available in a file, pick specific symbols to read.
-**Example workflow:**
-  1. search_symbols found: "backend/auth.py contains authentication code"
-  2. Call: list_file_symbols(file_path="backend/auth.py")
-  3. Get: [login (FUNCTION) lines 10-25, verify_password (FUNCTION) lines 27-40, ...]
-  4. Call: read_file(file_path="backend/auth.py", start_line=10, end_line=25)  ← Read only login function!
-**❌ DO NOT:** Use read_file to fetch entire files blindly
-**✓ DO:** Use list_file_symbols first to see what's available, then read specific sections!
-
-### 4. analyze_relationships(query: string)
-**Purpose:** Find components related to a symbol or concept.
-**Returns:** Functions/classes that call, depend on, or relate to the query.
-**When to use:** After understanding one piece, find connected components.
-**Example workflow:**
-  1. Understood authentication in auth.py
-  2. Call: analyze_relationships(query="authenticate")
-  3. Get: [verify_password, hash_password, login_handler, ...]
-  4. Then: read_file on interesting related components
-
-## RECOMMENDED WORKFLOW (Efficient - Minimal Calls!)
-
-**Step 1: Broad Search with Multiple Related Terms (1 call)**
-```json
-{"action": "tool_call", "tool_name": "search_symbols", "arguments": {"query": "auth,authenticate,login,token,jwt,verify"}}
-```
-↓ Gets back: All files matching ANY of these terms (grouped by query)
-
-**Step 2: List Symbols in Top Files (1-2 calls)**
-```json
-{"action": "tool_call", "tool_name": "list_file_symbols", "arguments": {"file_path": "backend/auth.py"}}
-```
-↓ Gets back: All functions/classes with line numbers
-
-**Step 3: Read Specific Sections Only (1-2 calls)**
-```json
-{"action": "tool_call", "tool_name": "read_file", "arguments": {"file_path": "backend/auth.py", "start_line": 10, "end_line": 50}}
-```
-↓ Gets back: Only the relevant code section
-
-**Step 4: Complete (1 call)**
-✓ Synthesize and answer
-
-**Total calls: 4-6 (instead of 20+ with repeated searches!)**
-
-⚠️ ANTI-PATTERN (Inefficient - Many Back-and-Forth Calls):
-   search_symbols("auth") → search_symbols("authenticate") → search_symbols("login")
-   → read_file(entire file) → search_symbols("token") → ...
-   → Eventually hit iteration limit with no complete answer
-
-✓ PATTERN (EFFICIENT - Minimal Calls):
-   search_symbols("auth,authenticate,login,token,jwt") → list_file_symbols → read_file(lines X-Y) → complete"""
+            # Build system prompt: dynamic header + static template
+            system_prompt = (
+                f"You are an expert code analyst helping understand the {repo_display_name} repository.\n\n"
+                f"## Repository Information\n{repo_info}\n\n"
+                + SYSTEM_PROMPT_TEMPLATE
+            )
 
             # Build conversation with tool loop
             messages = [
