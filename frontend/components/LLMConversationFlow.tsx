@@ -145,24 +145,18 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
 
   const simulateQuery = async (userQuery: string) => {
     setRunning(true);
-    setMessages([]);
     setToolCalls(0);
     setTotalData(0);
     setElapsed(0);
     setDone(false);
     startTimeRef.current = Date.now();
 
-    // Immediately show user query and initial thinking message
-    setMessages([
-      {
-        type: 'user-query' as const,
-        content: userQuery,
-      },
-      {
-        type: 'llm-thinking' as const,
-        content: 'Sending your query to the LLM...',
-      },
-    ]);
+    // Append to existing conversation (don't clear history)
+    // Backend will send user-query via SSE, so don't duplicate it here
+    setMessages(prev => [...prev, {
+      type: 'llm-thinking' as const,
+      content: 'Sending your query to the LLM...',
+    }]);
 
     try {
       if (!repoHash) {
