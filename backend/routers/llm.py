@@ -320,7 +320,7 @@ async def analyze_repository_stream(
                         "type": "tool-response",
                         "tool_name": turn.tool_observation.get("tool_name"),
                         "success": turn.tool_observation.get("success", False),
-                        "result_summary": turn.tool_observation.get("formatted_message", "")[:4000],
+                        "result_summary": turn.tool_observation.get("formatted_message", ""),
                         "result_count": len(turn.tool_observation.get("data", [])) if isinstance(turn.tool_observation.get("data"), list) else None,
                         "error": turn.tool_observation.get("error"),
                         "duration_ms": turn.duration_ms,
