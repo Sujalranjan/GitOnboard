@@ -63,8 +63,9 @@ Examples of CORRECT tool calls:
 ### 1. search_symbols(query: string)
 **Purpose:** Find code symbols matching your search query(ies).
 **SUPPORTS MULTIPLE QUERIES:** Pass comma-separated queries to search all at once!
+**Returns:** ALL matching results (up to 10 per query) - LLM decides what to investigate.
 **Example:** search_symbols(query="auth,authenticate,login,token,jwt")
-**BEST PRACTICE:** Use ONE call with comma-separated queries instead of many separate calls!
+**BEST PRACTICE:** Use ONE call with comma-separated queries, LLM sees full result set to decide!
 
 ### 2. read_file(file_path: string, start_line?: int, end_line?: int)
 **Purpose:** Read file contents (supports line ranges).
@@ -234,7 +235,8 @@ async def execute_search_symbols(query: str, db: Session, analysis_id: Optional[
 
         for q in queries:
             logger.debug("[SEARCH] Searching for query: %s", q)
-            results = retriever.retrieve(q, top_k=5)
+            # Fetch top 10 results so LLM has full visibility of options
+            results = retriever.retrieve(q, top_k=10)
             all_results[q] = results
 
             # Track unique files
@@ -258,12 +260,11 @@ async def execute_search_symbols(query: str, db: Session, analysis_id: Optional[
                 continue
 
             output += f"✓ Query '{q}': Found {len(results)} matching symbols\n"
-            for result in results[:3]:  # Limit to 3 per query for brevity
-                output += f"  - {result.entity_name} ({result.entity_type.value})\n"
+            # Show ALL results so LLM can decide what to investigate
+            for i, result in enumerate(results, 1):
+                output += f"  {i}. {result.entity_name} ({result.entity_type.value})\n"
                 if result.file_path:
-                    output += f"    📄 {result.file_path}\n"
-            if len(results) > 3:
-                output += f"  ... and {len(results) - 3} more\n"
+                    output += f"     📄 {result.file_path}\n"
 
         output += f"\nFiles to investigate: {', '.join(sorted(total_files))}\n"
         output += f"Use: list_file_symbols(file_path) to see available symbols in each file"
