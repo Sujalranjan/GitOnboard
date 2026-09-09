@@ -149,11 +149,11 @@ class ToolDispatchTable:
             ),
             ToolSpec(
                 "search_repository",
-                "Hybrid search: find symbols, files, and code snippets matching a query.",
+                "Search for symbols, files, and code by name or pattern. Use simple code terms, not descriptions.",
                 {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "Search query"},
+                        "query": {"type": "string", "description": "Symbol name, file name, or code pattern (e.g., 'login', 'auth.js', 'const token'). Keep it simple and code-like, not natural language descriptions."},
                         "limit": {"type": "integer", "description": "Max results (default 10)"},
                     },
                     "required": ["query"],
