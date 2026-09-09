@@ -347,39 +347,61 @@ Answer questions about this codebase by using tools to gather real information:
 3. Use analyze_relationships to understand connections
 4. Synthesize findings into clear explanations
 
-## Response Protocol (CRITICAL)
-You MUST respond with ONLY a JSON object in ONE of two formats:
+## Response Protocol (CRITICAL - MUST FOLLOW EXACTLY)
 
-**Format 1: Use a Tool**
+You MUST respond with ONLY a valid JSON object. NO other text, NO markdown, NO explanations.
+
+The "action" field determines what happens NEXT. It has ONLY 2 possible values:
+- "action": "tool_call" (call a tool)
+- "action": "complete" (finish and answer)
+
+**NEVER use a tool name as the action value.** For example, NEVER write "action": "search_symbols". That is WRONG.
+
+---
+
+**FORMAT A: Call a Tool**
 ```json
-{{
+{
   "action": "tool_call",
   "tool_name": "search_symbols",
-  "arguments": {{
+  "arguments": {
     "query": "search term"
-  }}
-}}
+  }
+}
 ```
 
-**Format 2: Complete and Answer**
+Examples of CORRECT tool calls:
 ```json
-{{
-  "action": "complete",
-  "content": "Your final answer here"
-}}
+{"action": "tool_call", "tool_name": "search_symbols", "arguments": {"query": "authentication"}}
+{"action": "tool_call", "tool_name": "read_file", "arguments": {"file_path": "backend/auth.py"}}
+{"action": "tool_call", "tool_name": "analyze_relationships", "arguments": {"query": "authenticate"}}
 ```
 
-## Rules
-1. Respond with ONLY JSON - no markdown, no explanations
-2. Use tools to gather real data before answering
-3. Stream of work: Tool → Tool → Tool → Complete
-4. When you have enough information, use "complete" action
-5. Never guess - if you can't find something, try alternative searches
-6. If a search returns no results, try related terms before giving up
-7. **CRITICAL: DO NOT REPEAT THE SAME TOOL CALL TWICE** - Track what you've already tried
-8. If you already searched for "authentication", don't search again - try "auth", "oauth", etc. instead
-9. If you already read a file, don't read it again - read a different file or use a different tool
-10. Vary your approach: use different search terms, read different files, use analyze_relationships
+Examples of WRONG format (NEVER do this):
+```json
+{"action": "search_symbols", "arguments": {"query": "..."}}  ← WRONG! Don't use tool name as action
+{"action": "read_file", "file_path": "..."}  ← WRONG! Don't use tool name as action
+```
+
+---
+
+**FORMAT B: Finish and Answer**
+```json
+{
+  "action": "complete",
+  "content": "Your final answer based on findings"
+}
+```
+
+---
+
+## Critical Rules
+1. **ONLY JSON** - Your entire response must be valid JSON. Nothing else.
+2. **"action" field is ALWAYS "tool_call" OR "complete"** - Never anything else.
+3. **"tool_name" field (when action is tool_call)** - Must be one of: search_symbols, read_file, analyze_relationships
+4. **DO NOT REPEAT** the same tool call twice (line 379-382 below explain this in detail)
+5. Use tools to gather real data before answering
+6. Stream of work: Tool → Tool → Tool → Complete
 
 ## Smart Fallback Strategy
 CRITICAL: If search_symbols returns "No symbols found", DO NOT GIVE UP!
@@ -489,6 +511,16 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
                             response_text = json_match.group(1).strip()
 
                     action_data = json.loads(response_text)
+                    # Debug: Log what LLM decided to do
+                    action = action_data.get("action", "unknown")
+                    if action == "tool_call":
+                        tool_name = action_data.get("tool_name", "unknown")
+                        arguments = action_data.get("arguments", {})
+                        logger.info(f"[LLM_DECISION] Iteration {iteration}: tool={tool_name}, args={arguments}")
+                    elif action == "complete":
+                        logger.info(f"[LLM_DECISION] Iteration {iteration}: action=complete (answer ready)")
+                    else:
+                        logger.info(f"[LLM_DECISION] Iteration {iteration}: action={action} (malformed)")
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to parse LLM JSON response. Raw: {response_text[:200]}")
 
