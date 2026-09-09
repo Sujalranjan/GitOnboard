@@ -25,6 +25,66 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/llm", tags=["llm"])
 
 
+# ===== Error Message Formatting =====
+
+def format_error_message(error: Exception) -> str:
+    """
+    Format error messages to clearly tell developers what failed.
+    Detects resource exhaustion, timeouts, and connection issues.
+    """
+    error_str = str(error).lower()
+    error_type = type(error).__name__
+
+    # Memory/OOM errors
+    if any(x in error_str for x in ["oom", "out of memory", "memory", "cuda out of memory", "no space"]):
+        return (
+            "❌ LOCAL MODEL MEMORY LIMIT EXCEEDED\n\n"
+            "The local model server (Ollama) ran out of memory while processing your request.\n\n"
+            "**What failed:** Model inference requires more GPU/CPU memory than available.\n"
+            "**Default model:** Qwen 3 4B Instruct (recommended for 8GB+ RAM)\n\n"
+            "**Solutions:**\n"
+            "1. Reduce repository size or query complexity\n"
+            "2. Restart Ollama: `ollama serve`\n"
+            "3. Pull Qwen 3 4B: `ollama pull qwen:3-4b-instruct`\n"
+            "4. Check available GPU/CPU memory: `nvidia-smi` or `free -h`\n"
+        )
+
+    # Connection/timeout errors
+    if any(x in error_str for x in ["disconnected", "connection refused", "timeout", "connection"]):
+        return (
+            "❌ LOCAL MODEL SERVER CONNECTION FAILED\n\n"
+            "Cannot connect to Ollama server. The model service may have crashed or is not running.\n\n"
+            "**What failed:** Network connection to local model inference server.\n"
+            "**Default model:** Qwen 3 4B Instruct (should run on `localhost:11434`)\n\n"
+            "**Solutions:**\n"
+            "1. Start Ollama server: `ollama serve`\n"
+            "2. Verify Ollama is running: `curl http://localhost:11434/api/tags`\n"
+            "3. Check logs: `ollama logs` or system logs\n"
+            "4. Restart Docker/system if needed\n"
+        )
+
+    # JSON parsing errors
+    if "json" in error_str or "jsondecodeerror" in error_type.lower():
+        return (
+            "❌ INVALID MODEL RESPONSE\n\n"
+            "The model returned malformed data that could not be parsed.\n\n"
+            "**What failed:** JSON parsing of model output (model sent invalid JSON).\n"
+            "**Default model:** Qwen 3 4B Instruct (instruction-tuned for structured output)\n\n"
+            "**Solutions:**\n"
+            "1. Ensure Qwen 3 4B Instruct is running (not Code variant)\n"
+            "2. Restart the model: `ollama pull qwen:3-4b-instruct && ollama serve`\n"
+            "3. Check model prompt compatibility with system prompt\n"
+        )
+
+    # Generic fallback
+    return (
+        f"❌ ANALYSIS FAILED: {error_type}\n\n"
+        f"**Error details:** {str(error)}\n\n"
+        "**Default model:** Qwen 3 4B Instruct\n\n"
+        "**Contact:** Check application logs for full stack trace.\n"
+    )
+
+
 # ===== Repository Context Building =====
 
 async def build_repository_context(db: Session, repo: Repository, analysis_id: Optional[int] = None) -> str:
@@ -665,6 +725,7 @@ Instructions:
 
         except Exception as e:
             logger.error(f"Error analyzing repository: {e}", exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'content': f'Analysis failed: {str(e)}'})}\n\n"
+            error_message = format_error_message(e)
+            yield f"data: {json.dumps({'type': 'error', 'content': error_message})}\n\n"
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
