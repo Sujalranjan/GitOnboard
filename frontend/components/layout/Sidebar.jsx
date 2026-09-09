@@ -11,7 +11,6 @@ import {
   Sparkles,
   GitMerge,
   GitCompare,
-  Zap,
   MessageCircle
 } from 'lucide-react';
 
@@ -19,7 +18,6 @@ const navItems = [
   { id: 'overview', label: 'Dashboard', icon: LayoutDashboard, path: '' },
   { id: 'workspace', label: 'AI Workspace IDE', icon: Sparkles, path: '/workspace' },
   { id: 'conversation-flow', label: 'LLM Conversation Flow', icon: MessageCircle, path: '/conversation-flow' },
-  { id: 'pipeline', label: '8-Stage Pipeline', icon: Zap, path: '/pipeline' },
   { id: 'trace', label: 'Feature Tracing', icon: GitMerge, path: '/trace' },
   { id: 'explorer', label: 'File Explorer', icon: FolderTree, path: '/explorer' },
   { id: 'architecture', label: 'Architecture', icon: Network, path: '/architecture' },
