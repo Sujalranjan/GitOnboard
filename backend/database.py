@@ -6,11 +6,16 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.config import settings
 
-# Support both the legacy DATABASE_URL env var and the config-backed database URL.
-# Docker Compose still injects DATABASE_URL, while local development uses settings.database_url.
-raw_url = os.getenv("DATABASE_URL") or settings.database_url or ""
-SQLALCHEMY_DATABASE_URL = raw_url.strip() if raw_url else "sqlite:///data/local.db"
+# Database URL from environment or config
+raw_url = os.getenv("DATABASE_URL") or settings.database_url
+is_test_mode = os.getenv("DEPLOYMENT_TYPE") == "TEST"
 
+if not raw_url or not raw_url.strip():
+    raise ValueError("DATABASE_URL must be configured")
+
+SQLALCHEMY_DATABASE_URL = raw_url.strip()
+
+# Normalize PostgreSQL URL formats (production/local dev)
 if SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
     try:
         import psycopg
@@ -20,8 +25,7 @@ if SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
             import psycopg2
             SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
         except ImportError:
-            fallback_db = "sqlite:///:memory:" if os.getenv("DEPLOYMENT_TYPE") == "TEST" else "sqlite:///data/local.db"
-            SQLALCHEMY_DATABASE_URL = fallback_db
+            raise ImportError("psycopg or psycopg2 is required for PostgreSQL connections")
 elif "postgresql" in SQLALCHEMY_DATABASE_URL:
     try:
         if "psycopg2" in SQLALCHEMY_DATABASE_URL:
@@ -29,9 +33,13 @@ elif "postgresql" in SQLALCHEMY_DATABASE_URL:
         else:
             import psycopg
     except ImportError:
-        fallback_db = "sqlite:///:memory:" if os.getenv("DEPLOYMENT_TYPE") == "TEST" else "sqlite:///data/local.db"
-        SQLALCHEMY_DATABASE_URL = fallback_db
+        raise ImportError("psycopg or psycopg2 is required for PostgreSQL connections")
 
+# SQLite only allowed in test mode
+if "sqlite" in SQLALCHEMY_DATABASE_URL.lower() and not is_test_mode:
+    raise ValueError("SQLite is only allowed in TEST mode. Use PostgreSQL for production/local development.")
+
+# Configure connection pool
 engine_args = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     from sqlalchemy.pool import StaticPool
