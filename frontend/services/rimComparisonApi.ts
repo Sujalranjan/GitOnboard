@@ -85,6 +85,68 @@ export interface RIMComparisonResponse {
   trace: RIMTrace;
 }
 
+/**
+ * Stream LLM analysis for RIM comparison.
+ * Filters to only show final-answer messages.
+ */
+export async function streamRimAnalysis(
+  repoHash: string,
+  question: string,
+  onMessage: (type: string, content: string) => void,
+  onError: (error: string) => void
+): Promise<void> {
+  try {
+    const response = await fetch('/api/llm/analyze/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: question,
+        repo_hash: repoHash,
+        model: localStorage.getItem('selectedModel') || 'qwen3:4b-instruct',
+        show_tool_details: false,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to analyze: ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines[lines.length - 1];
+
+      for (let i = 0; i < lines.length - 1; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === 'final-answer') {
+              onMessage('final-answer', data.content);
+            } else if (data.type === 'error') {
+              onError(`Error: ${data.content}`);
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE data:', e);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    onError(error instanceof Error ? error.message : 'Failed to analyze query');
+  }
+}
+
 export async function compareRimVsBaseline(
   repoName: string,
   question: string
