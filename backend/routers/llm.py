@@ -361,36 +361,36 @@ The "action" field determines what happens NEXT. It has ONLY 2 possible values:
 
 **FORMAT A: Call a Tool**
 ```json
-{
+{{
   "action": "tool_call",
   "tool_name": "search_symbols",
-  "arguments": {
+  "arguments": {{
     "query": "search term"
-  }
-}
+  }}
+}}
 ```
 
 Examples of CORRECT tool calls:
 ```json
-{"action": "tool_call", "tool_name": "search_symbols", "arguments": {"query": "authentication"}}
-{"action": "tool_call", "tool_name": "read_file", "arguments": {"file_path": "backend/auth.py"}}
-{"action": "tool_call", "tool_name": "analyze_relationships", "arguments": {"query": "authenticate"}}
+{{"action": "tool_call", "tool_name": "search_symbols", "arguments": {{"query": "authentication"}}}}
+{{"action": "tool_call", "tool_name": "read_file", "arguments": {{"file_path": "backend/auth.py"}}}}
+{{"action": "tool_call", "tool_name": "analyze_relationships", "arguments": {{"query": "authenticate"}}}}
 ```
 
 Examples of WRONG format (NEVER do this):
 ```json
-{"action": "search_symbols", "arguments": {"query": "..."}}  ← WRONG! Don't use tool name as action
-{"action": "read_file", "file_path": "..."}  ← WRONG! Don't use tool name as action
+{{"action": "search_symbols", "arguments": {{"query": "..."}}}}  ← WRONG! Don't use tool name as action
+{{"action": "read_file", "file_path": "..."}}  ← WRONG! Don't use tool name as action
 ```
 
 ---
 
 **FORMAT B: Finish and Answer**
 ```json
-{
+{{
   "action": "complete",
   "content": "Your final answer based on findings"
-}
+}}
 ```
 
 ---
