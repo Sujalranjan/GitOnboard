@@ -45,7 +45,7 @@ def trace_feature(
         try:
             _, latest = get_latest_analysis(repo_name, db, current_user)
             analysis_id = latest.id
-            logger.info(f"[TRACE] Got analysis_id={analysis_id} for repo '{repo_name}'")
+            logger.debug(f"[TRACE] Got analysis_id={analysis_id} for repo '{repo_name}'")
         except HTTPException:
             raise  # Re-raise auth/not-found errors
         except Exception as e:
@@ -59,19 +59,19 @@ def trace_feature(
             chroma_collection=collection,
             rrf_k=60
         )
-        logger.info(f"[TRACE] HybridRetriever initialized. BM25 loaded: {retriever.bm25_index is not None}")
+        logger.debug(f"[TRACE] HybridRetriever initialized. BM25 loaded: {retriever.bm25_index is not None}")
 
         retrieved_items = retriever.retrieve(query=search_q, top_k=10, expand_with_fact_store=False)
-        logger.info(f"[TRACE] Retrieved {len(retrieved_items)} results for query '{search_q}'")
+        logger.debug(f"[TRACE] Retrieved {len(retrieved_items)} results for query '{search_q}'")
         if retrieved_items:
-            logger.info(f"[TRACE] First item: {retrieved_items[0]}")
+            logger.debug(f"[TRACE] First item: {retrieved_items[0]}")
 
         seed_nodes = []
         if retrieved_items:
-            logger.info(f"[TRACE] Starting entity matching with {len(retrieved_items)} retrieved items")
+            logger.debug(f"[TRACE] Starting entity matching with {len(retrieved_items)} retrieved items")
             try:
                 query_layer = get_or_build_model(repo_name, db, current_user)
-                logger.info(f"[TRACE] Got model with {len(query_layer.model.entities)} entities")
+                logger.debug(f"[TRACE] Got model with {len(query_layer.model.entities)} entities")
             except Exception as e:
                 logger.error(f"[TRACE] Failed to build model for trace: {e}", exc_info=True)
                 return {"trace": None, "flow": []}
@@ -85,20 +85,20 @@ def trace_feature(
                 typ = (item.entity_type.value if hasattr(item, 'entity_type') else
                       item.get("match_type", item.get("type")))
                 ent_id = None
-                logger.info(f"[TRACE] Processing item: name='{name}', fp='{fp}', type='{typ}'")
+                logger.debug(f"[TRACE] Processing item: name='{name}', fp='{fp}', type='{typ}'")
 
                 for e in query_layer.model.entities.values():
                     if e.name == name or (name and e.name.lower() == name.lower()):
                         if not fp or e.metadata.get("file_id") == fp or e.location.repository_path == fp or fp in e.location.repository_path or not e.location.repository_path:
                             ent_id = e.id
-                            logger.info(f"[TRACE] Found matching entity: id={ent_id}")
+                            logger.debug(f"[TRACE] Found matching entity: id={ent_id}")
                             break
 
                 if not ent_id:
                     for e in query_layer.model.entities.values():
                         if e.name.lower() == str(name).lower():
                             ent_id = e.id
-                            logger.info(f"[TRACE] Found matching entity (fallback): id={ent_id}")
+                            logger.debug(f"[TRACE] Found matching entity (fallback): id={ent_id}")
                             break
 
                 if ent_id:
@@ -109,7 +109,7 @@ def trace_feature(
                         item_dict = dict(item)
                     item_dict["id"] = ent_id
                     seed_nodes.append(item_dict)
-                    logger.info(f"[TRACE] Added to seed_nodes: {ent_id}")
+                    logger.debug(f"[TRACE] Added to seed_nodes: {ent_id}")
                 else:
                     logger.warning(f"[TRACE] No matching entity found for: {name}")
     except Exception as e:
@@ -117,7 +117,7 @@ def trace_feature(
         seed_nodes = []
 
     if not seed_nodes:
-        logger.info(f"[TRACE] No seed nodes found, returning empty trace")
+        logger.debug(f"[TRACE] No seed nodes found, returning empty trace")
         return {"trace": None, "flow": []}
 
     logger.info(f"[TRACE] Have {len(seed_nodes)} seed nodes, building trace")
