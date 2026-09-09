@@ -163,8 +163,17 @@ async def execute_read_file(file_path: str, db: Session, analysis_id: Optional[i
         if hasattr(fact_file, 'content') and fact_file.content:
             content = fact_file.content
         elif hasattr(fact_file, 'blob_name') and fact_file.blob_name:
-            # File content is in blob storage - for now return a placeholder
-            return f"File: {file_path}\n[Content stored in blob storage - {fact_file.blob_name}]\n(Full content retrieval would require blob client)"
+            # File content is in blob storage - fetch it
+            try:
+                from backend.storage import get_storage
+                storage = get_storage()
+                content = storage.get_object_text(fact_file.blob_name)
+                logger.debug(f"[READ_FILE_BLOB] Fetched {len(content)} bytes from blob: {fact_file.blob_name}")
+            except FileNotFoundError:
+                return f"File exists in index but blob not found: {file_path} (blob: {fact_file.blob_name})"
+            except Exception as e:
+                logger.warning(f"[READ_FILE_BLOB] Failed to fetch blob {fact_file.blob_name}: {e}")
+                return f"File exists but could not retrieve content from blob storage: {file_path}"
         else:
             return f"File exists but content not available: {file_path}"
 
