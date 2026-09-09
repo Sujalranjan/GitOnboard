@@ -8,7 +8,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U myuser -d repository_intelligence"]
       interval: 5s
@@ -34,7 +34,7 @@ services:
       - "10101:10001"
       - "10102:10002"
     volumes:
-      - azurite_data:/data
+      - ./azurite_data:/data
 
   backend:
     build:
@@ -85,16 +85,4 @@ services:
         condition: service_started
 
 volumes:
-  postgres_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./postgres_data
   chroma_cache:
-  azurite_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./azurite_data
