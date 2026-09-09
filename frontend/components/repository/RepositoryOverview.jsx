@@ -276,33 +276,3 @@ export default function RepositoryOverview({ repoName, data: scanData }) {
     </div>
   );
 }
-                        </div>
-                      )}
-                      
-                      {warning > 0 && (
-                        <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-900/60 rounded-lg flex items-start gap-3">
-                          <AlertTriangle className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm font-bold text-amber-900 dark:text-amber-200">{warning} Warnings</p>
-                            <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">Code smells or structural issues to review.</p>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-                
-                <div className="mt-auto pt-4">
-                  <Link href={`/repository/${repoName}/health`} className="w-full inline-flex justify-center items-center px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-medium rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-colors">
-                    Review all findings
-                  </Link>
-                </div>
-              </>
-            )}
-          </div>
-        </Card>
-
-      </div>
-    </div>
-  );
-}
