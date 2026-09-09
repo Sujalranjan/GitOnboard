@@ -212,6 +212,54 @@ export default function RIMComparisonPage() {
   );
 }
 
+interface MetricComparisonRowProps {
+  label: string;
+  withoutValue: any;
+  withValue: any;
+  diff: any;
+  pct?: number;
+  lowerIsBetter?: boolean;
+}
+
+const MetricComparisonRow = ({
+  label,
+  withoutValue,
+  withValue,
+  diff,
+  pct,
+  lowerIsBetter = false,
+}: MetricComparisonRowProps) => {
+  let winner = '';
+  let winnerColor = '';
+
+  if (typeof diff === 'number' && diff !== 0) {
+    if (lowerIsBetter) {
+      winner = diff < 0 ? 'WITH RIM Wins ✓' : 'WITHOUT RIM Better';
+      winnerColor = diff < 0 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400';
+    } else {
+      winner = diff > 0 ? 'WITH RIM Wins ✓' : 'WITHOUT RIM Better';
+      winnerColor = diff > 0 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400';
+    }
+  }
+
+  return (
+    <tr className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
+      <td className="py-2 px-3 font-semibold text-slate-900 dark:text-slate-100">{label}</td>
+      <td className="py-2 px-3 text-right text-slate-600 dark:text-slate-400 font-mono">{withoutValue}</td>
+      <td className="py-2 px-3 text-right text-slate-600 dark:text-slate-400 font-mono">{withValue}</td>
+      <td className="py-2 px-3 text-right">
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="font-mono text-slate-600 dark:text-slate-400">
+            {typeof diff === 'string' ? diff : (diff > 0 ? '+' : '') + diff}
+            {pct !== null && pct !== undefined ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}
+          </span>
+          {winner && <span className={`text-xs font-semibold ${winnerColor}`}>{winner}</span>}
+        </div>
+      </td>
+    </tr>
+  );
+};
+
 interface ComparisonResultProps {
   run: ComparisonRun;
   index: number;
@@ -361,16 +409,59 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
       </div>
 
       {/* Metrics Comparison */}
-      {withoutRim && withRim && Object.keys(metricsDiff).length > 0 && (
+      {withoutRim && withRim && (
         <Card>
-          <CardHeader title="Metrics Comparison (WITH RIM vs WITHOUT RIM)" />
-          <div className="p-6">
-            <div className="space-y-3">
-              {renderMetricDiff('Tool Calls', metricsDiff.tool_calls_diff, 'tool_calls_pct')}
-              {renderMetricDiff('Files Retrieved', metricsDiff.files_diff)}
-              {renderMetricDiff('Total Tokens', metricsDiff.tokens_diff, 'tokens_pct')}
-              {renderMetricDiff('Latency (ms)', metricsDiff.latency_diff_ms?.toFixed(0))}
-            </div>
+          <CardHeader title="Metrics Comparison" />
+          <div className="p-6 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th className="text-left py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">Metric</th>
+                  <th className="text-right py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">WITHOUT RIM</th>
+                  <th className="text-right py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">WITH RIM</th>
+                  <th className="text-right py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">Difference / Winner</th>
+                </tr>
+              </thead>
+              <tbody>
+                <MetricComparisonRow
+                  label="Tool Calls"
+                  withoutValue={withoutRim.retrieval_metrics.tool_call_count}
+                  withValue={withRim.retrieval_metrics.tool_call_count}
+                  diff={metricsDiff.tool_calls_diff}
+                  pct={metricsDiff.tool_calls_pct}
+                  lowerIsBetter={true}
+                />
+                <MetricComparisonRow
+                  label="Files Retrieved"
+                  withoutValue={withoutRim.retrieval_metrics.files_retrieved}
+                  withValue={withRim.retrieval_metrics.files_retrieved}
+                  diff={metricsDiff.files_diff}
+                  lowerIsBetter={false}
+                />
+                <MetricComparisonRow
+                  label="Input Tokens"
+                  withoutValue={withoutRim.llm_efficiency_metrics.actual_prompt_tokens}
+                  withValue={withRim.llm_efficiency_metrics.actual_prompt_tokens}
+                  diff={metricsDiff.tokens_diff}
+                  pct={metricsDiff.tokens_pct}
+                  lowerIsBetter={true}
+                />
+                <MetricComparisonRow
+                  label="Total Latency (ms)"
+                  withoutValue={(withoutRim.llm_efficiency_metrics.total_latency_ms ?? 0).toFixed(0)}
+                  withValue={(withRim.llm_efficiency_metrics.total_latency_ms ?? 0).toFixed(0)}
+                  diff={metricsDiff.latency_diff_ms?.toFixed(0)}
+                  lowerIsBetter={true}
+                />
+                <MetricComparisonRow
+                  label="RIM Entities Accessed"
+                  withoutValue={0}
+                  withValue={withRim.retrieval_metrics.rim_entities_accessed_count}
+                  diff="-"
+                  lowerIsBetter={false}
+                />
+              </tbody>
+            </table>
           </div>
         </Card>
       )}
