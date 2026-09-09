@@ -112,17 +112,21 @@ def trace_feature(
         seed_nodes = []
 
     if not seed_nodes:
+        logger.info(f"[TRACE] No seed nodes found, returning empty trace")
         return {"trace": None, "flow": []}
+
+    logger.info(f"[TRACE] Have {len(seed_nodes)} seed nodes, building trace")
 
     try:
         query_layer = get_or_build_model(repo_name, db, current_user)
     except Exception as e:
-        logger.error(f"Failed to build model for trace: {e}")
+        logger.error(f"[TRACE] Failed to build model for trace: {e}")
         return {"trace": None, "flow": []}
 
     from backend.intelligence.feature_tracing import DeterministicTracer
     tracer = DeterministicTracer(query_layer.model)
     trace_result = tracer.trace_feature(seed_nodes)
+    logger.info(f"[TRACE] Tracer returned: {trace_result}")
 
     flow = []
     if isinstance(trace_result, dict):
