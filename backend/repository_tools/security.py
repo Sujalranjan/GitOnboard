@@ -92,14 +92,19 @@ def validate_repo_path(repo_root: Path, relative_path: str, allow_binary: bool =
 def clamp_line_range(total_lines: int, start_line: int = 1, end_line: int | None = None) -> Tuple[int, int]:
     """
     Validates and bounds 1-indexed line ranges to prevent unbounded memory usage.
+    If end_line is provided, honor it (up to total_lines).
+    If end_line is None, apply MAX_READ_LINES limit from start.
     """
     if total_lines <= 0:
         return 1, 0
 
     s = max(1, start_line)
-    if end_line is None or end_line > total_lines:
+
+    if end_line is None:
+        # No end specified - apply MAX_READ_LINES limit from start
         e = min(total_lines, s + MAX_READ_LINES - 1)
     else:
+        # End specified - honor it (capped at total_lines)
         e = min(total_lines, end_line)
 
     if s > total_lines:
