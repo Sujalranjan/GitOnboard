@@ -795,7 +795,18 @@ class QALoop:
         if tool_name == "read_file" and isinstance(data, dict):
             # Check if data was truncated by sanitization
             if data.get("_truncated"):
-                return f"[read_file] TRUNCATED: {data.get('warning', 'File content too large')}"
+                path = data.get('path', 'unknown file')
+                return (
+                    f"[read_file] FILE TOO LARGE: {path} exceeds size limit.\n\n"
+                    f"SOLUTION: Use one of these approaches:\n"
+                    f"1. search_repository: Find specific functions/classes in the file\n"
+                    f"   Example: search_repository with query 'function_name' or 'class_name'\n"
+                    f"2. read_file with line range: Read specific sections\n"
+                    f"   Example: read_file('{path}', start_line=50, end_line=150)\n"
+                    f"3. get_symbol: Find definitions of specific symbols\n"
+                    f"   Example: get_symbol('MyClass') or get_symbol('my_function')\n\n"
+                    f"These tools will help you locate and read relevant parts without loading the entire file."
+                )
 
             path = data.get('path', '')
             start_line = data.get('start_line', 1)
