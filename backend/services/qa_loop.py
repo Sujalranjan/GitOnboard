@@ -9,7 +9,7 @@ Tracks tool calls, file reads, and RIM metadata access separately.
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Awaitable, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from backend.agent.loop.contracts import AgentLoopConfig, StopReason, ToolObservation
 from backend.agent.loop.guardrails import LoopGuardrails
@@ -78,6 +78,7 @@ class QALoop:
         request_id: Optional[str] = None,
         repository: Optional[str] = None,
         mode: Optional[str] = None,  # "baseline" or "rim"
+        on_turn: Optional[Callable[["QALoopTurn"], Awaitable[None]]] = None,
     ):
         self.llm_service = llm_service
         self.tool_dispatch = tool_dispatch
@@ -89,6 +90,7 @@ class QALoop:
         self.request_id = request_id
         self.repository = repository
         self.mode = mode
+        self.on_turn = on_turn
 
     async def run(self, question: str) -> QALoopResult:
         """
@@ -133,6 +135,8 @@ class QALoop:
                     turn_index, messages, llm_total_ms, tool_total_ms, loop_start
                 )
                 result.turns.append(turn)
+                if self.on_turn:
+                    await self.on_turn(turn)
                 result.answer = turn.raw_model_output
                 break
 
@@ -245,12 +249,16 @@ class QALoop:
                         "content": "[VERIFICATION REQUIRED] You have claimed repository-wide absence without performing a search. You must search the repository or inspect relevant files before making absence claims. Please perform a search or file inspection to verify your claim.",
                     })
                     result.turns.append(turn)
+                    if self.on_turn:
+                        await self.on_turn(turn)
                     # Continue loop to force retrieval
                     continue
 
                 result.answer = answer_candidate
                 result.stop_reason = StopReason.COMPLETED_FOR_VERIFICATION
                 result.turns.append(turn)
+                if self.on_turn:
+                    await self.on_turn(turn)
                 logger.info(f"[QALoop] LLM provided final answer at turn {turn_index}")
                 break
 
@@ -276,7 +284,11 @@ class QALoop:
                         turn_index + 1, messages, llm_total_ms, tool_total_ms, loop_start
                     )
                     result.turns.append(turn)
+                    if self.on_turn:
+                        await self.on_turn(turn)
                     result.turns.append(final_turn)
+                    if self.on_turn:
+                        await self.on_turn(final_turn)
                     result.answer = final_turn.raw_model_output
                     break
 
@@ -383,6 +395,8 @@ class QALoop:
                     "formatted_message": formatted_message,  # Include formatted message for audit trail
                 }
                 result.turns.append(turn)
+                if self.on_turn:
+                    await self.on_turn(turn)
                 result.tool_call_count += 1
                 logger.debug(f"[QALoop] Turn {turn_index}: {tool_name} executed in {tool_elapsed*1000:.0f}ms")
 
@@ -398,6 +412,8 @@ class QALoop:
                     "content": "[MALFORMED RESPONSE] Please respond with valid JSON: either {\"action\": \"tool_call\", \"tool_name\": \"...\", \"arguments\": {...}} or {\"action\": \"final_answer\", \"answer\": \"...\"}",
                 })
                 result.turns.append(turn)
+                if self.on_turn:
+                    await self.on_turn(turn)
 
         # Calculate latencies
         loop_elapsed = time.perf_counter() - loop_start
