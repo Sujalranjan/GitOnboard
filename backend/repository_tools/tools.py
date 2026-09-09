@@ -555,6 +555,11 @@ class RepositoryToolLayer:
                 logger.debug(f"Error retrieving for query '{sub_query}': {e}")
                 continue
 
+        # If HybridRetriever returned no results, fall back to basic search methods
+        if not combined:
+            logger.debug(f"HybridRetriever returned 0 results, falling back to basic search for queries: {sub_queries}")
+            return self._search_repository_fallback(query, limit)
+
         return combined[:max_total]
 
     def _search_repository_fallback(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
