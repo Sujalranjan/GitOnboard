@@ -108,11 +108,24 @@ Repository Intelligence Graph facts (structural relationships):
 
 {rim_metadata_block}
 
-**IMPORTANT: RIM is a reference only** - use it to cross-check findings. Always follow this workflow:
+**WHEN TO USE QUERY_RIM:**
+Use `query_rim` when the question involves relationships, dependencies, or connections between repository entities. It can identify:
+- CALLS: which functions call which
+- IMPORTS: which modules import which
+- INHERITS: inheritance relationships
+- CONTAINS: what a module/class contains
+- ROUTE_HANDLER: API routes and handlers
+- DATABASE_ACCESS: database interactions
+
+**WORKFLOW:**
 1. Search for relevant code using search_repository or find_files
-2. Read the actual source files using read_file
-3. Use query_rim ONLY to understand specific relationships between entities you've found (e.g., "what calls this function?", "what files import this?")
-4. Provide your answer based on what you've READ, not just RIM relationships"""
+2. Read source files to understand implementation details
+3. Determine: Does this question need structural relationships?
+   - NO (implementation details, algorithms, syntax) → Answer from source code
+   - YES (dependencies, connections, relationships) → Use query_rim to explore
+4. Combine findings and provide your answer
+
+**IMPORTANT:** Do not use query_rim just to use RIM. Use it only when relationship information is relevant to answering the question."""
         else:
             rim_section = ""  # baseline gets no RIM section at all
 
