@@ -598,6 +598,26 @@ class HybridRetriever:
 
         return valid_candidates
 
+    def _filter_dot_folders(self, results: List[RetrieverResult]) -> List[RetrieverResult]:
+        """Filter out results from dot-folders (.workspace, .archive, .cache, etc.)."""
+        filtered = []
+        dot_folder_prefixes = ('.workspace', '.archive', '.cache', '.git', '.env', '__pycache__', 'node_modules')
+
+        for result in results:
+            if result.file_path:
+                # Check if file path starts with any dot-folder prefix
+                path_parts = result.file_path.split('/')
+                if not any(part.startswith('.') for part in path_parts):
+                    filtered.append(result)
+            else:
+                # Keep results without file_path (shouldn't happen but be safe)
+                filtered.append(result)
+
+        if len(filtered) < len(results):
+            logger.debug(f"[Filter] Removed {len(results) - len(filtered)} results from dot-folders")
+
+        return filtered
+
     def retrieve(
         self,
         query: str,
@@ -643,6 +663,7 @@ class HybridRetriever:
         )
 
         if results:
+            results = self._filter_dot_folders(results)
             return results
 
         # If primary returned empty and fallback enabled, try alternatives
@@ -652,7 +673,7 @@ class HybridRetriever:
                 q, top_k, expand_with_fact_store, enable_graph_expansion
             )
 
-        return results
+        return self._filter_dot_folders(results)
 
     def _retrieve_primary(
         self,
