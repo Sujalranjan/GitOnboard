@@ -147,6 +147,62 @@ export async function streamRimAnalysis(
   }
 }
 
+export async function streamRimComparison(
+  repoName: string,
+  question: string,
+  onWithoutRim: (result: ComparisonSide) => void,
+  onWithRim: (result: ComparisonSide, metricsDiff: Record<string, any>) => void,
+  onError: (error: string) => void
+): Promise<void> {
+  try {
+    const response = await fetch(`/api/repos/${encodeURIComponent(repoName)}/rim-comparison/compare-stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to compare: ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines[lines.length - 1];
+
+      for (let i = 0; i < lines.length - 1; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === 'without_rim_complete' && data.without_rim) {
+              onWithoutRim(data.without_rim);
+            } else if (data.type === 'with_rim_complete' && data.with_rim) {
+              onWithRim(data.with_rim, data.metrics_diff || {});
+            } else if (data.type === 'error') {
+              onError(`Error: ${data.content}`);
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE data:', e);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    onError(error instanceof Error ? error.message : 'Failed to run comparison');
+  }
+}
+
 export async function compareRimVsBaseline(
   repoName: string,
   question: string

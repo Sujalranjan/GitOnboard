@@ -1,16 +1,18 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
-import { compareRimVsBaseline, RIMComparisonResponse } from '@/services/rimComparisonApi';
+import { streamRimComparison, ComparisonSide } from '@/services/rimComparisonApi';
 import { Card, CardHeader } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 
 interface ComparisonRun {
   question: string;
-  result: RIMComparisonResponse;
+  withoutRim: ComparisonSide | null;
+  withRim: ComparisonSide | null;
+  metricsDiff: Record<string, any>;
   timestamp: number;
   loadingWithoutRim: boolean;
   loadingWithRim: boolean;
@@ -35,48 +37,53 @@ export default function RIMComparisonPage() {
     setError(null);
 
     try {
-      // Create run with loading states
       const newRun: ComparisonRun = {
         question,
-        result: null as any,
+        withoutRim: null,
+        withRim: null,
+        metricsDiff: {},
         timestamp: Date.now(),
         loadingWithoutRim: true,
         loadingWithRim: true,
       };
       setRuns([newRun, ...runs]);
 
-      // Call comparison endpoint (runs both in parallel on backend)
-      const result = await compareRimVsBaseline(repoName, question);
-
-      // Update run with result and show WITHOUT RIM first
-      setRuns((prevRuns) => {
-        const updated = [...prevRuns];
-        updated[0] = {
-          ...updated[0],
-          result,
-          loadingWithoutRim: false,
-        };
-        return updated;
-      });
-
-      // Simulate delay before showing WITH RIM (visual flow)
-      setTimeout(() => {
-        setRuns((prevRuns) => {
-          const updated = [...prevRuns];
-          updated[0] = {
-            ...updated[0],
-            loadingWithRim: false,
-          };
-          return updated;
-        });
-      }, 500);
+      await streamRimComparison(
+        repoName,
+        question,
+        (withoutRimResult: ComparisonSide) => {
+          setRuns((prevRuns) => {
+            const updated = [...prevRuns];
+            updated[0] = {
+              ...updated[0],
+              withoutRim: withoutRimResult,
+              loadingWithoutRim: false,
+            };
+            return updated;
+          });
+        },
+        (withRimResult: ComparisonSide, metricsDiff: Record<string, any>) => {
+          setRuns((prevRuns) => {
+            const updated = [...prevRuns];
+            updated[0] = {
+              ...updated[0],
+              withRim: withRimResult,
+              metricsDiff,
+              loadingWithRim: false,
+            };
+            return updated;
+          });
+        },
+        (errorMsg: string) => {
+          setError(errorMsg);
+          setRuns((prevRuns) => prevRuns.slice(1));
+        }
+      );
 
       setQuestion('');
     } catch (err: any) {
       setError(err.message || 'Comparison failed. Please try again.');
       console.error('Comparison error:', err);
-      // Remove the failed run
-      setRuns((prevRuns) => prevRuns.slice(1));
     } finally {
       setIsLoading(false);
     }
@@ -91,6 +98,37 @@ export default function RIMComparisonPage() {
     if (e.key === 'Enter' && e.ctrlKey) {
       handleCompare();
     }
+  };
+
+  const renderMetricDiff = (label: string, value: any, pctKey?: string) => {
+    const pct = pctKey ? value[pctKey] : null;
+    let icon = null;
+    let color = 'text-slate-600 dark:text-slate-400';
+
+    if (typeof value === 'number') {
+      if (value > 0) {
+        icon = <ArrowUp className="w-4 h-4 text-red-500" />;
+        color = 'text-red-600 dark:text-red-400';
+      } else if (value < 0) {
+        icon = <ArrowDown className="w-4 h-4 text-green-500" />;
+        color = 'text-green-600 dark:text-green-400';
+      } else {
+        icon = <Minus className="w-4 h-4 text-slate-400" />;
+      }
+    }
+
+    return (
+      <div key={label} className="flex items-center justify-between text-xs">
+        <span className="text-slate-500 dark:text-slate-400">{label}</span>
+        <div className="flex items-center gap-1">
+          {icon}
+          <span className={`font-mono ${color}`}>
+            {typeof value === 'number' ? (value > 0 ? '+' : '') + value : value}
+            {pct !== null && pct !== undefined ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}
+          </span>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -180,7 +218,7 @@ interface ComparisonResultProps {
 }
 
 function ComparisonResult({ run, index }: ComparisonResultProps) {
-  const { result, loadingWithoutRim, loadingWithRim } = run;
+  const { withoutRim, withRim, metricsDiff, loadingWithoutRim, loadingWithRim } = run;
 
   return (
     <div className="mb-12">
@@ -201,7 +239,7 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                 <p className="text-slate-600 dark:text-slate-400">Processing...</p>
               </div>
             </div>
-          ) : (
+          ) : withoutRim ? (
             <div className="p-6 space-y-4">
               <div>
                 <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Answer</h4>
@@ -223,35 +261,35 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                       a: (props) => <a className="text-blue-600 dark:text-blue-400 underline" {...props} />,
                     }}
                   >
-                    {result.without_rim.answer}
+                    {withoutRim.answer}
                   </ReactMarkdown>
                 </div>
               </div>
 
-              {/* Metrics Summary */}
+              {/* Metrics */}
               <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4">
-                <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2 text-sm">Key Metrics</h4>
-                <div className="space-y-1 text-xs text-slate-700 dark:text-slate-300">
+                <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3 text-sm">Metrics</h4>
+                <div className="space-y-2 text-xs text-slate-700 dark:text-slate-300">
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Tool Calls:</span>
-                    <span className="font-mono">{result.without_rim.retrieval_metrics.tool_call_count}</span>
+                    <span className="font-mono">{withoutRim.retrieval_metrics.tool_call_count}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Files Retrieved:</span>
-                    <span className="font-mono">{result.without_rim.retrieval_metrics.files_retrieved}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Total Latency:</span>
-                    <span className="font-mono">{(result.without_rim.llm_efficiency_metrics.total_latency_ms ?? 0).toFixed(0)}ms</span>
+                    <span className="font-mono">{withoutRim.retrieval_metrics.files_retrieved}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Input Tokens:</span>
-                    <span className="font-mono">{result.without_rim.llm_efficiency_metrics.actual_prompt_tokens}</span>
+                    <span className="font-mono">{withoutRim.llm_efficiency_metrics.actual_prompt_tokens}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Total Latency:</span>
+                    <span className="font-mono">{(withoutRim.llm_efficiency_metrics.total_latency_ms ?? 0).toFixed(0)}ms</span>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
         </Card>
 
         {/* WITH RIM Panel */}
@@ -264,7 +302,7 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                 <p className="text-slate-600 dark:text-slate-400">Processing...</p>
               </div>
             </div>
-          ) : (
+          ) : withRim ? (
             <div className="p-6 space-y-4">
               <div>
                 <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Answer</h4>
@@ -286,41 +324,56 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                       a: (props) => <a className="text-blue-600 dark:text-blue-400 underline" {...props} />,
                     }}
                   >
-                    {result.with_rim.answer}
+                    {withRim.answer}
                   </ReactMarkdown>
                 </div>
               </div>
 
-              {/* Metrics Summary */}
+              {/* Metrics with Comparison */}
               <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4">
-                <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2 text-sm">Key Metrics</h4>
-                <div className="space-y-1 text-xs text-slate-700 dark:text-slate-300">
+                <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3 text-sm">Metrics</h4>
+                <div className="space-y-2 text-xs text-slate-700 dark:text-slate-300">
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Tool Calls:</span>
-                    <span className="font-mono">{result.with_rim.retrieval_metrics.tool_call_count}</span>
+                    <span className="font-mono">{withRim.retrieval_metrics.tool_call_count}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Files Retrieved:</span>
-                    <span className="font-mono">{result.with_rim.retrieval_metrics.files_retrieved}</span>
+                    <span className="font-mono">{withRim.retrieval_metrics.files_retrieved}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">RIM Entities:</span>
-                    <span className="font-mono">{result.with_rim.retrieval_metrics.rim_entities_accessed_count}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Total Latency:</span>
-                    <span className="font-mono">{(result.with_rim.llm_efficiency_metrics.total_latency_ms ?? 0).toFixed(0)}ms</span>
+                    <span className="font-mono">{withRim.retrieval_metrics.rim_entities_accessed_count}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Input Tokens:</span>
-                    <span className="font-mono">{result.with_rim.llm_efficiency_metrics.actual_prompt_tokens}</span>
+                    <span className="font-mono">{withRim.llm_efficiency_metrics.actual_prompt_tokens}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Total Latency:</span>
+                    <span className="font-mono">{(withRim.llm_efficiency_metrics.total_latency_ms ?? 0).toFixed(0)}ms</span>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
         </Card>
       </div>
+
+      {/* Metrics Comparison */}
+      {withoutRim && withRim && Object.keys(metricsDiff).length > 0 && (
+        <Card>
+          <CardHeader title="Metrics Comparison (WITH RIM vs WITHOUT RIM)" />
+          <div className="p-6">
+            <div className="space-y-3">
+              {renderMetricDiff('Tool Calls', metricsDiff.tool_calls_diff, 'tool_calls_pct')}
+              {renderMetricDiff('Files Retrieved', metricsDiff.files_diff)}
+              {renderMetricDiff('Total Tokens', metricsDiff.tokens_diff, 'tokens_pct')}
+              {renderMetricDiff('Latency (ms)', metricsDiff.latency_diff_ms?.toFixed(0))}
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
