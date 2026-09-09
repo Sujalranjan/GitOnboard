@@ -63,20 +63,27 @@ def trace_feature(
 
         retrieved_items = retriever.retrieve(query=search_q, top_k=10, expand_with_fact_store=False)
         logger.info(f"[TRACE] Retrieved {len(retrieved_items)} results for query '{search_q}'")
+        if retrieved_items:
+            logger.info(f"[TRACE] First item: {retrieved_items[0]}")
 
         seed_nodes = []
         if retrieved_items:
+            logger.info(f"[TRACE] Starting entity matching with {len(retrieved_items)} retrieved items")
             try:
                 query_layer = get_or_build_model(repo_name, db, current_user)
+                logger.info(f"[TRACE] Got model with {len(query_layer.model.entities)} entities")
             except Exception as e:
-                logger.error(f"Failed to build model for trace: {e}")
+                logger.error(f"[TRACE] Failed to build model for trace: {e}", exc_info=True)
                 return {"trace": None, "flow": []}
 
             from backend.intelligence.rim.enums import EntityType
             for item in retrieved_items:
-                fp = item.get("file_path")
-                name = item.get("match_name", item.get("name"))
-                typ = item.get("match_type", item.get("type"))
+                # Handle both dict and RetrieverResult objects
+                fp = item.file_path if hasattr(item, 'file_path') else item.get("file_path")
+                name = (item.entity_name if hasattr(item, 'entity_name') else
+                       item.get("match_name", item.get("name")))
+                typ = (item.entity_type.value if hasattr(item, 'entity_type') else
+                      item.get("match_type", item.get("type")))
                 ent_id = None
                 logger.info(f"[TRACE] Processing item: name='{name}', fp='{fp}', type='{typ}'")
 
