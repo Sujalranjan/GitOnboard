@@ -8,9 +8,9 @@ import { Card, CardHeader } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { Loader2, Send } from 'lucide-react';
 
-interface AnalysisResult {
+interface ComparisonResult {
   question: string;
-  answer: string;
+  withRimAnswer: string;
   timestamp: number;
 }
 
@@ -20,7 +20,7 @@ export default function RIMComparisonPage() {
 
   const [question, setQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [results, setResults] = useState<AnalysisResult[]>([]);
+  const [results, setResults] = useState<ComparisonResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [repoHash, setRepoHash] = useState<string | null>(null);
 
@@ -60,14 +60,14 @@ export default function RIMComparisonPage() {
     setError(null);
 
     try {
-      let answer = '';
+      let withRimAnswer = '';
 
       await streamRimAnalysis(
         repoHash,
         question,
         (type: string, content: string) => {
           if (type === 'final-answer') {
-            answer = content;
+            withRimAnswer = content;
           }
         },
         (errorMsg: string) => {
@@ -75,10 +75,10 @@ export default function RIMComparisonPage() {
         }
       );
 
-      if (answer) {
-        const newResult: AnalysisResult = {
+      if (withRimAnswer) {
+        const newResult: ComparisonResult = {
           question,
-          answer,
+          withRimAnswer,
           timestamp: Date.now(),
         };
         setResults([newResult, ...results]);
@@ -105,12 +105,12 @@ export default function RIMComparisonPage() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-950 p-8">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-2">RIM Analysis</h1>
+          <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-2">RIM Comparison</h1>
           <p className="text-slate-600 dark:text-slate-400">
-            Ask questions about your repository and get AI-powered answers using LLM Conversation Flow.
+            Compare repository-aware answers using LLM Conversation Flow with RIM enhancement.
           </p>
         </div>
 
@@ -118,7 +118,7 @@ export default function RIMComparisonPage() {
         <Card className="mb-8">
           <div className="p-6">
             <label className="block text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">
-              Question
+              Research Question
             </label>
             <textarea
               value={question}
@@ -147,7 +147,7 @@ export default function RIMComparisonPage() {
                 ) : (
                   <>
                     <Send className="w-4 h-4" />
-                    Analyze
+                    Compare
                   </>
                 )}
               </Button>
@@ -164,50 +164,79 @@ export default function RIMComparisonPage() {
 
         {/* Loading State */}
         {isLoading && (
-          <Card className="mb-8">
-            <div className="p-12">
-              <div className="flex flex-col items-center justify-center">
-                <Loader2 className="w-12 h-12 animate-spin text-blue-600 dark:text-blue-400 mb-4" />
-                <p className="text-slate-600 dark:text-slate-400">Analyzing your question...</p>
-                <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">This may take a few moments</p>
+          <div className="grid grid-cols-2 gap-6 mb-8">
+            <Card>
+              <CardHeader title="WITHOUT RIM" subtitle="Standard Retrieval" />
+              <div className="p-12">
+                <div className="flex flex-col items-center justify-center">
+                  <Loader2 className="w-12 h-12 animate-spin text-blue-600 dark:text-blue-400 mb-4" />
+                  <p className="text-slate-600 dark:text-slate-400">Processing...</p>
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+
+            <Card>
+              <CardHeader title="WITH RIM" subtitle="RIM-Enhanced Retrieval" />
+              <div className="p-12">
+                <div className="flex flex-col items-center justify-center">
+                  <Loader2 className="w-12 h-12 animate-spin text-blue-600 dark:text-blue-400 mb-4" />
+                  <p className="text-slate-600 dark:text-slate-400">Processing...</p>
+                </div>
+              </div>
+            </Card>
+          </div>
         )}
 
         {/* Results */}
         {results.map((result, idx) => (
-          <div key={result.timestamp} className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-4">
-              Question {results.length - idx}: {result.question}
+          <div key={result.timestamp} className="mb-12">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-6">
+              Test {results.length - idx}: {result.question}
             </h2>
 
-            <Card>
-              <CardHeader title="Answer" />
-              <div className="p-6">
-                <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed prose dark:prose-invert prose-sm max-w-none">
-                  <ReactMarkdown
-                    components={{
-                      p: (props) => <p className="mb-3" {...props} />,
-                      h1: (props) => <h1 className="text-lg font-bold mb-2" {...props} />,
-                      h2: (props) => <h2 className="text-base font-bold mb-2" {...props} />,
-                      h3: (props) => <h3 className="text-sm font-bold mb-2" {...props} />,
-                      ul: (props) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
-                      ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
-                      li: (props) => <li className="mb-1" {...props} />,
-                      code: (props: any) => props.inline
-                        ? <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono" {...props} />
-                        : <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs font-mono block mb-2 overflow-x-auto" {...props} />,
-                      pre: (props) => <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs" {...props} />,
-                      blockquote: (props) => <blockquote className="border-l-4 border-slate-300 dark:border-slate-600 pl-3 italic text-slate-600 dark:text-slate-400 mb-3" {...props} />,
-                      a: (props) => <a className="text-blue-600 dark:text-blue-400 underline" {...props} />,
-                    }}
-                  >
-                    {result.answer}
-                  </ReactMarkdown>
+            <div className="grid grid-cols-2 gap-6 mb-8">
+              {/* WITHOUT RIM (Placeholder) */}
+              <Card>
+                <CardHeader title="WITHOUT RIM" subtitle="Standard Retrieval" />
+                <div className="p-6">
+                  <div className="text-slate-500 dark:text-slate-400 italic text-sm">
+                    <p className="mb-2">This page now uses LLM Conversation Flow for unified analysis.</p>
+                    <p>The comparison requires the detailed RIM comparison endpoint.</p>
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+
+              {/* WITH RIM */}
+              <Card>
+                <CardHeader title="WITH RIM" subtitle="RIM-Enhanced Retrieval" />
+                <div className="p-6 space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Answer</h4>
+                    <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed prose dark:prose-invert prose-sm max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          p: (props) => <p className="mb-3" {...props} />,
+                          h1: (props) => <h1 className="text-lg font-bold mb-2" {...props} />,
+                          h2: (props) => <h2 className="text-base font-bold mb-2" {...props} />,
+                          h3: (props) => <h3 className="text-sm font-bold mb-2" {...props} />,
+                          ul: (props) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
+                          ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
+                          li: (props) => <li className="mb-1" {...props} />,
+                          code: (props: any) => props.inline
+                            ? <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono" {...props} />
+                            : <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs font-mono block mb-2 overflow-x-auto" {...props} />,
+                          pre: (props) => <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs" {...props} />,
+                          blockquote: (props) => <blockquote className="border-l-4 border-slate-300 dark:border-slate-600 pl-3 italic text-slate-600 dark:text-slate-400 mb-3" {...props} />,
+                          a: (props) => <a className="text-blue-600 dark:text-blue-400 underline" {...props} />,
+                        }}
+                      >
+                        {result.withRimAnswer}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
           </div>
         ))}
 
@@ -215,7 +244,7 @@ export default function RIMComparisonPage() {
         {results.length > 0 && (
           <div className="mt-8 text-center">
             <Button onClick={handleNewAnalysis} variant="secondary">
-              + New Analysis
+              + New Comparison
             </Button>
           </div>
         )}
