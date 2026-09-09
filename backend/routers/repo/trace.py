@@ -102,9 +102,14 @@ def trace_feature(
                             break
 
                 if ent_id:
-                    item_dict = dict(item)
+                    # Convert RetrieverResult to dict
+                    if hasattr(item, '__dict__'):
+                        item_dict = item.__dict__.copy()
+                    else:
+                        item_dict = dict(item)
                     item_dict["id"] = ent_id
                     seed_nodes.append(item_dict)
+                    logger.info(f"[TRACE] Added to seed_nodes: {ent_id}")
                 else:
                     logger.warning(f"[TRACE] No matching entity found for: {name}")
     except Exception as e:
