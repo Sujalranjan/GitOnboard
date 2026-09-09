@@ -146,62 +146,64 @@ async def build_repository_context(db: Session, repo: Repository, analysis_id: O
 # ===== Tool Implementations =====
 
 async def execute_search_symbols(query: str, db: Session, analysis_id: Optional[int] = None) -> str:
-    """Search for code symbols matching the query."""
+    """
+    Search for code symbols matching the query.
+    Supports multiple queries: "auth,login,verify" → searches all at once, returns grouped results.
+    """
     try:
-        logger.debug(f"[SEARCH] execute_search_symbols called with query='{query}', analysis_id={analysis_id}")
+        # Split comma-separated queries and clean them
+        queries = [q.strip() for q in query.split(",") if q.strip()]
+        logger.debug(f"[SEARCH] execute_search_symbols called with {len(queries)} query(ies): {queries}, analysis_id={analysis_id}")
 
-        # Try to use workspace tool handler first
-        try:
-            from backend.agent.tools.repository import handle_search_symbols
-            from backend.agent.tools.contracts import AgentToolContext
+        if not queries:
+            return "No search query provided"
 
-            context = AgentToolContext(
-                analysis_id=analysis_id,
-                repository_id=None,
-                db=db
-            )
-
-            result = handle_search_symbols(
-                args={"pattern": query, "limit": 10},
-                context=context
-            )
-
-            logger.debug(f"[SEARCH] handle_search_symbols returned: {result}")
-
-            if result and result.get('symbols_found'):
-                output = f"Found {len(result.get('symbols_found', []))} matching symbols:\n"
-                for sym in result.get('symbols_found', [])[:5]:
-                    output += f"- {sym.get('name', 'Unknown')} ({sym.get('type', 'unknown')})\n"
-                    if sym.get('file'):
-                        output += f"  File: {sym.get('file')}\n"
-                logger.debug(f"[SEARCH] Returning from handle_search_symbols")
-                return output
-            else:
-                logger.debug(f"[SEARCH] handle_search_symbols returned but no 'symbols_found' key, falling through to HybridRetriever")
-        except Exception as e:
-            logger.debug(f"[SEARCH] handle_search_symbols exception: {e}, falling back to HybridRetriever")
-            pass  # Fallback to retriever if handler fails
-
-        # Fallback: Use HybridRetriever
-        logger.debug(f"[SEARCH] Calling HybridRetriever with analysis_id={analysis_id}")
+        # Use HybridRetriever for all queries
         retriever = HybridRetriever(db, analysis_id=analysis_id)
-        results = retriever.retrieve(query, top_k=5)
 
-        logger.debug(f"[SEARCH] HybridRetriever returned {len(results) if results else 0} results: {results}")
+        # Collect results grouped by query
+        all_results = {}
+        total_files = set()  # Track unique files across all queries
 
-        if not results:
-            # Empty result - guide LLM to try alternatives
-            logger.debug(f"[SEARCH] No results found")
-            return f"No symbols found matching '{query}'. TRY ALTERNATIVE SEARCH TERMS: Try searching for related terms like synonyms, abbreviations, or more specific/general versions of the query."
+        for q in queries:
+            logger.debug(f"[SEARCH] Searching for: '{q}'")
+            results = retriever.retrieve(q, top_k=5)
+            all_results[q] = results
 
-        output = f"Found {len(results)} matching symbols:\n"
-        for i, result in enumerate(results, 1):
-            output += f"{i}. {result.entity_name} ({result.entity_type.value})\n"
-            if result.file_path:
-                output += f"   File: {result.file_path}\n"
+            # Track unique files
+            for result in (results or []):
+                if result.file_path:
+                    total_files.add(result.file_path)
 
-        logger.debug(f"[SEARCH] Returning formatted results")
+        # Format output: grouped by query with file references
+        if not total_files:
+            return (
+                f"No symbols found matching any of: {', '.join(queries)}\n\n"
+                f"TRY: Use synonyms like 'auth' vs 'authenticate', 'login' vs 'signin', etc."
+            )
+
+        output = f"Symbol Search Results ({len(queries)} query(ies) across {len(total_files)} file(s)):\n\n"
+
+        for q in queries:
+            results = all_results[q]
+            if not results:
+                output += f"❌ Query '{q}': No matches\n"
+                continue
+
+            output += f"✓ Query '{q}': Found {len(results)} matching symbols\n"
+            for result in results[:3]:  # Limit to 3 per query for brevity
+                output += f"  - {result.entity_name} ({result.entity_type.value})\n"
+                if result.file_path:
+                    output += f"    📄 {result.file_path}\n"
+            if len(results) > 3:
+                output += f"  ... and {len(results) - 3} more\n"
+
+        output += f"\nFiles to investigate: {', '.join(sorted(total_files))}\n"
+        output += f"Use: list_file_symbols(file_path) to see available symbols in each file"
+
+        logger.debug(f"[SEARCH] Returning grouped results for {len(queries)} queries")
         return output
+
     except Exception as e:
         logger.error(f"Error searching symbols: {e}", exc_info=True)
         return f"Error searching symbols: {str(e)}"
@@ -470,11 +472,13 @@ The "action" field determines what happens NEXT. It has ONLY 2 possible values:
 
 Examples of CORRECT tool calls:
 ```json
-{{"action": "tool_call", "tool_name": "search_symbols", "arguments": {{"query": "authentication"}}}}
+{{"action": "tool_call", "tool_name": "search_symbols", "arguments": {{"query": "auth,authenticate,login,verify"}}}}
 {{"action": "tool_call", "tool_name": "list_file_symbols", "arguments": {{"file_path": "backend/auth.py"}}}}
 {{"action": "tool_call", "tool_name": "read_file", "arguments": {{"file_path": "backend/auth.py", "start_line": 10, "end_line": 25}}}}
 {{"action": "tool_call", "tool_name": "analyze_relationships", "arguments": {{"query": "authenticate"}}}}
 ```
+
+⭐ **BEST PRACTICE:** Use comma-separated queries in search_symbols to reduce back-and-forth!
 
 Examples of WRONG format (NEVER do this):
 ```json
@@ -523,16 +527,33 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
 ## Available Tools
 
 ### 1. search_symbols(query: string)
-**Purpose:** Find code symbols matching your search query.
-**Returns:** List of symbol names and their file locations.
+**Purpose:** Find code symbols matching your search query(ies).
+**SUPPORTS MULTIPLE QUERIES:** Pass comma-separated queries to search all at once!
+**Returns:** Symbol names and file locations, grouped by query.
 **IMPORTANT:** Returns file paths, NOT line numbers or code content!
-**When to use:** First step - locate files containing relevant code.
-**Example workflow:**
-  1. Call: search_symbols(query="authenticate")
-  2. Get back: [AuthenticationModule (backend/auth.py), verify_password (backend/auth/service.py), ...]
-  3. Then: Use read_file to fetch actual code
 
-**Optimization tip:** If search returns 0 results, try synonyms (auth, login, signin, token, jwt, etc.)
+**Single query:**
+  - Call: search_symbols(query="authentication")
+  - Get: [AuthenticationModule, verify_password, login_handler, ...]
+
+**Multiple queries (RECOMMENDED - reduces round-trips!):**
+  - Call: search_symbols(query="auth,authenticate,login,verify")
+  - Backend searches ALL 4 terms at once
+  - Returns results grouped by query showing which files matched which search
+  - Example output:
+    ```
+    ✓ Query 'auth': Found 3 symbols (backend/auth.py, backend/dependencies/auth.py)
+    ✓ Query 'authenticate': Found 2 symbols (backend/auth/service.py)
+    ✓ Query 'login': Found 5 symbols (backend/routers/auth.py)
+    ✗ Query 'verify': No matches
+    Files to investigate: backend/auth.py, backend/dependencies/auth.py, backend/routers/auth.py
+    ```
+
+**When to use:**
+- First step - locate files containing relevant code
+- Use multiple queries to explore the search space efficiently in ONE call!
+
+**Optimization:** Instead of LLM making 4 separate search_symbols calls, use ONE call with comma-separated queries!
 
 ### 2. read_file(file_path: string, start_line?: int, end_line?: int)
 **Purpose:** Read file contents from repository (supports line-range fetching).
@@ -571,19 +592,38 @@ Do NOT complete prematurely - try at least 3-5 different search terms before giv
   3. Get: [verify_password, hash_password, login_handler, ...]
   4. Then: read_file on interesting related components
 
-## RECOMMENDED WORKFLOW (Efficient)
-1. **search_symbols(query)** → Find files with relevant code
-2. **list_file_symbols(file)** → See what's available in that file (line numbers)
-3. **read_file(file, start_line, end_line)** → Read SPECIFIC symbol sections (not entire files!)
-4. **analyze_relationships(query)** → Find connected pieces if needed
-5. **Loop:** If needed, repeat steps 1-4 with related symbols
-6. **complete** → Synthesize findings into answer
+## RECOMMENDED WORKFLOW (Efficient - Minimal Calls!)
 
-⚠️ ANTI-PATTERN (Inefficient):
-   search_symbols → read_file(entire file, no line ranges) → repeat → hit token limit
+**Step 1: Broad Search with Multiple Related Terms (1 call)**
+```json
+{"action": "tool_call", "tool_name": "search_symbols", "arguments": {"query": "auth,authenticate,login,token,jwt,verify"}}
+```
+↓ Gets back: All files matching ANY of these terms (grouped by query)
 
-✓ PATTERN (Efficient):
-   search_symbols → list_file_symbols → read_file(lines 10-25) → analyze_relationships → read_file(lines 50-75) → complete"""
+**Step 2: List Symbols in Top Files (1-2 calls)**
+```json
+{"action": "tool_call", "tool_name": "list_file_symbols", "arguments": {"file_path": "backend/auth.py"}}
+```
+↓ Gets back: All functions/classes with line numbers
+
+**Step 3: Read Specific Sections Only (1-2 calls)**
+```json
+{"action": "tool_call", "tool_name": "read_file", "arguments": {"file_path": "backend/auth.py", "start_line": 10, "end_line": 50}}
+```
+↓ Gets back: Only the relevant code section
+
+**Step 4: Complete (1 call)**
+✓ Synthesize and answer
+
+**Total calls: 4-6 (instead of 20+ with repeated searches!)**
+
+⚠️ ANTI-PATTERN (Inefficient - Many Back-and-Forth Calls):
+   search_symbols("auth") → search_symbols("authenticate") → search_symbols("login")
+   → read_file(entire file) → search_symbols("token") → ...
+   → Eventually hit iteration limit with no complete answer
+
+✓ PATTERN (EFFICIENT - Minimal Calls):
+   search_symbols("auth,authenticate,login,token,jwt") → list_file_symbols → read_file(lines X-Y) → complete"""
 
             # Build conversation with tool loop
             messages = [
