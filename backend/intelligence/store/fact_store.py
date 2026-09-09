@@ -85,9 +85,16 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
         # First, process explicit FILE entities from the RIM
         for entity_id, entity in model.entities.items():
             if entity.type == EntityType.FILE and entity.id not in seen_file_ids:
-                seen_file_ids.add(entity.id)
                 db_id = f"{analysis_id}:{entity.id}"
                 f_path = entity.location.repository_path or entity.name
+
+                # Skip dot-folders: .workspace, .archive, .cache, __pycache__, etc.
+                path_parts = f_path.split('/')
+                if any(part.startswith('.') for part in path_parts):
+                    logger.debug(f"[FactStore] Skipping file in dot-folder: {f_path}")
+                    continue
+
+                seen_file_ids.add(entity.id)
                 p_lower = f_path.lower()
                 
                 # Classification signals
@@ -151,6 +158,12 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
         for implicit_file_path in implicit_files:
             # Skip if already resolved in file_id_map (either explicit FILE entity or already created implicit)
             if not implicit_file_path or implicit_file_path in file_id_map or implicit_file_path in seen_implicit_files:
+                continue
+
+            # Skip dot-folders: .workspace, .archive, .cache, etc.
+            path_parts = implicit_file_path.split('/')
+            if any(part.startswith('.') for part in path_parts):
+                logger.debug(f"[FactStore] Skipping implicit file in dot-folder: {implicit_file_path}")
                 continue
 
             seen_implicit_files.add(implicit_file_path)
