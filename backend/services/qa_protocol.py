@@ -30,7 +30,18 @@ class SystemPromptParts:
 
 
 class QAProtocolAdapter:
-    """Builds and parses the JSON action protocol for Q&A."""
+    """Builds and parses the action protocol for Q&A (JSON by default, Hermes XML for Qwen3)."""
+
+    def __init__(self, model_id: Optional[str] = None):
+        """
+        Initialize protocol adapter with optional model ID.
+
+        Args:
+            model_id: Model identifier (e.g., "qwen3:4b-instruct"). If model starts with "qwen",
+                      enables optimizations for Qwen's native tool calling capabilities.
+        """
+        self.model_id = model_id or ""
+        self.is_qwen = self.model_id.lower().startswith("qwen")
 
     GROUNDING_RULES = """You are a code assistant analyzing a software repository to answer questions.
 CRITICAL: You MUST use repository tools to find information. You MUST NOT rely on general knowledge.
