@@ -795,12 +795,22 @@ class QALoop:
         if tool_name == "read_file" and isinstance(data, dict):
             path = data.get('path', '')
             start_line = data.get('start_line', 1)
-            end_line = data.get('end_line', 0)
+            end_line = data.get('end_line')  # Don't default to 0 - let it be None if missing
+            total_lines = data.get('total_lines', 0)
             content = data.get('content', '')
-            summary = f"[read_file] {path} lines {start_line}-{end_line}: {len(content)} chars\n"
+            raw_text = data.get('raw_text', '')
+
+            # Use actual content if available, otherwise try formatted content
+            actual_content = raw_text or content
+
+            # If end_line is missing, use total_lines
+            if end_line is None:
+                end_line = total_lines or start_line
+
+            summary = f"[read_file] {path} lines {start_line}-{end_line}: {len(actual_content)} chars\n"
             # Include actual file content so LLM can reason over code
-            if content:
-                return summary + content
+            if actual_content:
+                return summary + actual_content
             return summary
         elif tool_name == "query_rim" and isinstance(data, dict):
             if not data.get("found"):
