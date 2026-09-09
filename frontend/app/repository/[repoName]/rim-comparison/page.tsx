@@ -18,6 +18,37 @@ interface ComparisonRun {
   loadingWithRim: boolean;
 }
 
+const renderMetricDiff = (label: string, value: any, pctKey?: string) => {
+  const pct = pctKey ? value[pctKey] : null;
+  let icon = null;
+  let color = 'text-slate-600 dark:text-slate-400';
+
+  if (typeof value === 'number') {
+    if (value > 0) {
+      icon = <ArrowUp className="w-4 h-4 text-red-500" />;
+      color = 'text-red-600 dark:text-red-400';
+    } else if (value < 0) {
+      icon = <ArrowDown className="w-4 h-4 text-green-500" />;
+      color = 'text-green-600 dark:text-green-400';
+    } else {
+      icon = <Minus className="w-4 h-4 text-slate-400" />;
+    }
+  }
+
+  return (
+    <div key={label} className="flex items-center justify-between text-xs">
+      <span className="text-slate-500 dark:text-slate-400">{label}</span>
+      <div className="flex items-center gap-1">
+        {icon}
+        <span className={`font-mono ${color}`}>
+          {typeof value === 'number' ? (value > 0 ? '+' : '') + value : value}
+          {pct !== null && pct !== undefined ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}
+        </span>
+      </div>
+    </div>
+  );
+};
+
 export default function RIMComparisonPage() {
   const params = useParams();
   const repoName = params?.repoName as string;
@@ -98,37 +129,6 @@ export default function RIMComparisonPage() {
     if (e.key === 'Enter' && e.ctrlKey) {
       handleCompare();
     }
-  };
-
-  const renderMetricDiff = (label: string, value: any, pctKey?: string) => {
-    const pct = pctKey ? value[pctKey] : null;
-    let icon = null;
-    let color = 'text-slate-600 dark:text-slate-400';
-
-    if (typeof value === 'number') {
-      if (value > 0) {
-        icon = <ArrowUp className="w-4 h-4 text-red-500" />;
-        color = 'text-red-600 dark:text-red-400';
-      } else if (value < 0) {
-        icon = <ArrowDown className="w-4 h-4 text-green-500" />;
-        color = 'text-green-600 dark:text-green-400';
-      } else {
-        icon = <Minus className="w-4 h-4 text-slate-400" />;
-      }
-    }
-
-    return (
-      <div key={label} className="flex items-center justify-between text-xs">
-        <span className="text-slate-500 dark:text-slate-400">{label}</span>
-        <div className="flex items-center gap-1">
-          {icon}
-          <span className={`font-mono ${color}`}>
-            {typeof value === 'number' ? (value > 0 ? '+' : '') + value : value}
-            {pct !== null && pct !== undefined ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}
-          </span>
-        </div>
-      </div>
-    );
   };
 
   return (
