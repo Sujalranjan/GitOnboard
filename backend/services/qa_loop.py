@@ -822,7 +822,7 @@ class QALoop:
             if end_line is None:
                 end_line = total_lines or start_line
 
-            summary = f"[read_file] {path} lines {start_line}-{end_line}: {len(actual_content)} chars\n"
+            summary = f"[read_file] {path} lines {start_line}-{end_line}: {len(actual_content)} chars (total: {total_lines})\n"
             # Include actual file content so LLM can reason over code
             if actual_content:
                 return summary + actual_content

@@ -19,6 +19,7 @@ interface Message {
   resultCount?: number | null;
   error?: { type: string; message: string } | null;
   durationMs?: number;
+  totalLines?: number;  // For read_file tool - total lines in the file
 }
 
 interface ModelOption {
@@ -226,6 +227,15 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                 }]);
               } else if (data.type === 'tool-response') {
                 // Structured tool-response event from backend
+                // Extract total_lines from result_summary for read_file (e.g., "[read_file] path lines 1-100: 4522 chars\n")
+                let totalLines: number | undefined;
+                if (data.tool_name === 'read_file' && data.result_summary) {
+                  const match = data.result_summary.match(/\[read_file\].*total:\s*(\d+)/);
+                  if (match) {
+                    totalLines = parseInt(match[1], 10);
+                  }
+                }
+
                 setMessages(prev => [...prev, {
                   type: 'tool-response' as const,
                   content: data.result_summary || 'Tool execution completed',
@@ -235,6 +245,7 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                   resultCount: data.result_count,
                   error: data.error,
                   durationMs: data.duration_ms,
+                  totalLines: totalLines,
                 }]);
               } else {
                 setMessages(prev => [...prev, {
@@ -388,11 +399,14 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                           )}
                         </div>
 
-                        {/* Tool name and result count */}
+                        {/* Tool name and result count/total lines */}
                         {msg.toolName && (
-                          <div className="mb-2 flex items-center gap-2">
+                          <div className="mb-2 flex items-center gap-2 flex-wrap">
                             <span className="text-xs font-mono text-slate-400">{msg.toolName}</span>
-                            {msg.resultCount !== undefined && msg.resultCount !== null && (
+                            {msg.toolName === 'read_file' && msg.totalLines !== undefined && (
+                              <span className="text-xs text-slate-500">(total_lines: {msg.totalLines})</span>
+                            )}
+                            {msg.resultCount !== undefined && msg.resultCount !== null && msg.toolName !== 'read_file' && (
                               <span className="text-xs text-slate-500">({msg.resultCount} results)</span>
                             )}
                           </div>
