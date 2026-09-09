@@ -86,9 +86,9 @@ class RepositoryToolLayer:
 
         # 1. Active Worktree (if present)
         if self.repo_root and self.repo_root.exists():
-            target_file = validate_repo_path(self.repo_root, path, allow_binary=False)
-            if target_file.exists():
-                try:
+            try:
+                target_file = validate_repo_path(self.repo_root, path, allow_binary=False)
+                if target_file.exists() and target_file.stat().st_size > 0:  # Prefer files with actual content
                     with open(target_file, "r", encoding="utf-8", errors="replace") as f:
                         lines = f.readlines()
                     total_lines = len(lines)
@@ -104,8 +104,8 @@ class RepositoryToolLayer:
                         "content": numbered_content,
                         "raw_text": "".join(selected_lines),
                     }
-                except Exception as e:
-                    logger.debug(f"Could not read from worktree {path}: {e}")
+            except Exception as e:
+                logger.debug(f"Could not read from worktree {path}: {e}")
 
         # 2. Azure Blob Storage (persistent repository snapshots)
         if self.db is not None and self.analysis_id is not None:
