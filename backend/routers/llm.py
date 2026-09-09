@@ -348,9 +348,11 @@ async def execute_list_file_symbols(file_path: str, db: Session, analysis_id: Op
         if not analysis_id:
             return f"Cannot list symbols without analysis context"
 
-        # Query all symbols in this file
-        symbols = db.query(FactSymbol).filter(
-            FactSymbol.file_path == file_path,
+        # Query all symbols in this file by joining with FactFile
+        symbols = db.query(FactSymbol).join(
+            FactFile, FactSymbol.file_id == FactFile.id
+        ).filter(
+            FactFile.path == file_path,
             FactSymbol.analysis_id == analysis_id
         ).all()
 
@@ -358,16 +360,16 @@ async def execute_list_file_symbols(file_path: str, db: Session, analysis_id: Op
             return f"No symbols found in file: {file_path}"
 
         output = f"Symbols in {file_path}:\n"
-        for sym in sorted(symbols, key=lambda s: s.start_line or 0):
-            sym_type = getattr(sym, 'symbol_type', 'unknown').upper()
-            start_line = getattr(sym, 'start_line', '?')
-            end_line = getattr(sym, 'end_line', '?')
+        for sym in sorted(symbols, key=lambda s: s.line_start or 0):
+            sym_type = sym.symbol_type.upper() if sym.symbol_type else 'unknown'
+            start_line = sym.line_start if sym.line_start else '?'
+            end_line = sym.line_end if sym.line_end else '?'
             output += f"- {sym.name} ({sym_type}) [lines {start_line}-{end_line}]\n"
 
         output += f"\n💡 Use: read_file(file_path=\"{file_path}\", start_line=X, end_line=Y) to fetch specific symbol code"
         return output
     except Exception as e:
-        logger.error(f"Error listing file symbols: {e}")
+        logger.error("[LIST_SYMBOLS] Error: %s", str(e), exc_info=True)
         return f"Error listing file symbols: {str(e)}"
 
 VALID_MODELS = {
