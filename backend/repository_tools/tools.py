@@ -18,6 +18,7 @@ from backend.models.fact_store import (
     FactRoute,
 )
 from backend.models.repository import Repository, Analysis
+from backend.intelligence.retrieval.retriever import HybridRetriever
 from .security import (
     RepositorySecurityError,
     validate_repo_path,
@@ -48,6 +49,7 @@ class RepositoryToolLayer:
         self.analysis_id = analysis_id
         self.db = db
         self.user_id = user_id
+        self._retriever: Optional[HybridRetriever] = None  # lazily constructed on first search
 
         # Resolve repo root directory
         self.repo_root = resolve_repo_root(
@@ -485,13 +487,78 @@ class RepositoryToolLayer:
     # 6. Hybrid search_repository
     # ──────────────────────────────────────────────────────────────────────────
 
+    def _get_retriever(self) -> Optional[HybridRetriever]:
+        """Lazily construct and cache HybridRetriever to avoid rebuilding BM25 index per call."""
+        if self._retriever is None and self.db is not None and self.analysis_id is not None:
+            try:
+                self._retriever = HybridRetriever(db=self.db, analysis_id=self.analysis_id)
+            except Exception as e:
+                logger.debug(f"Failed to initialize HybridRetriever: {e}")
+                return None
+        return self._retriever
+
     def search_repository(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        Hybrid search combining:
-        1. Symbol matches (FactStore)
-        2. Filename matches (Manifest)
-        3. Lexical code matches (Source snapshot)
+        Hybrid search using HybridRetriever with comma-separated multi-query batching.
+        Supports: "mysql,db,connection,database" → splits into 3 queries, dedupes results.
+        Returns: [{"type", "file", "symbol"/"line", "lines"/"snippet", "query", "match_source", "score"}]
         """
+        retriever = self._get_retriever()
+        if retriever is None:
+            # Fallback to original multi-method approach if retriever unavailable
+            return self._search_repository_fallback(query, limit)
+
+        # Split query on commas (supports comma-separated multi-query batching)
+        sub_queries = [q.strip() for q in query.split(",") if q.strip()]
+        if not sub_queries:
+            return []
+
+        combined: List[Dict[str, Any]] = []
+        seen_keys = set()
+        max_total = min(limit * len(sub_queries), 30)  # hard cap at 30 results
+
+        for sub_query in sub_queries:
+            try:
+                # Use HybridRetriever for better ranking
+                top_k = max(limit, 10)
+                results = retriever.retrieve(sub_query, top_k=top_k)
+
+                for result in results:
+                    # Map RetrieverResult to output dict shape
+                    if result.symbol:
+                        key = f"sym:{result.file_path}:{result.symbol}"
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            combined.append({
+                                "type": "symbol",
+                                "file": result.file_path,
+                                "symbol": result.symbol,
+                                "lines": f"{result.line_start}-{result.line_end}" if result.line_start else "",
+                                "query": sub_query,
+                                "match_source": result.score_type or "symbol_index",
+                                "score": result.score,
+                            })
+                    else:
+                        key = f"code:{result.file_path}:{result.line_number}"
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            combined.append({
+                                "type": "code",
+                                "file": result.file_path,
+                                "line": result.line_number,
+                                "snippet": result.snippet or "",
+                                "query": sub_query,
+                                "match_source": result.score_type or "hybrid",
+                                "score": result.score,
+                            })
+            except Exception as e:
+                logger.debug(f"Error retrieving for query '{sub_query}': {e}")
+                continue
+
+        return combined[:max_total]
+
+    def _search_repository_fallback(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Fallback to original multi-method search when HybridRetriever is unavailable."""
         combined: List[Dict[str, Any]] = []
         seen_keys = set()
 
@@ -508,6 +575,7 @@ class RepositoryToolLayer:
                     "symbol_type": sym["symbol_type"],
                     "lines": f"{sym['line_start']}-{sym['line_end']}",
                     "match_source": "symbol_index",
+                    "score": 0,
                 })
 
         # 2. File path match
@@ -521,6 +589,7 @@ class RepositoryToolLayer:
                     "file": f["path"],
                     "size": f.get("size", 0),
                     "match_source": "filename_manifest",
+                    "score": 0,
                 })
 
         # 3. Lexical search in source files
@@ -535,6 +604,7 @@ class RepositoryToolLayer:
                     "line": lex["line"],
                     "snippet": lex["snippet"],
                     "match_source": "lexical",
+                    "score": 0,
                 })
 
         return combined[:limit]

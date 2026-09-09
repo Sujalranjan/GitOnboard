@@ -149,11 +149,11 @@ class ToolDispatchTable:
             ),
             ToolSpec(
                 "search_repository",
-                "Search for symbols, files, and code by name or pattern. Use simple code terms, not descriptions.",
+                "Search for symbols, files, and code by name or pattern. Supports comma-separated multi-query batching (e.g., 'login,auth,token') to reduce round trips. Use simple code terms, not descriptions.",
                 {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "Symbol name, file name, or code pattern (e.g., 'login', 'auth.js', 'const token'). Keep it simple and code-like, not natural language descriptions."},
+                        "query": {"type": "string", "description": "Symbol name, file name, or code pattern (e.g., 'login', 'auth.js', 'const token'). Comma-separated queries supported (e.g., 'mysql,db,connection'). Keep terms simple and code-like, not natural language descriptions."},
                         "limit": {"type": "integer", "description": "Max results (default 10)"},
                     },
                     "required": ["query"],
