@@ -3,10 +3,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zap, MessageCircle, CheckCircle2, Eye, EyeOff, Send, Settings } from 'lucide-react';
 
+interface ToolArguments {
+  [key: string]: string | number | boolean | null | undefined;
+}
+
 interface Message {
   type: 'user-query' | 'llm-thinking' | 'tool-call' | 'tool-response' | 'final-answer';
   content: string;
   icon?: React.ReactNode;
+  // Structured tool event fields
+  toolName?: string;
+  arguments?: ToolArguments;
+  success?: boolean;
+  resultSummary?: string;
+  resultCount?: number | null;
+  error?: { type: string; message: string } | null;
+  durationMs?: number;
 }
 
 interface ModelOption {
@@ -197,10 +209,25 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                   content: `Error: ${data.content}`,
                 }]);
               } else if (data.type === 'tool-call') {
+                // Structured tool-call event from backend
                 setToolCalls(prev => prev + 1);
                 setMessages(prev => [...prev, {
                   type: 'tool-call' as const,
-                  content: data.content,
+                  content: `${data.tool_name}(${JSON.stringify(data.arguments)})`,
+                  toolName: data.tool_name,
+                  arguments: data.arguments,
+                }]);
+              } else if (data.type === 'tool-response') {
+                // Structured tool-response event from backend
+                setMessages(prev => [...prev, {
+                  type: 'tool-response' as const,
+                  content: data.result_summary || 'Tool execution completed',
+                  toolName: data.tool_name,
+                  success: data.success,
+                  resultSummary: data.result_summary,
+                  resultCount: data.result_count,
+                  error: data.error,
+                  durationMs: data.duration_ms,
                 }]);
               } else {
                 setMessages(prev => [...prev, {
@@ -302,26 +329,80 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                     {/* Tool Call Header */}
                     {msg.type === 'tool-call' && (
                       <div>
-                        <div className="flex items-center gap-2 mb-2">
+                        <div className="flex items-center gap-2 mb-3">
                           <Zap className="w-4 h-4 animate-pulse text-amber-400" />
                           <span className="text-xs font-semibold text-amber-300 uppercase">🔧 Tool Call</span>
                         </div>
-                        <div className="bg-slate-900/50 rounded px-3 py-2 text-sm font-mono">
-                          {msg.content}
-                        </div>
+                        {msg.toolName && (
+                          <div className="space-y-2">
+                            {/* Tool name chip */}
+                            <div className="inline-block bg-amber-600/40 border border-amber-500/50 rounded-full px-3 py-1 text-xs font-mono font-semibold text-amber-200">
+                              {msg.toolName}
+                            </div>
+                            {/* Arguments */}
+                            {msg.arguments && Object.keys(msg.arguments).length > 0 && (
+                              <div className="bg-slate-900/50 rounded px-3 py-2 text-xs space-y-1">
+                                {Object.entries(msg.arguments).map(([key, val]) => (
+                                  <div key={key} className="text-slate-300">
+                                    <span className="text-slate-400">{key}:</span>{' '}
+                                    <span className="text-slate-200 font-mono">
+                                      {typeof val === 'string' ? `"${val}"` : JSON.stringify(val)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {/* Tool Response Header */}
                     {msg.type === 'tool-response' && (
                       <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Zap className="w-4 h-4 text-amber-400" />
-                          <span className="text-xs font-semibold text-amber-300 uppercase">✓ Result</span>
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="flex items-center gap-2">
+                            {msg.success ? (
+                              <>
+                                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                                <span className="text-xs font-semibold text-green-300 uppercase">✓ Success</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-white text-xs font-bold">!</span>
+                                <span className="text-xs font-semibold text-red-300 uppercase">✗ Failed</span>
+                              </>
+                            )}
+                          </div>
+                          {msg.durationMs !== undefined && (
+                            <span className="text-xs text-slate-400">({msg.durationMs.toFixed(0)}ms)</span>
+                          )}
                         </div>
-                        <div className="bg-slate-900/50 rounded px-3 py-2 text-sm whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">
-                          {msg.content}
-                        </div>
+
+                        {/* Tool name and result count */}
+                        {msg.toolName && (
+                          <div className="mb-2 flex items-center gap-2">
+                            <span className="text-xs font-mono text-slate-400">{msg.toolName}</span>
+                            {msg.resultCount !== undefined && msg.resultCount !== null && (
+                              <span className="text-xs text-slate-500">({msg.resultCount} results)</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Error state */}
+                        {msg.error && (
+                          <div className="mb-2 bg-red-900/30 border border-red-700/50 rounded px-3 py-2 text-xs">
+                            <div className="text-red-300 font-semibold mb-1">{msg.error.type}</div>
+                            <div className="text-red-200">{msg.error.message}</div>
+                          </div>
+                        )}
+
+                        {/* Result summary */}
+                        {msg.resultSummary && (
+                          <div className="bg-slate-900/50 rounded px-3 py-2 text-sm whitespace-pre-wrap font-mono max-h-48 overflow-y-auto text-slate-200">
+                            {msg.resultSummary}
+                          </div>
+                        )}
                       </div>
                     )}
 
