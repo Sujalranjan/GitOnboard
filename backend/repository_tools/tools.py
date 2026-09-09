@@ -431,16 +431,17 @@ class RepositoryToolLayer:
                 return None
         return self._retriever
 
-    def search_repository(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def search_repository(self, query: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
         """
         Hybrid search using HybridRetriever with comma-separated multi-query batching.
         Supports: "mysql,db,connection,database" → splits into 3 queries, dedupes results.
+        Pagination: use offset to fetch next batch (e.g., offset=30 to get results 31-60).
         Returns: [{"type", "file", "symbol"/"line", "lines"/"snippet", "query", "match_source", "score"}]
         """
         retriever = self._get_retriever()
         if retriever is None:
             # Fallback to original multi-method approach if retriever unavailable
-            return self._search_repository_fallback(query, limit)
+            return self._search_repository_fallback(query, limit, offset)
 
         # Split query on commas (supports comma-separated multi-query batching)
         sub_queries = [q.strip() for q in query.split(",") if q.strip()]
@@ -492,11 +493,14 @@ class RepositoryToolLayer:
         # If HybridRetriever returned no results, fall back to basic search methods
         if not combined:
             logger.debug(f"HybridRetriever returned 0 results, falling back to basic search for queries: {sub_queries}")
-            return self._search_repository_fallback(query, limit)
+            return self._search_repository_fallback(query, limit, offset)
 
-        return combined[:max_total]
+        # Apply offset-based pagination
+        start = offset
+        end = offset + max_total
+        return combined[start:end]
 
-    def _search_repository_fallback(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def _search_repository_fallback(self, query: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
         """Fallback to original multi-method search when HybridRetriever is unavailable."""
         combined: List[Dict[str, Any]] = []
         seen_keys = set()
@@ -557,4 +561,7 @@ class RepositoryToolLayer:
                         "score": 0,
                     })
 
-        return combined[:max_total]
+        # Apply offset-based pagination
+        start = offset
+        end = offset + max_total
+        return combined[start:end]

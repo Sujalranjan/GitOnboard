@@ -858,7 +858,8 @@ class QALoop:
                 else:
                     summary += f"  - {str(result)[:50]}\n"
             if len(data) > 10:
-                summary += f"  ... and {len(data) - 10} more results\n"
+                summary += f"  ... and {len(data) - 10} more results available.\n"
+                summary += f"To fetch more: search_repository(query=..., limit=10, offset={len(data[:10])})\n"
             return summary
         elif tool_name == "get_symbol" and isinstance(data, list):
             summary = f"[get_symbol] Found {len(data)} symbols:\n"

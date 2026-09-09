@@ -85,12 +85,19 @@ SEARCH BEST PRACTICES:
 - BAD: "login route or endpoint" or "auth controller login function"
 - GOOD: "login", "route", "auth", "controller"
 - If search returns 0 results with first query, try simpler terms or use get_callers/get_callees
+- If search shows "... and N more results", use offset parameter to fetch next batch: search_repository(query="...", limit=10, offset=10)
 - Then read the actual files to understand the code
 
 Example flow:
 Turn 0: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "login"}}
 Turn 1: {"action": "tool_call", "tool_name": "read_file", "arguments": {"path": "src/auth.js", "start_line": 1, "end_line": 50}}
-Turn 2: {"action": "final_answer", "answer": "Based on examining src/auth.js, the login process..."}"""
+Turn 2: {"action": "final_answer", "answer": "Based on examining src/auth.js, the login process..."}
+
+Pagination example (if first search shows more results available):
+Turn 0: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "database", "limit": 10}}
+Turn 1: (results 1-10 shown, message indicates "... and 20+ more results")
+Turn 2: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "database", "limit": 10, "offset": 10}}
+Turn 3: (results 11-20 retrieved without re-fetching 1-10)"""
 
     def build_system_prompt(self, tool_specs: List[ToolSpec], rim_metadata_block: Optional[str]) -> SystemPromptParts:
         """

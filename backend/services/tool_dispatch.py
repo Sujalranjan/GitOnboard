@@ -149,12 +149,13 @@ class ToolDispatchTable:
             ),
             ToolSpec(
                 "search_repository",
-                "Search for symbols, files, and code by name or pattern. Supports comma-separated multi-query batching (e.g., 'login,auth,token') to reduce round trips. Use simple code terms, not descriptions.",
+                "Search for symbols, files, and code by name or pattern. Supports comma-separated multi-query batching (e.g., 'login,auth,token') and offset-based pagination for retrieving additional results without duplication.",
                 {
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "Symbol name, file name, or code pattern (e.g., 'login', 'auth.js', 'const token'). Comma-separated queries supported (e.g., 'mysql,db,connection'). Keep terms simple and code-like, not natural language descriptions."},
-                        "limit": {"type": "integer", "description": "Max results (default 10)"},
+                        "limit": {"type": "integer", "description": "Max results per batch (default 10)"},
+                        "offset": {"type": "integer", "description": "Starting position for pagination (default 0). To get next 10 results, use offset=10. Example: search_repository(query='auth', limit=10, offset=30) gets results 31-40."},
                     },
                     "required": ["query"],
                 },
@@ -353,6 +354,7 @@ class ToolDispatchTable:
         """Handle search_repository tool call."""
         query = arguments.get("query", "")
         limit = arguments.get("limit", 10)
+        offset = arguments.get("offset", 0)
 
         if not query:
             return ToolObservation(
@@ -361,7 +363,7 @@ class ToolDispatchTable:
             )
 
         try:
-            result = self.tool_layer.search_repository(query, limit)
+            result = self.tool_layer.search_repository(query, limit, offset)
             return ToolObservation(
                 tool_call_id=tool_call_id, tool_name="search_repository", success=True, data=result,
             )
