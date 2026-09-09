@@ -361,13 +361,29 @@ class RepositoryToolLayer:
         if not self.db or not self.analysis_id:
             return []
 
+        # First, find the target symbol ID
+        target_symbol = (
+            self.db.query(FactSymbol.id)
+            .filter(
+                FactSymbol.analysis_id == self.analysis_id,
+                FactSymbol.name.ilike(f"%{symbol_name}%"),
+            )
+            .first()
+        )
+
+        if not target_symbol:
+            return []
+
+        target_id = target_symbol.id
+
+        # Find all symbols that call this target
         rel_rows = (
             self.db.query(FactRelationship, FactSymbol.name, FactSymbol.symbol_type)
             .join(FactSymbol, FactRelationship.from_symbol_id == FactSymbol.id)
             .filter(
                 FactRelationship.analysis_id == self.analysis_id,
                 FactRelationship.rel_type == "CALLS",
-                FactRelationship.to_symbol_id.ilike(f"%{symbol_name}%"),
+                FactRelationship.to_symbol_id == target_id,
             )
             .limit(20)
             .all()
@@ -389,13 +405,28 @@ class RepositoryToolLayer:
         if not self.db or not self.analysis_id:
             return []
 
+        # First, find the source symbol ID
+        source_symbol = (
+            self.db.query(FactSymbol.id)
+            .filter(
+                FactSymbol.analysis_id == self.analysis_id,
+                FactSymbol.name.ilike(f"%{symbol_name}%"),
+            )
+            .first()
+        )
+
+        if not source_symbol:
+            return []
+
+        source_id = source_symbol.id
+
         rel_rows = (
             self.db.query(FactRelationship, FactSymbol.name, FactSymbol.symbol_type)
             .join(FactSymbol, FactRelationship.to_symbol_id == FactSymbol.id)
             .filter(
                 FactRelationship.analysis_id == self.analysis_id,
                 FactRelationship.rel_type == "CALLS",
-                FactRelationship.from_symbol_id.ilike(f"%{symbol_name}%"),
+                FactRelationship.from_symbol_id == source_id,
             )
             .limit(20)
             .all()
