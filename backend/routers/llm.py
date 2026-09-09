@@ -51,12 +51,32 @@ Examples of CORRECT tool calls:
 
 ⭐ **BEST PRACTICE:** Use comma-separated queries in search_symbols to reduce back-and-forth!
 
+Examples of WRONG format (NEVER do this):
+{"action": "search_symbols", "arguments": {"query": "..."}}  ← WRONG! Don't use tool name as action
+{"action": "read_file", "file_path": "..."}  ← WRONG! Don't use tool name as action
+
+---
+
+**FORMAT B: Finish and Answer (REQUIRED AFTER TOOLS)**
+```json
+{"action": "complete", "content": "Your comprehensive answer based on findings"}
+```
+
+⚠️ **CRITICAL:** You MUST provide a complete action with your answer. Gathering data without answering is WRONG!
+
 ## Critical Rules
 1. **ONLY JSON** - Your entire response must be valid JSON. Nothing else.
 2. **"action" field is ALWAYS "tool_call" OR "complete"** - Never anything else.
 3. **"tool_name" field (when action is tool_call)** - Must be one of: search_symbols, read_file, list_file_symbols, analyze_relationships
-4. Use tools to gather real data before answering
-5. Stream of work: Tool → Tool → Tool → Complete
+4. **AFTER 4-6 TOOL CALLS, ALWAYS COMPLETE** - Gather data, then synthesize into an answer. Do NOT keep gathering.
+5. **Stream of work:** Tool → Tool → Tool → Complete (REQUIRED - must end with complete action)
+
+## When to Call "complete"
+- ✅ After you've gathered enough information (4-6 calls typically)
+- ✅ When you can answer the question based on tool results
+- ✅ IMMEDIATELY when iteration limit approaches
+- ❌ Do NOT gather data indefinitely
+- ❌ Do NOT gather data and stop without answering
 
 ## Available Tools
 
