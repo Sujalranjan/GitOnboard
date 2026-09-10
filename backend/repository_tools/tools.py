@@ -173,10 +173,16 @@ class RepositoryToolLayer:
 
         # Validate preconditions
         if self.db is None:
-            logger.error(f"[search_code] Database session is None. Cannot search repository '{self.repo_name}'.")
+            try:
+                logger.error(f"[search_code] Database session is None. Cannot search repository '{self.repo_name}'.")
+            except:
+                pass
             return results
         if self.analysis_id is None:
-            logger.error(f"[search_code] Analysis ID is None for repository '{self.repo_name}'. Analysis may not be complete.")
+            try:
+                logger.error(f"[search_code] Analysis ID is None for repository '{self.repo_name}'. Analysis may not be complete.")
+            except:
+                pass
             return results
 
         try:
@@ -195,10 +201,16 @@ class RepositoryToolLayer:
         )
 
         if not files:
-            logger.debug(f"[search_code] No non-binary files found for analysis_id={self.analysis_id}")
+            try:
+                logger.debug(f"[search_code] No non-binary files found for analysis_id={self.analysis_id}")
+            except:
+                pass
             return results
 
-        logger.debug(f"[search_code] Searching {len(files)} files for query='{query}' with pattern='{file_pattern}'")
+        try:
+            logger.debug(f"[search_code] Searching {len(files)} files for query='{query}' with pattern='{file_pattern}'")
+        except:
+            pass
 
         from backend.storage import get_storage
         storage = get_storage()
@@ -209,13 +221,19 @@ class RepositoryToolLayer:
             if file_pattern and not fnmatch.fnmatch(f_rec.path, file_pattern) and not fnmatch.fnmatch(os.path.basename(f_rec.path), file_pattern):
                 continue
             if not f_rec.blob_name:
-                logger.debug(f"[search_code] File {f_rec.path} has no blob_name; skipping")
+                try:
+                    logger.debug(f"[search_code] File {f_rec.path} has no blob_name; skipping")
+                except:
+                    pass
                 continue
 
             # Stop scanning after max_files_scanned to prevent unbounded Azure calls
             files_scanned += 1
             if files_scanned > max_files_scanned:
-                logger.debug(f"[search_code] Reached max_files_scanned limit ({max_files_scanned}); stopping scan")
+                try:
+                    logger.debug(f"[search_code] Reached max_files_scanned limit ({max_files_scanned}); stopping scan")
+                except:
+                    pass
                 break
 
             try:
@@ -231,15 +249,24 @@ class RepositoryToolLayer:
                         })
                         matches_in_file += 1
                         if len(results) >= max_matches:
-                            logger.debug(f"[search_code] Found {len(results)} matches across {files_with_matches + 1} files; stopping")
+                            try:
+                                logger.debug(f"[search_code] Found {len(results)} matches across {files_with_matches + 1} files; stopping")
+                            except:
+                                pass
                             return results
                 if matches_in_file > 0:
                     files_with_matches += 1
             except Exception as e:
-                logger.debug(f"[search_code] Error reading blob {f_rec.blob_name}: {e}")
+                try:
+                    logger.debug(f"[search_code] Error reading blob {f_rec.blob_name}: {e}")
+                except:
+                    pass
                 continue
 
-        logger.debug(f"[search_code] Search complete: {len(results)} matches in {files_with_matches} files (scanned {files_scanned} files)")
+        try:
+            logger.debug(f"[search_code] Search complete: {len(results)} matches in {files_with_matches} files (scanned {files_scanned} files)")
+        except:
+            pass
         return results
 
     # ──────────────────────────────────────────────────────────────────────────
