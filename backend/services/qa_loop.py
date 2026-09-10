@@ -116,8 +116,12 @@ class QALoop:
             "content": question,
         })
 
+        print(f"[QALoop:START] Loop starting at T+0ms for question: {question[:60]}...")
+
         while True:
             turn_index = len(result.turns)
+            elapsed = (time.perf_counter() - loop_start) * 1000
+            print(f"[QALoop:TURN] T+{elapsed:.0f}ms turn_index={turn_index}")
             self.guardrails.record_turn()
 
             # 1. Check guardrails BEFORE turn
@@ -214,11 +218,15 @@ class QALoop:
             parsed = self._parse_response(llm_response.content)
 
             # Log all details to debug for troubleshooting
+            elapsed = (time.perf_counter() - loop_start) * 1000
             if parsed["action"] == "tool_call":
+                print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} → tool_call: {parsed.get('tool_name')}")
                 logger.debug(f"[QALoop] Turn {turn_index}: tool={parsed.get('tool_name')}")
             elif parsed["action"] == "final_answer":
+                print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} → FINAL_ANSWER")
                 logger.debug(f"[QALoop] Turn {turn_index}: FINAL_ANSWER")
             else:
+                print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} → MALFORMED: {parsed.get('error')}")
                 logger.debug(f"[QALoop] Turn {turn_index}: MALFORMED - {parsed.get('error')} | {llm_response.content[:100]}...")
 
             turn = QALoopTurn(
@@ -295,6 +303,8 @@ class QALoop:
                 # 6. Execute tool
                 logger.debug(f"[QALoop] Turn {turn_index}: executing tool '{tool_name}'")
                 tool_start = time.perf_counter()
+                loop_elapsed = (tool_start - loop_start) * 1000
+                print(f"[QALoop:EXEC] T+{loop_elapsed:.0f}ms turn={turn_index} executing {tool_name}")
 
                 try:
                     tool_observation = self.tool_dispatch.dispatch(tool_name, arguments)
@@ -309,6 +319,8 @@ class QALoop:
 
                 tool_elapsed = time.perf_counter() - tool_start
                 tool_total_ms += tool_elapsed * 1000
+                loop_elapsed_after = (time.perf_counter() - loop_start) * 1000
+                print(f"[QALoop:RESULT] T+{loop_elapsed_after:.0f}ms turn={turn_index} {tool_name} → success={tool_observation.success} elapsed={tool_elapsed*1000:.0f}ms")
 
                 # Log tool call if structured logger is available
                 if self.structured_logger and self.request_id:
@@ -424,9 +436,13 @@ class QALoop:
         }
 
         # Log completion - show critical summary
+        total_elapsed = (time.perf_counter() - loop_start) * 1000
         log_message = (f"[QALoop] Completed {len(result.turns)} turns | "
                       f"{result.tool_call_count} tool calls | "
-                      f"{result.stop_reason}")
+                      f"{result.stop_reason} | "
+                      f"Total time: {total_elapsed:.0f}ms")
+
+        print(f"[QALoop:END] T+{total_elapsed:.0f}ms turns={len(result.turns)} tools={result.tool_call_count} reason={result.stop_reason.value}")
 
         if result.tool_call_count == 0:
             logger.error(f"{log_message} | ❌ ERROR: No tools called - malformed JSON or protocol failure")

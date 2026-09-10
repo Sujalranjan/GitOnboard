@@ -310,6 +310,7 @@ async def analyze_repository_stream(
             async def on_turn_callback(turn: QALoopTurn) -> None:
                 """Called when each turn completes; emits structured events to queue."""
                 if not request.show_tool_details:
+                    print(f"[on_turn] show_tool_details=False, skipping event queue")
                     return
 
                 if turn.tool_call:
@@ -320,8 +321,11 @@ async def analyze_repository_stream(
                         "turn_index": turn.turn_index,
                         "timestamp": (datetime.now() - start_time).total_seconds(),
                     }
-                    logger.error(f"[router:on_turn:DIAGNOSTIC:tool-call] turn={turn.turn_index} tool={event['tool_name']}")
-                    event_queue.put_nowait(event)
+                    try:
+                        event_queue.put_nowait(event)
+                        print(f"[on_turn] tool-call queued: turn={turn.turn_index} tool={event['tool_name']}")
+                    except Exception as e:
+                        print(f"[on_turn] ERROR queueing tool-call: {e}")
 
                 if turn.tool_observation:
                     event = {
@@ -335,8 +339,11 @@ async def analyze_repository_stream(
                         "turn_index": turn.turn_index,
                         "timestamp": (datetime.now() - start_time).total_seconds(),
                     }
-                    logger.error(f"[router:on_turn:DIAGNOSTIC:tool-response] turn={turn.turn_index} tool={event['tool_name']} success={event['success']} result_count={event['result_count']}")
-                    event_queue.put_nowait(event)
+                    try:
+                        event_queue.put_nowait(event)
+                        print(f"[on_turn] tool-response queued: turn={turn.turn_index} tool={event['tool_name']} success={event['success']}")
+                    except Exception as e:
+                        print(f"[on_turn] ERROR queueing tool-response: {e}")
 
             # 6. Create and run the QALoop in background
             loop = QALoop(
@@ -355,27 +362,45 @@ async def analyze_repository_stream(
             total_tool_calls = 0
             total_prompt_tokens = 0
             total_completion_tokens = 0
+            events_yielded = 0
+
+            print(f"[stream_generator] Starting event drain loop, loop_task.done()={loop_task.done()}")
 
             try:
                 while not loop_task.done():
                     try:
-                        # Check for queued events (non-blocking)
-                        event = event_queue.get_nowait()
+                        # Check for queued events (non-blocking with timeout to prevent stall)
+                        try:
+                            event = event_queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            # No events, yield control briefly
+                            await asyncio.sleep(0.01)
+                            continue
+
                         try:
                             json_str = json.dumps(event)
-                            logger.error(f"[router:sse:DIAGNOSTIC:serialized] event_type={event.get('type')} json_len={len(json_str)}")
+                            events_yielded += 1
+                            print(f"[stream_generator] Yielding event {events_yielded}: type={event.get('type')}")
                         except Exception as json_err:
-                            logger.error(f"[router:sse:DIAGNOSTIC:serialization_failed] event_type={event.get('type')} error={json_err}")
+                            logger.error(f"[stream_generator] JSON serialization failed: {json_err}", exc_info=True)
                             continue
                         yield f"data: {json_str}\n\n"
-                    except asyncio.QueueEmpty:
-                        # No events, yield control briefly
-                        await asyncio.sleep(0.01)
+                    except Exception as e:
+                        logger.error(f"[stream_generator] Error in event loop: {e}", exc_info=True)
+                        break
+
+                print(f"[stream_generator] Main loop exited, events_yielded so far={events_yielded}")
 
                 # Drain any remaining events after loop completes
                 while not event_queue.empty():
-                    event = event_queue.get_nowait()
-                    yield f"data: {json.dumps(event)}\n\n"
+                    try:
+                        event = event_queue.get_nowait()
+                        yield f"data: {json.dumps(event)}\n\n"
+                    except asyncio.QueueEmpty:
+                        break
+                    except Exception as e:
+                        logger.error(f"[router:sse] Error draining queue: {e}", exc_info=True)
+                        break
 
                 # Get final result
                 result = await loop_task
