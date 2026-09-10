@@ -170,50 +170,76 @@ class RepositoryToolLayer:
             max_files_scanned: Maximum number of files to scan (prevents unbounded Azure calls)
         """
         results: List[Dict[str, Any]] = []
+
+        # Validate preconditions
+        if self.db is None:
+            logger.error(f"[search_code] Database session is None. Cannot search repository '{self.repo_name}'.")
+            return results
+        if self.analysis_id is None:
+            logger.error(f"[search_code] Analysis ID is None for repository '{self.repo_name}'. Analysis may not be complete.")
+            return results
+
         try:
             pattern = re.compile(query, re.IGNORECASE)
         except re.error:
             pattern = re.compile(re.escape(query), re.IGNORECASE)
 
         # Search Azure Blob Storage via Fact Store manifest
-        if self.db is not None and self.analysis_id is not None:
-            files = (
-                self.db.query(FactFile)
-                .filter(
-                    FactFile.analysis_id == self.analysis_id,
-                    FactFile.is_binary == False,
-                )
-                .all()
+        files = (
+            self.db.query(FactFile)
+            .filter(
+                FactFile.analysis_id == self.analysis_id,
+                FactFile.is_binary == False,
             )
-            from backend.storage import get_storage
-            storage = get_storage()
-            files_scanned = 0
-            for f_rec in files:
-                if file_pattern and not fnmatch.fnmatch(f_rec.path, file_pattern) and not fnmatch.fnmatch(os.path.basename(f_rec.path), file_pattern):
-                    continue
-                if not f_rec.blob_name:
-                    continue
+            .all()
+        )
 
-                # Stop scanning after max_files_scanned to prevent unbounded Azure calls
-                files_scanned += 1
-                if files_scanned > max_files_scanned:
-                    break
+        if not files:
+            logger.debug(f"[search_code] No non-binary files found for analysis_id={self.analysis_id}")
+            return results
 
-                try:
-                    text = storage.get_object_text(f_rec.blob_name)
-                    for line_idx, line in enumerate(text.splitlines(), start=1):
-                        if pattern.search(line):
-                            results.append({
-                                "file": f_rec.path,
-                                "line": line_idx,
-                                "snippet": line.strip()[:200],
-                                "match_type": "lexical",
-                            })
-                            if len(results) >= max_matches:
-                                return results
-                except Exception:
-                    continue
+        logger.debug(f"[search_code] Searching {len(files)} files for query='{query}' with pattern='{file_pattern}'")
 
+        from backend.storage import get_storage
+        storage = get_storage()
+        files_scanned = 0
+        files_with_matches = 0
+
+        for f_rec in files:
+            if file_pattern and not fnmatch.fnmatch(f_rec.path, file_pattern) and not fnmatch.fnmatch(os.path.basename(f_rec.path), file_pattern):
+                continue
+            if not f_rec.blob_name:
+                logger.debug(f"[search_code] File {f_rec.path} has no blob_name; skipping")
+                continue
+
+            # Stop scanning after max_files_scanned to prevent unbounded Azure calls
+            files_scanned += 1
+            if files_scanned > max_files_scanned:
+                logger.debug(f"[search_code] Reached max_files_scanned limit ({max_files_scanned}); stopping scan")
+                break
+
+            try:
+                text = storage.get_object_text(f_rec.blob_name)
+                matches_in_file = 0
+                for line_idx, line in enumerate(text.splitlines(), start=1):
+                    if pattern.search(line):
+                        results.append({
+                            "file": f_rec.path,
+                            "line": line_idx,
+                            "snippet": line.strip()[:200],
+                            "match_type": "lexical",
+                        })
+                        matches_in_file += 1
+                        if len(results) >= max_matches:
+                            logger.debug(f"[search_code] Found {len(results)} matches across {files_with_matches + 1} files; stopping")
+                            return results
+                if matches_in_file > 0:
+                    files_with_matches += 1
+            except Exception as e:
+                logger.debug(f"[search_code] Error reading blob {f_rec.blob_name}: {e}")
+                continue
+
+        logger.debug(f"[search_code] Search complete: {len(results)} matches in {files_with_matches} files (scanned {files_scanned} files)")
         return results
 
     # ──────────────────────────────────────────────────────────────────────────
