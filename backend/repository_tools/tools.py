@@ -220,8 +220,15 @@ class RepositoryToolLayer:
 
             try:
                 text = storage.get_object_text(f_rec.blob_name)
+                if not text:
+                    logger.debug(f"[search_code] Blob {f_rec.blob_name} returned empty content")
+                    continue
+
+                text_lines = text.splitlines()
+                logger.debug(f"[search_code] Blob {f_rec.blob_name}: {len(text_lines)} lines, {len(text)} bytes")
+
                 matches_in_file = 0
-                for line_idx, line in enumerate(text.splitlines(), start=1):
+                for line_idx, line in enumerate(text_lines, start=1):
                     if pattern.search(line):
                         results.append({
                             "file": f_rec.path,
@@ -235,8 +242,10 @@ class RepositoryToolLayer:
                             return results
                 if matches_in_file > 0:
                     files_with_matches += 1
+                else:
+                    logger.debug(f"[search_code] No matches in {f_rec.path} for pattern '{query}'")
             except Exception as e:
-                logger.debug(f"[search_code] Error reading blob {f_rec.blob_name}: {e}")
+                logger.error(f"[search_code] Error reading blob {f_rec.blob_name}: {e}", exc_info=True)
                 continue
 
         logger.debug(f"[search_code] Search complete: {len(results)} matches in {files_with_matches} files (scanned {files_scanned} files)")
