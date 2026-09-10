@@ -121,7 +121,7 @@ class QALoop:
         while True:
             turn_index = len(result.turns)
             elapsed = (time.perf_counter() - loop_start) * 1000
-            print(f"[QALoop:TURN] T+{elapsed:.0f}ms turn_index={turn_index}")
+            print(f"[QALoop:TURN] T+{elapsed:.0f}ms turn_index={turn_index} context_messages={len(messages)}")
             self.guardrails.record_turn()
 
             # 1. Check guardrails BEFORE turn
@@ -149,11 +149,18 @@ class QALoop:
             turn_start = time.perf_counter()
 
             try:
+                # CONTEXT WINDOWING: Keep only recent turns to prevent token explosion
+                # Keep last N turns (each turn = 1-2 messages) to maintain context while avoiding token limit
+                window_size = 6  # Keep last 6 messages (~3 turns of tool-call + tool-response pairs)
+                windowed_messages = messages[-window_size:] if len(messages) > window_size else messages
+                if len(messages) > window_size:
+                    logger.debug(f"[QALoop] Context windowing: keeping last {len(windowed_messages)} of {len(messages)} messages")
+
                 # Build LLMRequest with system prompt as first message
                 llm_messages = [
                     Message(role=MessageRole.SYSTEM, content=self.system_prompt_parts.full_text),
                 ]
-                for msg in messages:
+                for msg in windowed_messages:
                     try:
                         role_str = msg.get("role", "user").lower() if isinstance(msg, dict) else "user"
                         role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
