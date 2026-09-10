@@ -56,8 +56,15 @@ ONLY TWO VALID ACTIONS EXIST:
 ⚠️  NEVER use tool name as action: {"action": "search_code"} is WRONG
 ⚠️  ALWAYS use: {"action": "tool_call", "tool_name": "search_code"} is CORRECT
 
-YOUR TASK:
-Determine what information is needed to answer the user's question, then select the most direct available tool to retrieve that information. Provide your answer once sufficient repository evidence is gathered.
+YOUR TASK (MANDATORY):
+YOU MUST ALWAYS use tools to investigate repository questions. NEVER provide final answers without using tools first.
+
+1. Analyze the user's question
+2. Determine what tools you need to answer it
+3. Call those tools (one per turn) to gather repository evidence
+4. Once you have enough evidence from tools, provide your final answer
+
+⚠️  NEVER skip directly to final answer. Repository questions REQUIRE tool usage.
 
 RESPONSE FORMAT (MANDATORY - STRICT JSON ONLY):
 Each turn, output EXACTLY ONE complete JSON object with NO extra text:
