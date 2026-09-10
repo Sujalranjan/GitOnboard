@@ -547,8 +547,13 @@ class QALoop:
                         # Successfully parsed a JSON object
                         # Verify it has the expected structure
                         action = obj.get("action", "").lower()
-                        if action in ["tool_call", "final_answer"]:
-                            # This is a valid action object
+                        # Accept tool_call and final_answer as valid
+                        # Also accept tool names (auto-correct fallback for small models)
+                        KNOWN_TOOLS = {"search_code", "search_repository", "search_symbols", "get_symbol",
+                                      "get_file_outline", "get_callers", "get_callees", "get_dependencies",
+                                      "get_route", "get_feature", "query_rim", "read_file", "find_files"}
+                        if action in ["tool_call", "final_answer"] or (action in KNOWN_TOOLS and obj.get("arguments")):
+                            # This is a valid action object (or auto-correctable tool call)
                             break
                 except json.JSONDecodeError:
                     # This position didn't yield valid JSON, try next {
@@ -560,6 +565,18 @@ class QALoop:
             return {"action": "malformed", "error": "no valid JSON action object found"}
 
         action = obj.get("action", "").lower()
+
+        # AUTO-CORRECT: If LLM used tool name as action, convert to tool_call
+        KNOWN_TOOLS = {"search_code", "search_repository", "search_symbols", "get_symbol",
+                      "get_file_outline", "get_callers", "get_callees", "get_dependencies",
+                      "get_route", "get_feature", "query_rim", "read_file", "find_files"}
+        if action in KNOWN_TOOLS and obj.get("arguments"):
+            print(f"[parse_response:AUTO_CORRECT] turn detected tool_name_as_action: {action} → converting to tool_call")
+            return {
+                "action": "tool_call",
+                "tool_name": action,
+                "arguments": obj.get("arguments", {}),
+            }
 
         if action == "tool_call":
             return {
