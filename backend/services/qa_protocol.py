@@ -43,7 +43,7 @@ class QAProtocolAdapter:
         self.model_id = model_id or ""
         self.is_qwen = self.model_id.lower().startswith("qwen")
 
-    GROUNDING_RULES = """You are a code assistant analyzing a software repository to answer questions.
+    GROUNDING_RULES_JSON = """You are a code assistant analyzing a software repository to answer questions.
 CRITICAL: You MUST use repository tools to find information. You MUST NOT rely on general knowledge.
 
 === MANDATORY RESPONSE PROTOCOL (READ FIRST) ===
@@ -75,43 +75,51 @@ For tool calls, ALWAYS use this structure:
 When done analyzing:
 {"action": "final_answer", "answer": "Your answer based on tools"}
 
-TOOL SELECTION GUIDE:
-Use only tools listed in AVAILABLE TOOLS. Never invent, rename, or substitute a tool.
-
-- search_code: Search repository file contents for text patterns, keywords, string literals
-- search_symbols: Find files and symbols (classes, functions, methods) by name using exact matching, BM25, or semantic similarity
-- get_symbol: Look up an exact known symbol and return its definition, location, type, docstring, methods
-- get_callers: Find functions/methods that call a specific symbol
-- get_callees: Find functions/methods called by a specific symbol
-- get_dependencies: Return third-party project dependencies
-- get_route: Look up HTTP REST routes and their handler mappings
-- get_feature: Look up detected architectural capabilities (authentication, caching, logging, etc.)
-
-Prefer specialized tools when they directly match the user's question:
-- Question asks "Where is AuthService?" or "Find the login function" → search_symbols
-- Question asks for exact symbol info → get_symbol
-- Question asks "Who calls authenticate_user?" → get_callers
-- Question asks "What does process_payment call?" → get_callees
-- Question asks "What dependencies does this project use?" → get_dependencies
-- Question asks "What endpoints exist?" or "Show routes under /users" → get_route
-- Question asks "Does the repository have authentication?" → get_feature
-- Question asks for text patterns or keyword search → search_code
-
 EXECUTION RULES:
 1. ONE tool call per turn - wait for results before taking next action
 2. Use the fewest tool calls necessary to answer accurately
-3. Once available repository evidence is sufficient, provide your answer - do not perform additional searches merely because more tools are available
-4. Read source files only when available search/metadata/relationship results are insufficient or when implementation details are required
-5. Only claim to have inspected code that was actually returned by a tool
-6. Base repository-specific claims on tool results, never on general knowledge
-7. JSON ONLY: Output ONLY the JSON object, with NO text before or after it
-8. NO EXPLANATIONS: Do not add "Let me search..." or "I found..." - just output the JSON
+3. Once available repository evidence is sufficient, provide your answer
+4. Base repository-specific claims on tool results, never on general knowledge
+5. JSON ONLY: Output ONLY the JSON object, with NO text before or after it
+6. NO EXPLANATIONS: Do not add "Let me search..." or "I found..." - just output the JSON"""
 
-PAGINATION:
-If a tool result indicates "... and N more results" available, use offset/limit parameters to fetch additional results as needed.
+    GROUNDING_RULES_HERMES = """You are a code assistant analyzing a software repository to answer questions.
+CRITICAL: You MUST use repository tools to find information. You MUST NOT rely on general knowledge.
 
-RELATIONSHIP QUERIES:
-When relationship information is actually relevant to answering the question, use relationship tools (get_callers, get_callees) to explore connections. Do not use relationship tools merely because they exist."""
+=== MANDATORY RESPONSE PROTOCOL (Hermes XML Format) ===
+EVERY response MUST use HERMES XML TOOL CALLING format. Output EITHER:
+  1. A tool call in XML format (see examples below)
+  2. A final answer wrapped in tags
+
+YOUR TASK (MANDATORY):
+YOU MUST ALWAYS use tools to investigate repository questions. NEVER provide final answers without using tools first.
+
+1. Analyze the user's question
+2. Determine what tools you need to answer it
+3. Call those tools (one per turn) to gather repository evidence
+4. Once you have enough evidence from tools, provide your final answer
+
+⚠️  NEVER skip directly to final answer. Repository questions REQUIRE tool usage.
+
+RESPONSE FORMAT (MANDATORY - HERMES XML ONLY):
+For tool calls, use EXACTLY this structure:
+<tool_call>
+<invoke name="TOOL_NAME">
+<parameter name="param_name">value</parameter>
+</invoke>
+</tool_call>
+
+When done analyzing, use:
+<tool_call>
+<invoke name="final_answer">
+<parameter name="answer">Your answer based on tools</parameter>
+</invoke>
+</tool_call>"""
+
+    @property
+    def GROUNDING_RULES(self) -> str:
+        """Return format-specific grounding rules based on model type."""
+        return self.GROUNDING_RULES_HERMES if self.is_qwen else self.GROUNDING_RULES_JSON
 
     def build_system_prompt(self, tool_specs: List[ToolSpec], rim_metadata_block: Optional[str]) -> SystemPromptParts:
         """
@@ -196,7 +204,7 @@ Use `query_rim` when the question involves relationships, dependencies, or conne
 
     def parse_response(self, text: str) -> Dict[str, Any]:
         """
-        Parse LLM response for JSON action.
+        Parse LLM response for action (JSON or Hermes XML depending on model).
 
         Returns:
             {
@@ -207,6 +215,78 @@ Use `query_rim` when the question involves relationships, dependencies, or conne
                 "error": "...",  # if malformed
             }
         """
+        if self.is_qwen:
+            return self._parse_hermes_response(text)
+        else:
+            return self._parse_json_response(text)
+
+    def _parse_hermes_response(self, text: str) -> Dict[str, Any]:
+        """Parse Hermes XML tool calling format (for Qwen models)."""
+        import re
+        import json
+
+        # Look for <tool_call> ... </tool_call> blocks
+        tool_call_match = re.search(r'<tool_call>(.*?)</tool_call>', text, re.DOTALL)
+        if not tool_call_match:
+            logger.debug(f"[parse_hermes] No <tool_call> block found in response: {text[:100]}")
+            return {"action": "malformed", "error": "no <tool_call> block found"}
+
+        tool_call_content = tool_call_match.group(1)
+
+        # Extract invoke name: <invoke name="tool_name">
+        invoke_match = re.search(r'<invoke name="([^"]+)">', tool_call_content)
+        if not invoke_match:
+            logger.debug(f"[parse_hermes] No <invoke> with name attribute found")
+            return {"action": "malformed", "error": "no <invoke name=...> found"}
+
+        invoke_name = invoke_match.group(1).strip()
+
+        # Special case: final_answer
+        if invoke_name == "final_answer":
+            # Extract answer from <parameter name="answer">...</parameter>
+            param_match = re.search(r'<parameter name="answer">(.*?)</parameter>', tool_call_content, re.DOTALL)
+            answer = param_match.group(1).strip() if param_match else text
+            return {
+                "action": "final_answer",
+                "answer": answer,
+            }
+
+        # Regular tool call: extract parameters
+        KNOWN_TOOLS = {
+            "search_code", "search_repository", "search_symbols", "get_symbol",
+            "get_file_outline", "get_callers", "get_callees", "get_dependencies",
+            "get_route", "get_feature", "query_rim", "read_file", "find_files"
+        }
+
+        if invoke_name not in KNOWN_TOOLS:
+            logger.debug(f"[parse_hermes] Unknown tool: {invoke_name}")
+            return {"action": "malformed", "error": f"unknown tool: {invoke_name}"}
+
+        # Extract all parameters: <parameter name="key">value</parameter>
+        arguments = {}
+        param_pattern = r'<parameter name="([^"]+)">([^<]*)</parameter>'
+        for match in re.finditer(param_pattern, tool_call_content):
+            param_name = match.group(1).strip()
+            param_value = match.group(2).strip()
+
+            # Try to parse as JSON if it looks like JSON
+            if param_value.startswith('{') or param_value.startswith('['):
+                try:
+                    param_value = json.loads(param_value)
+                except json.JSONDecodeError:
+                    pass  # Keep as string if not valid JSON
+
+            arguments[param_name] = param_value
+
+        logger.debug(f"[parse_hermes] Parsed tool_call: {invoke_name} with {len(arguments)} params")
+        return {
+            "action": "tool_call",
+            "tool_name": invoke_name,
+            "arguments": arguments,
+        }
+
+    def _parse_json_response(self, text: str) -> Dict[str, Any]:
+        """Parse JSON format responses."""
         import json
         import re
 
@@ -249,16 +329,6 @@ Use `query_rim` when the question involves relationships, dependencies, or conne
             return {
                 "action": "malformed",
                 "error": "no valid JSON action object found",
-            }
-
-        try:
-            # obj is already parsed
-            pass
-        except json.JSONDecodeError as e:
-            logger.debug(f"JSON parse error: {e}")
-            return {
-                "action": "malformed",
-                "error": f"JSON parse error: {e}",
             }
 
         action = obj.get("action", "").lower()
