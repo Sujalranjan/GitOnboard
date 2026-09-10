@@ -206,6 +206,10 @@ Use `query_rim` when the question involves relationships, dependencies, or conne
         """
         Parse LLM response for action (JSON or Hermes XML depending on model).
 
+        For Qwen models: tries Hermes XML first, falls back to JSON if XML not found.
+        This handles non-deterministic LLM behavior where context degradation causes
+        format switching (early turns: Hermes XML, later turns: JSON).
+
         Returns:
             {
                 "action": "tool_call" | "final_answer" | "malformed",
@@ -216,7 +220,14 @@ Use `query_rim` when the question involves relationships, dependencies, or conne
             }
         """
         if self.is_qwen:
-            return self._parse_hermes_response(text)
+            # Try Hermes format first (native for Qwen)
+            result = self._parse_hermes_response(text)
+            # If Hermes parsing failed but looks like it tried, don't fall back
+            if result["action"] != "malformed" or "tool_call" in text:
+                return result
+            # Context degradation: LLM reverted to JSON, try JSON format as fallback
+            logger.debug(f"[parse_response] Hermes parse failed, trying JSON fallback for Qwen")
+            return self._parse_json_response(text)
         else:
             return self._parse_json_response(text)
 
