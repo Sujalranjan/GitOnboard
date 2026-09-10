@@ -256,6 +256,21 @@ Use `query_rim` when the question involves relationships, dependencies, or conne
 
         action = obj.get("action", "").lower()
 
+        # FALLBACK: Detect and fix malformed responses where LLM put tool name as action
+        # This happens with small models like Qwen 3 4B that don't follow complex instructions
+        # Pattern: {"action": "search_code", "arguments": {...}} should be tool_call
+        KNOWN_TOOLS = {
+            "search_code", "search_repository", "search_symbols", "get_symbol",
+            "get_file_outline", "get_callers", "get_callees", "get_dependencies",
+            "get_route", "get_feature", "query_rim", "read_file", "find_files"
+        }
+        if action in KNOWN_TOOLS and obj.get("arguments"):
+            # LLM mistakenly used tool name as action. Correct it.
+            logger.warning(f"[parse_response] Correcting malformed response: action={action} (should be tool_call)")
+            obj["tool_name"] = action
+            obj["action"] = "tool_call"
+            action = "tool_call"
+
         if action == "tool_call":
             tool_name = obj.get("tool_name", "").strip()
             arguments = obj.get("arguments", {})
