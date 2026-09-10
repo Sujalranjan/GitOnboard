@@ -15,6 +15,7 @@ from backend.agent.loop.contracts import AgentLoopConfig, StopReason, ToolObserv
 from backend.agent.loop.guardrails import LoopGuardrails
 from backend.ai.service import LLMService
 from backend.ai.schemas import LLMRequest, Message, MessageRole
+from backend.services.qa_protocol import QAProtocolAdapter
 
 if TYPE_CHECKING:
     from backend.logging.structured_logger import StructuredLogger
@@ -91,6 +92,8 @@ class QALoop:
         self.repository = repository
         self.mode = mode
         self.on_turn = on_turn
+        # Create protocol adapter with model_id for format-specific parsing (Hermes XML for Qwen, JSON for others)
+        self.protocol_adapter = QAProtocolAdapter(model_id=model)
 
     async def run(self, question: str) -> QALoopResult:
         """
@@ -221,8 +224,8 @@ class QALoop:
                     is_rim=is_rim
                 )
 
-            # 3. Parse response: tool_call | final_answer | malformed
-            parsed = self._parse_response(llm_response.content)
+            # 3. Parse response: tool_call | final_answer | malformed (using format-specific parser)
+            parsed = self.protocol_adapter.parse_response(llm_response.content)
 
             # Log all details to debug for troubleshooting
             elapsed = (time.perf_counter() - loop_start) * 1000
@@ -510,87 +513,6 @@ class QALoop:
             model=llm_response.model,
             duration_ms=(time.perf_counter() - turn_start) * 1000,
         )
-
-    def _parse_response(self, text: str) -> Dict[str, Any]:
-        """
-        Parse LLM response for tool_call | final_answer | malformed.
-
-        Returns {"action": "tool_call"|"final_answer"|"malformed", ...}
-        """
-        import json
-        import re
-
-        # Try to extract JSON object from response.
-        # Search for '{' and attempt to parse from each position until successful.
-        # This handles nested JSON (e.g., arguments with nested dicts).
-        obj = None
-        for match in re.finditer(r'\{', text):
-            start_pos = match.start()
-            # Find the matching closing brace by counting braces
-            brace_count = 0
-            end_pos = start_pos
-            for i in range(start_pos, len(text)):
-                if text[i] == '{':
-                    brace_count += 1
-                elif text[i] == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        end_pos = i + 1
-                        break
-
-            if brace_count == 0:  # Found matching close brace
-                try:
-                    # Try to parse just this JSON object
-                    json_str = text[start_pos:end_pos]
-                    obj = json.loads(json_str)
-                    if isinstance(obj, dict):
-                        # Successfully parsed a JSON object
-                        # Verify it has the expected structure
-                        action = obj.get("action", "").lower()
-                        # Accept tool_call and final_answer as valid
-                        # Also accept tool names (auto-correct fallback for small models)
-                        KNOWN_TOOLS = {"search_code", "search_repository", "search_symbols", "get_symbol",
-                                      "get_file_outline", "get_callers", "get_callees", "get_dependencies",
-                                      "get_route", "get_feature", "query_rim", "read_file", "find_files"}
-                        if action in ["tool_call", "final_answer"] or (action in KNOWN_TOOLS and obj.get("arguments")):
-                            # This is a valid action object (or auto-correctable tool call)
-                            break
-                except json.JSONDecodeError:
-                    # This position didn't yield valid JSON, try next {
-                    obj = None
-                    continue
-
-        if obj is None:
-            # No valid JSON action object found
-            return {"action": "malformed", "error": "no valid JSON action object found"}
-
-        action = obj.get("action", "").lower()
-
-        # AUTO-CORRECT: If LLM used tool name as action, convert to tool_call
-        KNOWN_TOOLS = {"search_code", "search_repository", "search_symbols", "get_symbol",
-                      "get_file_outline", "get_callers", "get_callees", "get_dependencies",
-                      "get_route", "get_feature", "query_rim", "read_file", "find_files"}
-        if action in KNOWN_TOOLS and obj.get("arguments"):
-            print(f"[parse_response:AUTO_CORRECT] turn detected tool_name_as_action: {action} → converting to tool_call")
-            return {
-                "action": "tool_call",
-                "tool_name": action,
-                "arguments": obj.get("arguments", {}),
-            }
-
-        if action == "tool_call":
-            return {
-                "action": "tool_call",
-                "tool_name": obj.get("tool_name", ""),
-                "arguments": obj.get("arguments", {}),
-            }
-        elif action == "final_answer":
-            return {
-                "action": "final_answer",
-                "answer": obj.get("answer", text),
-            }
-        else:
-            return {"action": "malformed", "error": f"unknown action: {action}"}
 
     def _has_retrieval_been_performed(self, result: QALoopResult) -> bool:
         """
