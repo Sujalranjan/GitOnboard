@@ -233,6 +233,8 @@ class QALoop:
                 print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} → FINAL_ANSWER")
                 logger.debug(f"[QALoop] Turn {turn_index}: FINAL_ANSWER")
             else:
+                # DIAGNOSTIC: Log raw LLM response for malformed
+                print(f"[QALoop:MALFORMED:RAW] turn={turn_index} len={len(llm_response.content)} content={repr(llm_response.content[:200])}")
                 print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} → MALFORMED: {parsed.get('error')}")
                 logger.debug(f"[QALoop] Turn {turn_index}: MALFORMED - {parsed.get('error')} | {llm_response.content[:100]}...")
 
