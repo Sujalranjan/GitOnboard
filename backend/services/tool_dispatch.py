@@ -473,14 +473,10 @@ class ToolDispatchTable:
             # Resolve entity
             target = self.target_resolver.resolve(entity_name)
             if not target:
-                logger.debug(f"[query_rim] Entity '{entity_name}' not found in repository index")
                 return ToolObservation(
                     tool_call_id=tool_call_id, tool_name="query_rim", success=True,
                     data={"found": False, "message": f"'{entity_name}' not found in this repository's index"},
                 )
-
-            target_type = type(target).__name__
-            logger.debug(f"[query_rim] Resolved '{entity_name}' to {target_type}")
 
             # Map relationship type + direction to SemanticQueryClass
             query_class = self._map_to_query_class(relationship_type, direction)
@@ -492,11 +488,9 @@ class ToolDispatchTable:
                 direction=TraversalDirection.FORWARD if direction == "FORWARD" else TraversalDirection.REVERSE,
                 confidence=1.0,
             )
-            logger.debug(f"[query_rim] Traversing {entity_name}: relationship_type={relationship_type}, direction={direction}, query_class={query_class}")
             result = self.graph_traverser.traverse(intent, target)
 
             if not result.related_entities:
-                logger.debug(f"[query_rim] No related entities found for '{entity_name}' ({relationship_type}, {direction}). Explanation: {result.explanation}")
                 return ToolObservation(
                     tool_call_id=tool_call_id, tool_name="query_rim", success=True,
                     data={
@@ -505,8 +499,6 @@ class ToolDispatchTable:
                         "message": result.explanation,
                     },
                 )
-
-            logger.debug(f"[query_rim] Found {len(result.related_entities)} related entities for '{entity_name}'")
 
             # Serialize related entities (cap to top 15)
             related_list = [
