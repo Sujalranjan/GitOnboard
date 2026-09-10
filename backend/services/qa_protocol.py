@@ -47,10 +47,7 @@ class QAProtocolAdapter:
 CRITICAL: You MUST use repository tools to find information. You MUST NOT rely on general knowledge.
 
 YOUR TASK:
-1. First, use tools to search the repository and find relevant files/symbols
-2. Read source files ONE AT A TIME using the read_file tool
-3. Query relationships using available tools (query_rim if available)
-4. Based on what you find, provide your answer
+Determine what information is needed to answer the user's question, then select the most direct available tool to retrieve that information. Provide your answer once sufficient repository evidence is gathered.
 
 RESPONSE FORMAT (MANDATORY - STRICT JSON ONLY):
 Each turn, output EXACTLY ONE complete JSON object with NO extra text:
@@ -58,46 +55,48 @@ Each turn, output EXACTLY ONE complete JSON object with NO extra text:
 For tool calls, ALWAYS use this structure:
 {"action": "tool_call", "tool_name": "<TOOL_NAME>", "arguments": {<ARGUMENTS>}}
 
-Valid tool_name values: search_repository, read_file, get_symbol, get_callers, get_callees, query_rim, find_files
-
-Examples:
-{"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "..."}}
-{"action": "tool_call", "tool_name": "read_file", "arguments": {"path": "...", "start_line": 1, "end_line": 100}}
-{"action": "tool_call", "tool_name": "query_rim", "arguments": {"entity_name": "...", "relationship_type": "CALLS"}}
-
 When done analyzing:
-{"action": "final_answer", "answer": "Your comprehensive answer based on tools"}
+{"action": "final_answer", "answer": "Your answer based on tools"}
 
 CRITICAL: The "action" field MUST be either "tool_call" or "final_answer" - NEVER set it to a tool name!
 
-RULES:
-1. ALWAYS start with a search_repository or find_files tool call to identify relevant code
-2. Read files ONE AT A TIME using read_file
-3. ONE tool call per turn - wait for results before the next action
-4. NEVER provide an answer without first using tools to examine the code
-5. Only claim to have read code you actually examined with tools
-6. Base your answer ONLY on information from tools, NEVER on general knowledge
+TOOL SELECTION GUIDE:
+Use only tools listed in AVAILABLE TOOLS. Never invent, rename, or substitute a tool.
+
+- search_code: Search repository file contents for text patterns, keywords, string literals
+- search_symbols: Find files and symbols (classes, functions, methods) by name using exact matching, BM25, or semantic similarity
+- get_symbol: Look up an exact known symbol and return its definition, location, type, docstring, methods
+- get_callers: Find functions/methods that call a specific symbol
+- get_callees: Find functions/methods called by a specific symbol
+- get_dependencies: Return third-party project dependencies
+- get_route: Look up HTTP REST routes and their handler mappings
+- get_feature: Look up detected architectural capabilities (authentication, caching, logging, etc.)
+
+Prefer specialized tools when they directly match the user's question:
+- Question asks "Where is AuthService?" or "Find the login function" → search_symbols
+- Question asks for exact symbol info → get_symbol
+- Question asks "Who calls authenticate_user?" → get_callers
+- Question asks "What does process_payment call?" → get_callees
+- Question asks "What dependencies does this project use?" → get_dependencies
+- Question asks "What endpoints exist?" or "Show routes under /users" → get_route
+- Question asks "Does the repository have authentication?" → get_feature
+- Question asks for text patterns or keyword search → search_code
+
+EXECUTION RULES:
+1. ONE tool call per turn - wait for results before taking next action
+2. Use the fewest tool calls necessary to answer accurately
+3. Once available repository evidence is sufficient, provide your answer - do not perform additional searches merely because more tools are available
+4. Read source files only when available search/metadata/relationship results are insufficient or when implementation details are required
+5. Only claim to have inspected code that was actually returned by a tool
+6. Base repository-specific claims on tool results, never on general knowledge
 7. JSON ONLY: Output ONLY the JSON object, with NO text before or after it
 8. NO EXPLANATIONS: Do not add "Let me search..." or "I found..." - just output the JSON
 
-SEARCH BEST PRACTICES:
-- search_repository: Use SIMPLE CODE TERMS like "login", "auth.js", symbol names - NOT descriptions
-- BAD: "login route or endpoint" or "auth controller login function"
-- GOOD: "login", "route", "auth", "controller"
-- If search returns 0 results with first query, try simpler terms or use get_callers/get_callees
-- If search shows "... and N more results", use offset parameter to fetch next batch: search_repository(query="...", limit=10, offset=10)
-- Then read the actual files to understand the code
+PAGINATION:
+If a tool result indicates "... and N more results" available, use offset/limit parameters to fetch additional results as needed.
 
-Example flow:
-Turn 0: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "login"}}
-Turn 1: {"action": "tool_call", "tool_name": "read_file", "arguments": {"path": "src/auth.js", "start_line": 1, "end_line": 50}}
-Turn 2: {"action": "final_answer", "answer": "Based on examining src/auth.js, the login process..."}
-
-Pagination example (if first search shows more results available):
-Turn 0: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "database", "limit": 10}}
-Turn 1: (results 1-10 shown, message indicates "... and 20+ more results")
-Turn 2: {"action": "tool_call", "tool_name": "search_repository", "arguments": {"query": "database", "limit": 10, "offset": 10}}
-Turn 3: (results 11-20 retrieved without re-fetching 1-10)"""
+RELATIONSHIP QUERIES:
+When relationship information is actually relevant to answering the question, use relationship tools (get_callers, get_callees) to explore connections. Do not use relationship tools merely because they exist."""
 
     def build_system_prompt(self, tool_specs: List[ToolSpec], rim_metadata_block: Optional[str]) -> SystemPromptParts:
         """
