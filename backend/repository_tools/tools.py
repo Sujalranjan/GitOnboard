@@ -171,16 +171,19 @@ class RepositoryToolLayer:
         """
         results: List[Dict[str, Any]] = []
 
+        # DIAGNOSTIC: Log precondition state at entry
+        logger.error(f"[search_code:DIAGNOSTIC] ENTRY query='{query[:50]}' repo='{self.repo_name}' db={self.db is not None} analysis_id={self.analysis_id}")
+
         # Validate preconditions
         if self.db is None:
             try:
-                logger.error(f"[search_code] Database session is None. Cannot search repository '{self.repo_name}'.")
+                logger.error(f"[search_code:FAILURE] Database session is None. Cannot search repository '{self.repo_name}'.")
             except:
                 pass
             return results
         if self.analysis_id is None:
             try:
-                logger.error(f"[search_code] Analysis ID is None for repository '{self.repo_name}'. Analysis may not be complete.")
+                logger.error(f"[search_code:FAILURE] Analysis ID is None for repository '{self.repo_name}'. Analysis may not be complete.")
             except:
                 pass
             return results

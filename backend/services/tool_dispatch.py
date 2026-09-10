@@ -421,6 +421,9 @@ class ToolDispatchTable:
         file_pattern = arguments.get("file_pattern")
         max_matches = arguments.get("max_matches", 25)
 
+        # DIAGNOSTIC: Log tool_layer state at dispatch entry
+        logger.error(f"[tool_dispatch:search_code:DIAGNOSTIC] tool_layer.db={self.tool_layer.db is not None} tool_layer.analysis_id={self.tool_layer.analysis_id}")
+
         if not query:
             return ToolObservation(
                 tool_call_id=tool_call_id, tool_name="search_code", success=False,

@@ -236,6 +236,7 @@ async def analyze_repository_stream(
                 repo_context = ""
                 analysis_id = None
                 repo_display_name = request.repo_hash[:12]
+                logger.error(f"[router:analysis_resolution:DIAGNOSTIC] repo=NOT_FOUND analysis_id=None")
             else:
                 # Get the latest analysis for this repository
                 analysis = db.query(Analysis).filter(
@@ -245,9 +246,11 @@ async def analyze_repository_stream(
                 if analysis:
                     analysis_id = analysis.id
                     repo_context = await build_repository_context(db, repo, analysis_id)
+                    logger.error(f"[router:analysis_resolution:DIAGNOSTIC] repo='{repo.url}' analysis_id={analysis_id} (FOUND)")
                 else:
                     analysis_id = None
                     repo_context = ""
+                    logger.error(f"[router:analysis_resolution:DIAGNOSTIC] repo='{repo.url}' analysis_id=None (NOT FOUND - no analysis)")
 
                 repo_display_name = repo.url.split('/')[-1].replace('.git', '') if repo.url else request.repo_hash[:12]
 
@@ -279,6 +282,9 @@ async def analyze_repository_stream(
                 user_id=current_user.id,
             )
 
+            # DIAGNOSTIC: Log tool_layer initialization state
+            logger.error(f"[router:llm:DIAGNOSTIC] Tool layer created: repo='{repo_display_name}' analysis_id={analysis_id} db={db is not None}")
+
             graph_traverser = FactStoreGraphTraverser(db, analysis_id) if analysis_id else None
             target_resolver = TargetEntityResolver(db, analysis_id) if analysis_id else None
             tool_dispatch = ToolDispatchTable(tool_layer, graph_traverser, target_resolver)
@@ -307,16 +313,18 @@ async def analyze_repository_stream(
                     return
 
                 if turn.tool_call:
-                    event_queue.put_nowait({
+                    event = {
                         "type": "tool-call",
                         "tool_name": turn.tool_call.get("tool_name"),
                         "arguments": turn.tool_call.get("arguments", {}),
                         "turn_index": turn.turn_index,
                         "timestamp": (datetime.now() - start_time).total_seconds(),
-                    })
+                    }
+                    logger.error(f"[router:on_turn:DIAGNOSTIC:tool-call] turn={turn.turn_index} tool={event['tool_name']}")
+                    event_queue.put_nowait(event)
 
                 if turn.tool_observation:
-                    event_queue.put_nowait({
+                    event = {
                         "type": "tool-response",
                         "tool_name": turn.tool_observation.get("tool_name"),
                         "success": turn.tool_observation.get("success", False),
@@ -326,7 +334,9 @@ async def analyze_repository_stream(
                         "duration_ms": turn.duration_ms,
                         "turn_index": turn.turn_index,
                         "timestamp": (datetime.now() - start_time).total_seconds(),
-                    })
+                    }
+                    logger.error(f"[router:on_turn:DIAGNOSTIC:tool-response] turn={turn.turn_index} tool={event['tool_name']} success={event['success']} result_count={event['result_count']}")
+                    event_queue.put_nowait(event)
 
             # 6. Create and run the QALoop in background
             loop = QALoop(
@@ -351,7 +361,13 @@ async def analyze_repository_stream(
                     try:
                         # Check for queued events (non-blocking)
                         event = event_queue.get_nowait()
-                        yield f"data: {json.dumps(event)}\n\n"
+                        try:
+                            json_str = json.dumps(event)
+                            logger.error(f"[router:sse:DIAGNOSTIC:serialized] event_type={event.get('type')} json_len={len(json_str)}")
+                        except Exception as json_err:
+                            logger.error(f"[router:sse:DIAGNOSTIC:serialization_failed] event_type={event.get('type')} error={json_err}")
+                            continue
+                        yield f"data: {json_str}\n\n"
                     except asyncio.QueueEmpty:
                         # No events, yield control briefly
                         await asyncio.sleep(0.01)
@@ -380,6 +396,7 @@ async def analyze_repository_stream(
                 "stop_reason": result.stop_reason.value,
                 "timestamp": (datetime.now() - start_time).total_seconds(),
             }
+            logger.error(f"[router:sse:DIAGNOSTIC:final-answer] stop_reason={result.stop_reason.value} answer_len={len(result.answer)}")
             yield f"data: {json.dumps(final_event)}\n\n"
 
             # 9. Emit completion metrics
@@ -394,6 +411,7 @@ async def analyze_repository_stream(
                 "model_used": model,
                 "timestamp": elapsed_seconds,
             }
+            logger.error(f"[router:sse:DIAGNOSTIC:completed] tool_calls={total_tool_calls} elapsed_s={elapsed_seconds:.1f}")
             yield f"data: {json.dumps(completion_event)}\n\n"
 
         except Exception as e:
