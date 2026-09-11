@@ -346,7 +346,10 @@ class QALoop:
                     result.turns.append(final_turn)
                     if self.on_turn:
                         await self.on_turn(final_turn)
-                    result.answer = strip_xml_tags(final_turn.raw_model_output)
+                    # Parse the final answer response to extract the answer field, then strip XML tags
+                    parsed_final = self.protocol_adapter.parse_response(final_turn.raw_model_output)
+                    answer_text = parsed_final.get("answer", final_turn.raw_model_output)
+                    result.answer = strip_xml_tags(answer_text)
                     break
 
                 # 6. Execute tool
