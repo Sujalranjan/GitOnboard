@@ -78,77 +78,72 @@ class RepositoryToolLayer:
     ) -> Dict[str, Any]:
         """
         Reads a slice of a file from Azure Blob Storage.
-        First tries to get blob_name from FactFile index, then falls back to
-        direct blob storage search. Returns specified line range or full file.
+        Requires analysis_id to be set. Constructs blob name from repo hash and path,
+        fetches from blob storage, and returns specified line range.
         """
         from backend.storage import get_storage
 
         clean_path = path.replace("\\", "/").removeprefix("./").lstrip("/")
         storage = get_storage()
-        blob_name = None
 
-        # Strategy 1: Use FactFile index if available
-        if self.db is not None and self.analysis_id is not None:
-            fact_file = (
-                self.db.query(FactFile)
-                .filter(
-                    FactFile.analysis_id == self.analysis_id,
-                    FactFile.path == clean_path,
-                )
-                .first()
-            )
-            if fact_file and fact_file.blob_name:
-                blob_name = fact_file.blob_name
+        # Need analysis_id to get repo hash
+        if self.analysis_id is None or self.db is None:
+            return {
+                "path": clean_path,
+                "error": "no_analysis",
+                "message": "Analysis context not available. Cannot read file."
+            }
 
-        # Strategy 2: Construct blob name from analysis + repository hash
-        if not blob_name and self.analysis_id is not None and self.db is not None:
-            try:
-                analysis = self.db.query(Analysis).filter(Analysis.id == self.analysis_id).first()
-                if analysis:
-                    repo = self.db.query(Repository).filter(Repository.id == analysis.repository_id).first()
-                    if repo and repo.repository_hash:
-                        # Try constructed blob name
-                        blob_name = f"repositories/{repo.repository_hash}/snapshots/local_clone/{clean_path}"
-            except Exception as e:
-                pass
-
-        # Strategy 3: Search all available blobs for matching path (only if needed)
-        if not blob_name:
-            try:
-                all_blobs = storage.list_objects()
-                for blob in all_blobs:
-                    if blob.endswith(clean_path):
-                        blob_name = blob
-                        break
-            except Exception:
-                pass
-
-        # Try to fetch the file from blob storage
-        if blob_name:
-            try:
-                raw_text = storage.get_object_text(blob_name)
-                lines = raw_text.splitlines(keepends=True)
-                total_lines = len(lines)
-                s, e = clamp_line_range(total_lines, start_line, end_line)
-                selected_lines = lines[s - 1 : e]
-                numbered_content = "".join(f"{s + idx:4d} | {line}" for idx, line in enumerate(selected_lines))
+        # Get repository hash from analysis
+        try:
+            analysis = self.db.query(Analysis).filter(Analysis.id == self.analysis_id).first()
+            if not analysis:
                 return {
                     "path": clean_path,
-                    "start_line": s,
-                    "end_line": e,
-                    "total_lines": total_lines,
-                    "content": numbered_content,
-                    "raw_text": "".join(selected_lines),
+                    "error": "no_analysis",
+                    "message": f"Analysis {self.analysis_id} not found."
                 }
-            except Exception:
-                pass
 
-        # File not found - return helpful error message
-        return {
-            "path": clean_path,
-            "error": "wrong_path",
-            "message": f"File not found: '{path}'. Check that the path is correct."
-        }
+            repo = self.db.query(Repository).filter(Repository.id == analysis.repository_id).first()
+            if not repo or not repo.repository_hash:
+                return {
+                    "path": clean_path,
+                    "error": "no_repo",
+                    "message": "Repository not found."
+                }
+
+            # Construct blob name directly
+            blob_name = f"repositories/{repo.repository_hash}/snapshots/local_clone/{clean_path}"
+
+            # Fetch from blob storage
+            raw_text = storage.get_object_text(blob_name)
+            lines = raw_text.splitlines(keepends=True)
+            total_lines = len(lines)
+            s, e = clamp_line_range(total_lines, start_line, end_line)
+            selected_lines = lines[s - 1 : e]
+            numbered_content = "".join(f"{s + idx:4d} | {line}" for idx, line in enumerate(selected_lines))
+
+            return {
+                "path": clean_path,
+                "start_line": s,
+                "end_line": e,
+                "total_lines": total_lines,
+                "content": numbered_content,
+                "raw_text": "".join(selected_lines),
+            }
+
+        except FileNotFoundError:
+            return {
+                "path": clean_path,
+                "error": "wrong_path",
+                "message": f"File not found: '{path}'. Check that the path is correct."
+            }
+        except Exception as err:
+            return {
+                "path": clean_path,
+                "error": "read_error",
+                "message": f"Error reading file: {str(err)}"
+            }
 
     # ──────────────────────────────────────────────────────────────────────────
     # 2. find_files
