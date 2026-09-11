@@ -25,6 +25,7 @@ from backend.repository_tools import resolve_repo_root, RepositoryToolLayer
 from backend.summary.audit import redact_secrets, sanitize_dict_or_list
 from backend.services.qa_loop import QALoop, QALoopResult
 from backend.services.qa_protocol import QAProtocolAdapter
+from backend.services.llm_analysis_service import LLMAnalysisService
 from backend.services.tool_dispatch import ToolDispatchTable, TargetEntityResolver
 from backend.services.rim_metadata import build_rim_metadata_block
 from backend.logging import StructuredLogger
@@ -268,26 +269,23 @@ class RIMComparisonService:
 
         # 3. RUN BASELINE — with repository context (no RIM relationships)
         logger.info(f"[RIM Comparison] Running baseline (no RIM) for: {question}")
-        baseline_dispatch = ToolDispatchTable(tool_layer)  # No RIM tools
-        baseline_protocol = QAProtocolAdapter()
-        baseline_prompt_parts = baseline_protocol.build_system_prompt(
-            tool_specs=baseline_dispatch.specs(include_rim=False),
-            rim_metadata_block=repository_context_block  # Inject formatted context
-        )
-        baseline_loop = QALoop(
+
+        baseline_analysis_service = LLMAnalysisService(
             llm_service=self.llm_service,
-            tool_dispatch=baseline_dispatch,
-            config=config,
-            system_prompt_parts=baseline_prompt_parts,
+            tool_layer=tool_layer,
+            graph_traverser=None,  # No RIM tools for baseline
+            target_resolver=None,  # No RIM tools for baseline
             model="qwen3:4b-instruct",
+            config=config,
+            rim_metadata_block=repository_context_block,  # Inject formatted context
             structured_logger=structured_log,
             request_id=request_id,
             repository=self.repo_name,
-            mode="baseline"
+            mode="baseline",
         )
 
         t0 = time.perf_counter()
-        baseline_result = await baseline_loop.run(question)
+        baseline_result = await baseline_analysis_service.run(question, include_rim=False)
         baseline_elapsed_ms = (time.perf_counter() - t0) * 1000
 
         logger.info(
@@ -312,26 +310,23 @@ class RIMComparisonService:
         logger.info(f"[RIM Comparison] Running RIM comparison for: {question}")
         graph_traverser = FactStoreGraphTraverser(self.db, analysis_id)
         target_resolver = TargetEntityResolver(self.db, analysis_id)
-        rim_dispatch = ToolDispatchTable(tool_layer, graph_traverser, target_resolver)
-        rim_protocol = QAProtocolAdapter()
-        rim_prompt_parts = rim_protocol.build_system_prompt(
-            tool_specs=rim_dispatch.specs(include_rim=True),
-            rim_metadata_block=combined_rim_block
-        )
-        rim_loop = QALoop(
+
+        rim_analysis_service = LLMAnalysisService(
             llm_service=self.llm_service,
-            tool_dispatch=rim_dispatch,
-            config=config,
-            system_prompt_parts=rim_prompt_parts,
+            tool_layer=tool_layer,
+            graph_traverser=graph_traverser,
+            target_resolver=target_resolver,
             model="qwen3:4b-instruct",
+            config=config,
+            rim_metadata_block=combined_rim_block,
             structured_logger=structured_log,
             request_id=request_id,
             repository=self.repo_name,
-            mode="rim"
+            mode="rim",
         )
 
         t0 = time.perf_counter()
-        rim_result = await rim_loop.run(question)
+        rim_result = await rim_analysis_service.run(question, include_rim=True)
         rim_elapsed_ms = (time.perf_counter() - t0) * 1000
 
         logger.info(

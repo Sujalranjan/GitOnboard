@@ -23,6 +23,7 @@ from backend.models.user import User
 from backend.repository_tools.tools import RepositoryToolLayer, resolve_repo_root
 from backend.services.qa_loop import QALoop, QALoopTurn
 from backend.services.qa_protocol import QAProtocolAdapter
+from backend.services.llm_analysis_service import LLMAnalysisService
 from backend.services.tool_dispatch import TargetEntityResolver, ToolDispatchTable
 from backend.agent.loop.contracts import AgentLoopConfig
 from backend.intelligence.retrieval.graph_traverser import FactStoreGraphTraverser
@@ -288,7 +289,7 @@ async def analyze_repository_stream(
             if request.model:
                 os.environ["OLLAMA_MODEL"] = model
 
-            # 4. Construct shared tool stack
+            # 4. Construct tool layer and services
             llm_service = get_llm_service()
             repo_root = resolve_repo_root(repo_name=repo_display_name, user_id=current_user.id, db=db) if repo else None
 
@@ -305,22 +306,6 @@ async def analyze_repository_stream(
 
             graph_traverser = FactStoreGraphTraverser(db, analysis_id) if analysis_id else None
             target_resolver = TargetEntityResolver(db, analysis_id) if analysis_id else None
-            tool_dispatch = ToolDispatchTable(tool_layer, graph_traverser, target_resolver)
-
-            protocol = QAProtocolAdapter(model_id=model)
-            prompt_parts = protocol.build_system_prompt(
-                tool_specs=tool_dispatch.specs(include_rim=True),
-                rim_metadata_block=repo_context or None,
-            )
-
-            config = AgentLoopConfig(
-                max_agent_turns=50,
-                max_tool_calls=15,
-                max_command_executions=0,
-                max_execution_seconds=180,
-                max_observation_bytes=256000,  # 256KB - allow full file reads (typical files <250KB)
-                max_repeated_tool_calls=3,
-            )
 
             # 5. Create event queue for real-time tool visibility
             event_queue: asyncio.Queue = asyncio.Queue()
@@ -363,26 +348,37 @@ async def analyze_repository_stream(
                     except Exception as e:
                         print(f"[on_turn] ERROR queueing tool-response: {e}")
 
-            # 6. Create and run the QALoop in background
-            loop = QALoop(
-                llm_service=llm_service,
-                tool_dispatch=tool_dispatch,
-                config=config,
-                system_prompt_parts=prompt_parts,
-                model=model,
-                on_turn=on_turn_callback,
+            # 6. Create analysis service
+            config = AgentLoopConfig(
+                max_agent_turns=50,
+                max_tool_calls=15,
+                max_command_executions=0,
+                max_execution_seconds=180,
+                max_observation_bytes=256000,  # 256KB - allow full file reads (typical files <250KB)
+                max_repeated_tool_calls=3,
             )
 
-            # Run loop as background task
-            loop_task = asyncio.create_task(loop.run(request.query))
+            analysis_service = LLMAnalysisService(
+                llm_service=llm_service,
+                tool_layer=tool_layer,
+                graph_traverser=graph_traverser,
+                target_resolver=target_resolver,
+                model=model,
+                config=config,
+                rim_metadata_block=repo_context or None,
+                on_turn_callback=on_turn_callback,
+            )
 
-            # 7. Drain event queue in parallel with loop execution
+            # Run analysis as background task
+            loop_task = asyncio.create_task(analysis_service.run(request.query))
+
+            # 7. Drain event queue in parallel with analysis execution
             total_tool_calls = 0
             total_prompt_tokens = 0
             total_completion_tokens = 0
             events_yielded = 0
 
-            print(f"[stream_generator] Starting event drain loop, loop_task.done()={loop_task.done()}")
+            print(f"[stream_generator] Starting event drain loop, analysis_task.done()={loop_task.done()}")
 
             try:
                 while not loop_task.done():
@@ -409,7 +405,7 @@ async def analyze_repository_stream(
 
                 print(f"[stream_generator] Main loop exited, events_yielded so far={events_yielded}")
 
-                # Drain any remaining events after loop completes
+                # Drain any remaining events after analysis completes
                 while not event_queue.empty():
                     try:
                         event = event_queue.get_nowait()
