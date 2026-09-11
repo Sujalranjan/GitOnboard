@@ -1,10 +1,9 @@
 from typing import Callable, Optional
 from backend.services.qa_loop import QALoop, QALoopTurn, QALoopResult
-from backend.services.tool_dispatch import ToolDispatchTable
+from backend.services.tool_dispatch import ToolDispatchTable, TargetEntityResolver
 from backend.services.qa_protocol import QAProtocolAdapter
-from backend.intelligence.graph_traverser import GraphTraverser
-from backend.intelligence.target_resolver import TargetResolver
-from backend.repository_tools.tools import RepositoryTools
+from backend.intelligence.retrieval.graph_traverser import FactStoreGraphTraverser
+from backend.repository_tools.tools import RepositoryToolLayer
 from backend.agent.loop.contracts import AgentLoopConfig
 
 
@@ -19,9 +18,9 @@ class LLMAnalysisService:
     def __init__(
         self,
         llm_service,
-        tool_layer: RepositoryTools,
-        graph_traverser: Optional[GraphTraverser] = None,
-        target_resolver: Optional[TargetResolver] = None,
+        tool_layer: RepositoryToolLayer,
+        graph_traverser: Optional[FactStoreGraphTraverser] = None,
+        target_resolver: Optional[TargetEntityResolver] = None,
         model: str = "qwen3:4b-instruct",
         config: Optional[AgentLoopConfig] = None,
         rim_metadata_block: Optional[str] = None,
