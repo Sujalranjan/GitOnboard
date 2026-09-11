@@ -86,6 +86,17 @@ class RepositoryToolLayer:
         clean_path = path.replace("\\", "/").removeprefix("./").lstrip("/")
         storage = get_storage()
 
+        # Convert string parameters to integers if needed (from LLM tool calls)
+        try:
+            start_line = int(start_line) if start_line else 1
+            end_line = int(end_line) if end_line else None
+        except (ValueError, TypeError):
+            return {
+                "path": clean_path,
+                "error": "invalid_range",
+                "message": "start_line and end_line must be valid integers."
+            }
+
         # Need analysis_id to get repo hash
         if self.analysis_id is None or self.db is None:
             return {
