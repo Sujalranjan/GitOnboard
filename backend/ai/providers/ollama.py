@@ -47,15 +47,24 @@ class OllamaProvider:
     async def generate(self, request: LLMRequest) -> LLMResponse:
         # Respect request.model if provided, otherwise use provider's assigned default
         model_name = request.model or self.default_model
+
+        # Log request metadata for context window analysis
+        import json as _json
+        body = self._build_body(request)
+        body_size = len(_json.dumps(body))
+        num_messages = len(request.messages)
+        messages_size = sum(len(m.content) for m in request.messages)
+        logger.info(f"[OLLAMA_REQUEST] model={model_name} num_messages={num_messages} body_size={body_size} messages_chars={messages_size} num_ctx={body.get('options', {}).get('num_ctx')} num_predict={body.get('options', {}).get('num_predict')}")
+
         logger.info(f"[LLM_LIFECYCLE] OllamaProvider: Sending request to {self.base_url}/api/chat (model: {model_name}, timeout={self.timeout}s)...")
         t0 = time.time()
         timeout_config = httpx.Timeout(timeout=self.timeout, connect=10.0, read=self.timeout, write=10.0)
-        
+
         async with httpx.AsyncClient(timeout=timeout_config) as client:
             try:
                 resp = await client.post(
                     f"{self.base_url}/api/chat",
-                    json=self._build_body(request),
+                    json=body,
                 )
             except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError) as e:
                 elapsed = time.time() - t0
@@ -77,6 +86,9 @@ class OllamaProvider:
         prompt_tokens = data.get("prompt_eval_count", 0)
         eval_tokens = data.get("eval_count", 0)
         total_tokens = prompt_tokens + eval_tokens
+
+        # Log Ollama response metadata for context analysis
+        logger.info(f"[OLLAMA_RESPONSE] prompt_eval_count={prompt_tokens} eval_count={eval_tokens} total_tokens={total_tokens} response_chars={len(content)}")
 
         logger.info(f"[LLM_LIFECYCLE] OllamaProvider: Successfully extracted text ({len(content)} chars, {total_tokens} tokens)")
 

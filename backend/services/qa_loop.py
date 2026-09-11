@@ -141,6 +141,13 @@ class QALoop:
         while True:
             turn_index = len(result.turns)
             elapsed = (time.perf_counter() - loop_start) * 1000
+
+            # Log conversation state for context window analysis
+            import json as _json
+            messages_size = sum(len(m.get("content", "")) for m in messages if isinstance(m, dict))
+            messages_size_kb = messages_size / 1024
+            print(f"[QALoop:TURN] T+{elapsed:.0f}ms turn_index={turn_index} context_messages={len(messages)} history_size_chars={messages_size} history_size_kb={messages_size_kb:.1f}")
+
             print(f"[QALoop:TURN] T+{elapsed:.0f}ms turn_index={turn_index} context_messages={len(messages)}")
             self.guardrails.record_turn()
 
@@ -450,6 +457,13 @@ class QALoop:
 
                 # Record turn with tool info (include data and formatted message for later reconstruction)
                 formatted_message = self._format_tool_observation(tool_name, tool_observation, sanitized_data)
+
+                # Log tool result size for context analysis
+                formatted_msg_size = len(formatted_message)
+                formatted_msg_kb = formatted_msg_size / 1024
+                data_size = len(str(sanitized_data)) if sanitized_data else 0
+                print(f"[QALoop:TOOL_RESULT] T+{loop_elapsed_after:.0f}ms turn={turn_index} tool={tool_name} result_chars={formatted_msg_size} result_kb={formatted_msg_kb:.1f} data_chars={data_size}")
+
                 turn.tool_call = {"tool_name": tool_name, "arguments": arguments}
                 turn.tool_observation = {
                     "tool_name": tool_name,
