@@ -291,7 +291,7 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
             <div className="p-6 space-y-4">
               <div>
                 <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Answer</h4>
-                <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed prose dark:prose-invert prose-sm max-w-none">
+                <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
                   <ReactMarkdown
                     components={{
                       p: (props) => <p className="mb-3" {...props} />,
@@ -302,7 +302,7 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                       ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
                       li: (props) => <li className="mb-1" {...props} />,
                       code: (props: any) => (
-                        <code className="!inline !w-auto bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono whitespace-normal break-all" {...props} />
+                        <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono" {...props} />
                       ),
                       pre: (props) => (
                         <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs">
@@ -387,7 +387,7 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
             <div className="p-6 space-y-4">
               <div>
                 <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Answer</h4>
-                <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed prose dark:prose-invert prose-sm max-w-none">
+                <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
                   <ReactMarkdown
                     components={{
                       p: (props) => <p className="mb-3" {...props} />,
@@ -398,7 +398,7 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                       ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
                       li: (props) => <li className="mb-1" {...props} />,
                       code: (props: any) => (
-                        <code className="!inline !w-auto bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono whitespace-normal break-all" {...props} />
+                        <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono" {...props} />
                       ),
                       pre: (props) => (
                         <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs">
