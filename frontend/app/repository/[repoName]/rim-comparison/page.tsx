@@ -243,17 +243,17 @@ const MetricComparisonRow = ({
   }
 
   return (
-    <tr className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
-      <td className="py-2 px-3 font-semibold text-slate-900 dark:text-slate-100">{label}</td>
-      <td className="py-2 px-3 text-right text-slate-600 dark:text-slate-400 font-mono">{withoutValue}</td>
-      <td className="py-2 px-3 text-right text-slate-600 dark:text-slate-400 font-mono">{withValue}</td>
-      <td className="py-2 px-3 text-right">
-        <div className="flex flex-col items-end gap-0.5">
-          <span className="font-mono text-slate-600 dark:text-slate-400">
+    <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+      <td className="py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">{label}</td>
+      <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300 font-mono font-medium">{withoutValue}</td>
+      <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300 font-mono font-medium">{withValue}</td>
+      <td className="py-3 px-4 text-right">
+        <div className="flex flex-col items-end gap-1">
+          <span className="font-mono text-slate-700 dark:text-slate-300 font-medium">
             {typeof diff === 'string' ? diff : (diff > 0 ? '+' : '') + diff}
             {pct !== null && pct !== undefined ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}
           </span>
-          {winner && <span className={`text-xs font-semibold ${winnerColor}`}>{winner}</span>}
+          {winner && <span className={`text-xs font-bold ${winnerColor}`}>{winner}</span>}
         </div>
       </td>
     </tr>
@@ -317,29 +317,6 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                   >
                     {withoutRim.answer}
                   </ReactMarkdown>
-                </div>
-              </div>
-
-              {/* Metrics */}
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4">
-                <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3 text-sm">Metrics</h4>
-                <div className="space-y-2 text-xs text-slate-700 dark:text-slate-300">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Tool Calls:</span>
-                    <span className="font-mono">{withoutRim.retrieval_metrics.tool_call_count}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Files Retrieved:</span>
-                    <span className="font-mono">{withoutRim.retrieval_metrics.files_retrieved}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Input Tokens:</span>
-                    <span className="font-mono">{withoutRim.llm_efficiency_metrics.actual_prompt_tokens}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Total Latency:</span>
-                    <span className="font-mono">{(withoutRim.llm_efficiency_metrics.total_latency_ms ?? 0).toFixed(0)}ms</span>
-                  </div>
                 </div>
               </div>
 
@@ -426,33 +403,6 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                 </div>
               </div>
 
-              {/* Metrics with Comparison */}
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4">
-                <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3 text-sm">Metrics</h4>
-                <div className="space-y-2 text-xs text-slate-700 dark:text-slate-300">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Tool Calls:</span>
-                    <span className="font-mono">{withRim.retrieval_metrics.tool_call_count}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Files Retrieved:</span>
-                    <span className="font-mono">{withRim.retrieval_metrics.files_retrieved}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">RIM Entities:</span>
-                    <span className="font-mono">{withRim.retrieval_metrics.rim_entities_accessed_count}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Input Tokens:</span>
-                    <span className="font-mono">{withRim.llm_efficiency_metrics.actual_prompt_tokens}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Total Latency:</span>
-                    <span className="font-mono">{(withRim.llm_efficiency_metrics.total_latency_ms ?? 0).toFixed(0)}ms</span>
-                  </div>
-                </div>
-              </div>
-
               {/* Tool Calls */}
               {withRim.tool_call_transcript && withRim.tool_call_transcript.length > 0 && (
                 <div>
@@ -503,11 +453,11 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
           <div className="p-6 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700">
-                  <th className="text-left py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">Metric</th>
-                  <th className="text-right py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">WITHOUT RIM</th>
-                  <th className="text-right py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">WITH RIM</th>
-                  <th className="text-right py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">Difference / Winner</th>
+                <tr className="bg-slate-100 dark:bg-slate-700/50">
+                  <th className="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">Metric</th>
+                  <th className="text-right py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">WITHOUT RIM</th>
+                  <th className="text-right py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">WITH RIM</th>
+                  <th className="text-right py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">Difference / Winner</th>
                 </tr>
               </thead>
               <tbody>
