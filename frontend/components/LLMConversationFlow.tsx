@@ -4,6 +4,31 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Zap, MessageCircle, CheckCircle2, Eye, EyeOff, Send, Settings } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
+// Component to display code with line numbers
+function CodeDisplay({ content }: { content: string }) {
+  const lines = content.split('\n');
+  return (
+    <div className="bg-slate-900/50 rounded overflow-x-auto text-slate-200 font-mono text-sm">
+      <div className="flex">
+        {/* Line numbers column */}
+        <div className="bg-slate-950/50 px-3 py-2 text-right select-none text-slate-500 border-r border-slate-700 min-w-fit">
+          {lines.map((_, idx) => (
+            <div key={idx} className="h-5 leading-5">{idx + 1}</div>
+          ))}
+        </div>
+        {/* Code column */}
+        <div className="px-3 py-2 flex-1 overflow-x-auto">
+          {lines.map((line, idx) => (
+            <div key={idx} className="h-5 leading-5 whitespace-pre">
+              {line || ' '}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface ToolArguments {
   [key: string]: string | number | boolean | null | undefined;
 }
@@ -423,8 +448,14 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
 
                         {/* Result summary */}
                         {msg.resultSummary && (
-                          <div className="bg-slate-900/50 rounded px-3 py-2 text-sm whitespace-pre-wrap font-mono max-h-48 overflow-y-auto text-slate-200">
-                            {msg.resultSummary}
+                          <div className="max-h-96 overflow-y-auto">
+                            {msg.toolName === 'read_file' ? (
+                              <CodeDisplay content={msg.resultSummary} />
+                            ) : (
+                              <div className="bg-slate-900/50 rounded px-3 py-2 text-sm whitespace-pre-wrap font-mono text-slate-200">
+                                {msg.resultSummary}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
