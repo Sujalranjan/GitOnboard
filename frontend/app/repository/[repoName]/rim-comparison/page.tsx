@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import { streamRimComparison, ComparisonSide } from '@/services/rimComparisonApi';
 import { Card, CardHeader } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
-import { Loader2, Send, ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import { Loader2, Send, ArrowUp, ArrowDown, Minus, ChevronDown } from 'lucide-react';
 
 interface ComparisonRun {
   question: string;
@@ -267,6 +267,8 @@ interface ComparisonResultProps {
 
 function ComparisonResult({ run, index }: ComparisonResultProps) {
   const { withoutRim, withRim, metricsDiff, loadingWithoutRim, loadingWithRim } = run;
+  const [expandWithoutRimTools, setExpandWithoutRimTools] = useState(false);
+  const [expandWithRimTools, setExpandWithRimTools] = useState(false);
 
   return (
     <div className="mb-12">
@@ -344,29 +346,39 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
               {/* Tool Calls */}
               {withoutRim.tool_call_transcript && withoutRim.tool_call_transcript.length > 0 && (
                 <div>
-                  <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2 text-sm">Tool Calls ({withoutRim.tool_call_transcript.length})</h4>
-                  <div className="space-y-2 text-xs">
-                    {withoutRim.tool_call_transcript.map((call, idx) => (
-                      <div key={idx} className="bg-slate-100 dark:bg-slate-700/50 rounded p-3 border border-slate-200 dark:border-slate-600">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-semibold text-slate-900 dark:text-slate-100">
-                            [{call.turn}] {call.tool_name}
-                          </span>
+                  <button
+                    onClick={() => setExpandWithoutRimTools(!expandWithoutRimTools)}
+                    className="flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100 text-sm hover:opacity-75 transition-opacity mb-2"
+                  >
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform ${expandWithoutRimTools ? 'rotate-180' : ''}`}
+                    />
+                    Tool Calls ({withoutRim.tool_call_transcript.length})
+                  </button>
+                  {expandWithoutRimTools && (
+                    <div className="space-y-2 text-xs">
+                      {withoutRim.tool_call_transcript.map((call, idx) => (
+                        <div key={idx} className="bg-slate-100 dark:bg-slate-700/50 rounded p-3 border border-slate-200 dark:border-slate-600">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
+                              [{call.turn}] {call.tool_name}
+                            </span>
+                          </div>
+                          {call.arguments && Object.keys(call.arguments).length > 0 && (
+                            <div className="bg-slate-900 dark:bg-slate-900 text-slate-100 p-2 rounded text-xs font-mono mb-2 overflow-x-auto max-h-24 overflow-y-auto">
+                              <pre>{JSON.stringify(call.arguments, null, 2)}</pre>
+                            </div>
+                          )}
+                          {call.observation_summary && (
+                            <div className="text-slate-700 dark:text-slate-300 italic">
+                              Result: {call.observation_summary.substring(0, 200)}
+                              {call.observation_summary.length > 200 ? '...' : ''}
+                            </div>
+                          )}
                         </div>
-                        {call.arguments && Object.keys(call.arguments).length > 0 && (
-                          <div className="bg-slate-900 dark:bg-slate-900 text-slate-100 p-2 rounded text-xs font-mono mb-2 overflow-x-auto max-h-24 overflow-y-auto">
-                            <pre>{JSON.stringify(call.arguments, null, 2)}</pre>
-                          </div>
-                        )}
-                        {call.observation_summary && (
-                          <div className="text-slate-700 dark:text-slate-300 italic">
-                            Result: {call.observation_summary.substring(0, 200)}
-                            {call.observation_summary.length > 200 ? '...' : ''}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -444,29 +456,39 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
               {/* Tool Calls */}
               {withRim.tool_call_transcript && withRim.tool_call_transcript.length > 0 && (
                 <div>
-                  <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2 text-sm">Tool Calls ({withRim.tool_call_transcript.length})</h4>
-                  <div className="space-y-2 text-xs">
-                    {withRim.tool_call_transcript.map((call, idx) => (
-                      <div key={idx} className="bg-slate-100 dark:bg-slate-700/50 rounded p-3 border border-slate-200 dark:border-slate-600">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-semibold text-slate-900 dark:text-slate-100">
-                            [{call.turn}] {call.tool_name}
-                          </span>
+                  <button
+                    onClick={() => setExpandWithRimTools(!expandWithRimTools)}
+                    className="flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100 text-sm hover:opacity-75 transition-opacity mb-2"
+                  >
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform ${expandWithRimTools ? 'rotate-180' : ''}`}
+                    />
+                    Tool Calls ({withRim.tool_call_transcript.length})
+                  </button>
+                  {expandWithRimTools && (
+                    <div className="space-y-2 text-xs">
+                      {withRim.tool_call_transcript.map((call, idx) => (
+                        <div key={idx} className="bg-slate-100 dark:bg-slate-700/50 rounded p-3 border border-slate-200 dark:border-slate-600">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
+                              [{call.turn}] {call.tool_name}
+                            </span>
+                          </div>
+                          {call.arguments && Object.keys(call.arguments).length > 0 && (
+                            <div className="bg-slate-900 dark:bg-slate-900 text-slate-100 p-2 rounded text-xs font-mono mb-2 overflow-x-auto max-h-24 overflow-y-auto">
+                              <pre>{JSON.stringify(call.arguments, null, 2)}</pre>
+                            </div>
+                          )}
+                          {call.observation_summary && (
+                            <div className="text-slate-700 dark:text-slate-300 italic">
+                              Result: {call.observation_summary.substring(0, 200)}
+                              {call.observation_summary.length > 200 ? '...' : ''}
+                            </div>
+                          )}
                         </div>
-                        {call.arguments && Object.keys(call.arguments).length > 0 && (
-                          <div className="bg-slate-900 dark:bg-slate-900 text-slate-100 p-2 rounded text-xs font-mono mb-2 overflow-x-auto max-h-24 overflow-y-auto">
-                            <pre>{JSON.stringify(call.arguments, null, 2)}</pre>
-                          </div>
-                        )}
-                        {call.observation_summary && (
-                          <div className="text-slate-700 dark:text-slate-300 italic">
-                            Result: {call.observation_summary.substring(0, 200)}
-                            {call.observation_summary.length > 200 ? '...' : ''}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
