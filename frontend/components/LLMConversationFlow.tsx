@@ -515,7 +515,12 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                               em: ({ children }) => <em className="italic text-slate-300">{children}</em>,
                             }}
                           >
-                            {msg.content}
+                            {(() => {
+                              // Extract clean answer from XML tags if present
+                              const content = msg.content;
+                              const answerMatch = content.match(/<parameter name="answer">([\s\S]*?)<\/parameter>/);
+                              return answerMatch ? answerMatch[1].trim() : content;
+                            })()}
                           </ReactMarkdown>
                         </div>
                       </div>
