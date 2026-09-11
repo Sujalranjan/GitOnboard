@@ -294,6 +294,14 @@ class RIMComparisonService:
             f"stop_reason={baseline_result.stop_reason}"
         )
 
+        # Reconstruct prompt_parts for baseline (for token accounting only)
+        baseline_dispatch = ToolDispatchTable(tool_layer)
+        baseline_protocol = QAProtocolAdapter()
+        baseline_prompt_parts = baseline_protocol.build_system_prompt(
+            tool_specs=baseline_dispatch.specs(include_rim=False),
+            rim_metadata_block=repository_context_block
+        )
+
         # 4. RUN RIM — with repository context + RIM relationships + query_rim tool
         logger.info(f"[RIM Comparison] Building RIM metadata block...")
         t0_meta = time.perf_counter()
@@ -333,6 +341,14 @@ class RIMComparisonService:
             f"[RIM Comparison] RIM complete: {len(rim_result.turns)} turns, "
             f"{rim_result.tool_call_count} tool calls, "
             f"stop_reason={rim_result.stop_reason}"
+        )
+
+        # Reconstruct prompt_parts for RIM (for token accounting only)
+        rim_dispatch = ToolDispatchTable(tool_layer, graph_traverser, target_resolver)
+        rim_protocol = QAProtocolAdapter()
+        rim_prompt_parts = rim_protocol.build_system_prompt(
+            tool_specs=rim_dispatch.specs(include_rim=True),
+            rim_metadata_block=combined_rim_block
         )
 
         # 5. Compute token accounting for both sides
