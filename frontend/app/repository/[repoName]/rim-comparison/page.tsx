@@ -301,10 +301,14 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                       ul: (props) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
                       ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
                       li: (props) => <li className="mb-1" {...props} />,
-                      code: (props: any) => props.inline
-                        ? <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono whitespace-nowrap" {...props} />
-                        : <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs font-mono block mb-2 overflow-x-auto" {...props} />,
-                      pre: (props) => <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs" {...props} />,
+                      code: (props: any) => (
+                        <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono whitespace-nowrap" {...props} />
+                      ),
+                      pre: (props) => (
+                        <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs">
+                          {props.children}
+                        </pre>
+                      ),
                       blockquote: (props) => <blockquote className="border-l-4 border-slate-300 dark:border-slate-600 pl-3 italic text-slate-600 dark:text-slate-400 mb-3" {...props} />,
                       a: (props) => <a className="text-blue-600 dark:text-blue-400 underline" {...props} />,
                     }}
@@ -393,10 +397,14 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                       ul: (props) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
                       ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
                       li: (props) => <li className="mb-1" {...props} />,
-                      code: (props: any) => props.inline
-                        ? <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono whitespace-nowrap" {...props} />
-                        : <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs font-mono block mb-2 overflow-x-auto" {...props} />,
-                      pre: (props) => <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs" {...props} />,
+                      code: (props: any) => (
+                        <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono whitespace-nowrap" {...props} />
+                      ),
+                      pre: (props) => (
+                        <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs">
+                          {props.children}
+                        </pre>
+                      ),
                       blockquote: (props) => <blockquote className="border-l-4 border-slate-300 dark:border-slate-600 pl-3 italic text-slate-600 dark:text-slate-400 mb-3" {...props} />,
                       a: (props) => <a className="text-blue-600 dark:text-blue-400 underline" {...props} />,
                     }}
