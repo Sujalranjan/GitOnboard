@@ -6,19 +6,36 @@ import ReactMarkdown from 'react-markdown';
 
 // Component to display code with line numbers
 function CodeDisplay({ content }: { content: string }) {
+  // Parse line range from header: "lines X-Y:"
+  let startLine = 1;
+  const lineRangeMatch = content.match(/lines\s+(\d+)-(\d+)/);
+  if (lineRangeMatch) {
+    startLine = parseInt(lineRangeMatch[1], 10);
+  }
+
   const lines = content.split('\n');
+  // Find where code starts (skip header)
+  let codeStartIdx = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes('lines') && lines[i].includes(':')) {
+      codeStartIdx = i + 1;
+      break;
+    }
+  }
+  const codeLines = lines.slice(codeStartIdx);
+
   return (
     <div className="bg-slate-900/50 rounded overflow-x-auto text-slate-200 font-mono text-sm">
       <div className="flex">
         {/* Line numbers column */}
         <div className="bg-slate-950/50 px-3 py-2 text-right select-none text-slate-500 border-r border-slate-700 min-w-fit">
-          {lines.map((_, idx) => (
-            <div key={idx} className="h-5 leading-5">{idx + 1}</div>
+          {codeLines.map((_, idx) => (
+            <div key={idx} className="h-5 leading-5">{startLine + idx}</div>
           ))}
         </div>
         {/* Code column */}
         <div className="px-3 py-2 flex-1 overflow-x-auto">
-          {lines.map((line, idx) => (
+          {codeLines.map((line, idx) => (
             <div key={idx} className="h-5 leading-5 whitespace-pre">
               {line || ' '}
             </div>
