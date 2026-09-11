@@ -316,6 +316,14 @@ class RepositoryToolLayer:
             max_matches: Maximum number of match results to return
             max_files_scanned: Maximum number of files to scan (prevents unbounded Azure calls)
         """
+        # Convert string parameters to integers if needed (from LLM tool calls)
+        try:
+            max_matches = int(max_matches) if max_matches else 25
+            max_files_scanned = int(max_files_scanned) if max_files_scanned else 40
+        except (ValueError, TypeError):
+            max_matches = 25
+            max_files_scanned = 40
+
         results: List[Dict[str, Any]] = []
 
         # DIAGNOSTIC: Log precondition state at entry
@@ -641,6 +649,14 @@ class RepositoryToolLayer:
         Pagination: use offset to fetch next batch (e.g., offset=30 to get results 31-60).
         Returns: [{"type", "file", "symbol"/"line", "lines"/"snippet", "query", "match_source", "score"}]
         """
+        # Convert string parameters to integers if needed (from LLM tool calls)
+        try:
+            limit = int(limit) if limit else 10
+            offset = int(offset) if offset else 0
+        except (ValueError, TypeError):
+            limit = 10
+            offset = 0
+
         retriever = self._get_retriever()
         if retriever is None:
             # Fallback to original multi-method approach if retriever unavailable
