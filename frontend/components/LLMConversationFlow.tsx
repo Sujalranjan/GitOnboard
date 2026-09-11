@@ -4,6 +4,32 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Zap, MessageCircle, CheckCircle2, Eye, EyeOff, Send, Settings } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
+// Component to display tree structure
+function TreeDisplay({ content }: { content: string }) {
+  // Extract tree content from [get_tree] format or use directly
+  let treeContent = content;
+  const treeMatch = content.match(/\[get_tree\].*?"tree":\s*"((?:\\.|[^"\\])*)"/) ||
+                    content.match(/tree":\s*"((?:\\.|[^"\\])*)"/) ||
+                    content.match(/"tree":\s*"([^"]*)"/) ||
+                    content.match(/\n([\s\S]*)/);  // Fallback: everything after first newline
+
+  if (treeMatch && treeMatch[1]) {
+    // Unescape the string if it contains escape sequences
+    treeContent = treeMatch[1]
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\\//g, '/')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\');
+  }
+
+  return (
+    <div className="bg-slate-900/50 rounded px-3 py-2 text-sm whitespace-pre font-mono text-slate-200 overflow-x-auto">
+      {treeContent}
+    </div>
+  );
+}
+
 // Component to display code with line numbers
 function CodeDisplay({ content }: { content: string }) {
   // Parse line range from header: "lines X-Y:"
@@ -468,6 +494,8 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                           <div className="max-h-96 overflow-y-auto">
                             {msg.toolName === 'read_file' ? (
                               <CodeDisplay content={msg.resultSummary} />
+                            ) : msg.toolName === 'get_tree' ? (
+                              <TreeDisplay content={msg.resultSummary} />
                             ) : (
                               <div className="bg-slate-900/50 rounded px-3 py-2 text-sm whitespace-pre-wrap font-mono text-slate-200">
                                 {msg.resultSummary}
@@ -517,9 +545,16 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                           >
                             {(() => {
                               // Extract clean answer from XML tags if present
-                              const content = msg.content;
+                              let content = msg.content;
                               const answerMatch = content.match(/<parameter name="answer">([\s\S]*?)<\/parameter>/);
-                              return answerMatch ? answerMatch[1].trim() : content;
+                              content = answerMatch ? answerMatch[1].trim() : content;
+
+                              // If answer contains tool call XML, return error message
+                              if (content.includes('<tool_call>') || content.includes('<invoke')) {
+                                return `[LLM Response Issue] The model returned a tool call instead of an answer. This indicates the model did not complete its analysis properly.`;
+                              }
+
+                              return content;
                             })()}
                           </ReactMarkdown>
                         </div>

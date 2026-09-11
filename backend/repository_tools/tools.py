@@ -191,41 +191,71 @@ class RepositoryToolLayer:
     # 3. get_tree
     # ──────────────────────────────────────────────────────────────────────────
 
-    def get_tree(self, path: str = "", depth: int = 2) -> Dict[str, Any]:
+    def get_tree(self, path: str = "", depth: int = 0) -> Dict[str, Any]:
         """
-        Returns tree structure of repository files starting from given path.
+        Returns complete directory tree from Azure Blob Storage snapshot.
+        Shows ALL files in the repository snapshot (code + non-code files).
+
         Args:
             path: Starting path (e.g. 'backend' or 'backend/routers'). Empty string = root
-            depth: How many directory levels to show (1-10)
+            depth: How many directory levels to show (0-10). depth=0 shows only immediate contents.
+
+        Note: Uses Blob Storage for complete picture, not PostgreSQL (which only indexes code files).
         """
-        if self.analysis_id is None or self.db is None:
+        if self.analysis_id is None:
             return {
                 "error": "no_analysis",
                 "message": "Analysis context not available."
             }
 
-        # Normalize path
-        clean_path = path.replace("\\", "/").strip("/") if path else ""
-        depth = max(1, min(10, depth))  # Clamp between 1 and 10
+        # Normalize path (handle "." as root)
+        clean_path = path.replace("\\", "/").strip("/") if path and path != "." else ""
+        depth = max(0, min(10, depth))  # Clamp between 0 and 10
 
         try:
-            # Get all files for this analysis
-            files = self.db.query(FactFile).filter(
-                FactFile.analysis_id == self.analysis_id
-            ).all()
+            # Get repository hash from analysis
+            from backend.models.repository import Analysis, Repository
+            analysis = self.db.query(Analysis).filter(Analysis.id == self.analysis_id).first()
+            if not analysis:
+                return {"error": "analysis_not_found", "message": f"Analysis {self.analysis_id} not found"}
 
-            # Filter files under the specified path
+            repo = self.db.query(Repository).filter(Repository.id == analysis.repository_id).first()
+            if not repo:
+                return {"error": "repo_not_found", "message": f"Repository for analysis {self.analysis_id} not found"}
+
+            # List all objects in Blob Storage for this repository snapshot
+            from backend.storage import get_storage
+            storage = get_storage()
+            blob_prefix = f"repositories/{repo.repository_hash}/snapshots/local_clone/"
+
+            # Add path filter if specified
+            if clean_path:
+                blob_prefix += clean_path + "/"
+
+            # List all blobs under this prefix
+            blob_names = storage.list_objects(blob_prefix)
+
+            if not blob_names:
+                return {
+                    "path": clean_path or "/",
+                    "depth": depth,
+                    "tree": "No files found",
+                    "file_count": 0
+                }
+
+            # Extract relative paths from blob names
+            base_prefix_len = len(f"repositories/{repo.repository_hash}/snapshots/local_clone/")
             matching_files = []
-            for f in files:
-                if clean_path:
-                    if f.path.startswith(clean_path + "/"):
-                        matching_files.append(f.path)
-                else:
-                    matching_files.append(f.path)
+            for blob_name in blob_names:
+                if blob_name.startswith(blob_prefix):
+                    relative = blob_name[len(blob_prefix):]
+                    if relative:  # Skip empty paths
+                        matching_files.append(relative)
 
             if not matching_files:
                 return {
                     "path": clean_path or "/",
+                    "depth": depth,
                     "tree": "No files found",
                     "file_count": 0
                 }
@@ -237,9 +267,9 @@ class RepositoryToolLayer:
             else:
                 tree_lines.append(".")
 
-            # Build tree structure: use dict with '__dirs' and '__files' keys
+            # Build tree structure from relative paths
             def add_to_tree(tree, parts, depth_limit):
-                if not parts:
+                if not parts or not parts[0]:
                     return
                 if len(parts) > depth_limit + 1:
                     return  # Beyond depth limit
@@ -259,12 +289,10 @@ class RepositoryToolLayer:
 
             dirs = {}
             for file_path in sorted(matching_files):
-                # Remove the base path prefix
-                relative = file_path[len(clean_path)+1:] if clean_path else file_path
-                parts = relative.split("/")
+                parts = file_path.split("/")
                 add_to_tree(dirs, parts, depth)
 
-            # Format tree as string
+            # Format tree as string with ASCII art
             def format_tree(node, prefix="", is_last=True):
                 lines = []
                 if isinstance(node, dict):

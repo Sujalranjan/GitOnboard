@@ -421,7 +421,7 @@ Use `query_rim` when the question involves relationships, dependencies, or conne
         KNOWN_TOOLS = {
             "search_code", "search_repository", "search_symbols", "get_symbol",
             "get_file_outline", "get_callers", "get_callees", "get_dependencies",
-            "get_route", "get_feature", "query_rim", "read_file", "find_files"
+            "get_route", "get_feature", "query_rim", "read_file", "find_files", "get_tree"
         }
 
         if invoke_name not in KNOWN_TOOLS:
@@ -505,7 +505,7 @@ Use `query_rim` when the question involves relationships, dependencies, or conne
         KNOWN_TOOLS = {
             "search_code", "search_repository", "search_symbols", "get_symbol",
             "get_file_outline", "get_callers", "get_callees", "get_dependencies",
-            "get_route", "get_feature", "query_rim", "read_file", "find_files"
+            "get_route", "get_feature", "query_rim", "read_file", "find_files", "get_tree"
         }
         if action in KNOWN_TOOLS and obj.get("arguments"):
             # LLM mistakenly used tool name as action. Correct it.

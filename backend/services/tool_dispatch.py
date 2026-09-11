@@ -195,6 +195,17 @@ class ToolDispatchTable:
                     "required": ["query"],
                 },
             ),
+            ToolSpec(
+                "get_tree",
+                "Get directory tree structure of the repository from any path with specified depth.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Starting path (e.g. 'backend', 'backend/routers'). Empty string = root (default)"},
+                        "depth": {"type": "integer", "description": "Directory depth to show (0-10, default 0). depth=0 shows only immediate contents, depth=1 shows one level deeper, etc."},
+                    },
+                },
+            ),
         ]
 
         if include_rim and self.graph_traverser and self.target_resolver:
@@ -251,6 +262,8 @@ class ToolDispatchTable:
                 return self._handle_get_callees(arguments, tool_call_id)
             elif tool_name == "search_code":
                 return self._handle_search_code(arguments, tool_call_id)
+            elif tool_name == "get_tree":
+                return self._handle_get_tree(arguments, tool_call_id)
             elif tool_name == "query_rim":
                 return self._handle_query_rim(arguments, tool_call_id)
             else:
@@ -458,6 +471,28 @@ class ToolDispatchTable:
             return ToolObservation(
                 tool_call_id=tool_call_id, tool_name="search_code", success=False,
                 error={"type": "search_error", "message": str(e)},
+            )
+
+    def _handle_get_tree(self, arguments: Dict[str, Any], tool_call_id: str) -> ToolObservation:
+        """Handle get_tree tool call."""
+        path = arguments.get("path", "")
+        depth = arguments.get("depth", 0)
+
+        # Convert string parameters to integers if needed (from LLM tool calls)
+        try:
+            depth = int(depth) if depth is not None else 0
+        except (ValueError, TypeError):
+            depth = 0
+
+        try:
+            result = self.tool_layer.get_tree(path=path, depth=depth)
+            return ToolObservation(
+                tool_call_id=tool_call_id, tool_name="get_tree", success=True, data=result,
+            )
+        except Exception as e:
+            return ToolObservation(
+                tool_call_id=tool_call_id, tool_name="get_tree", success=False,
+                error={"type": "tree_error", "message": str(e)},
             )
 
     def _handle_query_rim(self, arguments: Dict[str, Any], tool_call_id: str) -> ToolObservation:

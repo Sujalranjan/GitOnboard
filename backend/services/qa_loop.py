@@ -833,6 +833,13 @@ class QALoop:
             if len(data) > 10:
                 summary += f"  ... and {len(data) - 10} more symbols\n"
             return summary
+        elif tool_name == "get_tree" and isinstance(data, dict):
+            # Special handling for tree output - preserve Unicode box drawing characters
+            tree = data.get("tree", "")
+            file_count = data.get("file_count", 0)
+            path = data.get("path", "/")
+            summary = f"[get_tree] {path} ({file_count} files):\n"
+            return summary + tree
         else:
             # Generic summary with actual data included
             import json
