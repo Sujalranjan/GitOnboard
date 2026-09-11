@@ -20,13 +20,10 @@ from backend.dependencies.auth import get_current_user
 from backend.models.fact_store import FactFile, FactSymbol
 from backend.models.repository import Analysis, Repository
 from backend.models.user import User
-from backend.repository_tools.tools import RepositoryToolLayer, resolve_repo_root
-from backend.services.qa_loop import QALoop, QALoopTurn
-from backend.services.qa_protocol import QAProtocolAdapter
-from backend.services.llm_analysis_service import LLMAnalysisService
-from backend.services.tool_dispatch import TargetEntityResolver, ToolDispatchTable
-from backend.agent.loop.contracts import AgentLoopConfig
-from backend.intelligence.retrieval.graph_traverser import FactStoreGraphTraverser
+from backend.repository_tools.tools import resolve_repo_root
+from backend.services.qa_loop import QALoopTurn
+from backend.services.llm_analysis_service import build_analysis_service
+from backend.logging import StructuredLogger
 
 logger = logging.getLogger(__name__)
 
@@ -289,25 +286,15 @@ async def analyze_repository_stream(
             if request.model:
                 os.environ["OLLAMA_MODEL"] = model
 
-            # 4. Construct tool layer and services
+            # 4. Initialize structured logging
+            structured_log = StructuredLogger(session_id=current_user.id, repository=repo_display_name)
+            request_id = structured_log.log_query(request.query, current_user.email)
+
+            # 5. Construct LLM service and resolve repo root
             llm_service = get_llm_service()
             repo_root = resolve_repo_root(repo_name=repo_display_name, user_id=current_user.id, db=db) if repo else None
 
-            tool_layer = RepositoryToolLayer(
-                repo_name=repo_display_name,
-                analysis_id=analysis_id,
-                db=db,
-                repo_root=repo_root,
-                user_id=current_user.id,
-            )
-
-            # DIAGNOSTIC: Log tool_layer initialization state
-            logger.error(f"[router:llm:DIAGNOSTIC] Tool layer created: repo='{repo_display_name}' analysis_id={analysis_id} db={db is not None}")
-
-            graph_traverser = FactStoreGraphTraverser(db, analysis_id) if analysis_id else None
-            target_resolver = TargetEntityResolver(db, analysis_id) if analysis_id else None
-
-            # 5. Create event queue for real-time tool visibility
+            # 6. Create event queue for real-time tool visibility
             event_queue: asyncio.Queue = asyncio.Queue()
 
             async def on_turn_callback(turn: QALoopTurn) -> None:
@@ -348,31 +335,27 @@ async def analyze_repository_stream(
                     except Exception as e:
                         print(f"[on_turn] ERROR queueing tool-response: {e}")
 
-            # 6. Create analysis service
-            config = AgentLoopConfig(
-                max_agent_turns=50,
-                max_tool_calls=15,
-                max_command_executions=0,
-                max_execution_seconds=180,
-                max_observation_bytes=256000,  # 256KB - allow full file reads (typical files <250KB)
-                max_repeated_tool_calls=3,
-            )
-
-            analysis_service = LLMAnalysisService(
+            # 7. Build analysis service using shared factory (eliminates duplication with RIM comparison)
+            analysis_service = build_analysis_service(
                 llm_service=llm_service,
-                tool_layer=tool_layer,
-                graph_traverser=graph_traverser,
-                target_resolver=target_resolver,
+                db=db,
+                repo_name=repo_display_name,
+                analysis_id=analysis_id,
+                user_id=current_user.id,
                 model=model,
-                config=config,
+                repo_root=repo_root,
                 rim_metadata_block=repo_context or None,
                 on_turn_callback=on_turn_callback,
+                structured_logger=structured_log,
+                request_id=request_id,
+                repository=repo_display_name,
+                mode="rim",
             )
 
             # Run analysis as background task
             loop_task = asyncio.create_task(analysis_service.run(request.query))
 
-            # 7. Drain event queue in parallel with analysis execution
+            # 8. Drain event queue in parallel with analysis execution
             total_tool_calls = 0
             total_prompt_tokens = 0
             total_completion_tokens = 0
@@ -428,7 +411,7 @@ async def analyze_repository_stream(
                 yield f"data: {json.dumps({'type': 'error', 'content': format_error_message(e)})}\n\n"
                 return
 
-            # 8. Emit final answer
+            # 9. Emit final answer
             final_event = {
                 "type": "final-answer",
                 "content": result.answer,
@@ -438,7 +421,7 @@ async def analyze_repository_stream(
             logger.error(f"[router:sse:DIAGNOSTIC:final-answer] stop_reason={result.stop_reason.value} answer_len={len(result.answer)}")
             yield f"data: {json.dumps(final_event)}\n\n"
 
-            # 9. Emit completion metrics
+            # 10. Emit completion metrics
             elapsed_seconds = (datetime.now() - start_time).total_seconds()
             completion_event = {
                 "type": "completed",

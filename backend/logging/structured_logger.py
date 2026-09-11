@@ -36,11 +36,13 @@ try:
     (LOGS_DIR / "metrics").mkdir(exist_ok=True, parents=True)
     (LOGS_DIR / "errors").mkdir(exist_ok=True, parents=True)
     (LOGS_DIR / "rim_trace").mkdir(exist_ok=True, parents=True)
+    (LOGS_DIR / "malformed_responses").mkdir(exist_ok=True, parents=True)
 except Exception as e:
     # Fallback to /tmp if we can't create in the expected location
     LOGS_DIR = Path("/tmp/rim_logs")
     LOGS_DIR.mkdir(exist_ok=True, parents=True)
     (LOGS_DIR / "errors").mkdir(exist_ok=True, parents=True)
+    (LOGS_DIR / "malformed_responses").mkdir(exist_ok=True, parents=True)
 
 
 @dataclass
@@ -363,6 +365,34 @@ class StructuredLogger:
             json.dump(error_log, f, indent=2)
 
         self.logger.error(f"Error in {stage}: {type(error).__name__}: {str(error)}")
+
+    def log_malformed_response(
+        self,
+        raw_content: str,
+        parse_error: str,
+        turn_index: int,
+        consecutive_count: int,
+        mode: Optional[str] = None,
+        terminated: bool = False,
+    ) -> None:
+        """Persist a malformed LLM tool-call response to disk only (no console output)."""
+        entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "request_id": self.request_id,
+            "session_id": self.session_id,
+            "repository": self.repository,
+            "mode": mode,
+            "turn_index": turn_index,
+            "consecutive_malformed_count": consecutive_count,
+            "parse_error": parse_error,
+            "raw_content": raw_content[:2000],
+            "terminated": terminated,
+        }
+        suffix = "terminated" if terminated else f"turn{turn_index}"
+        with open(self.session_dir / f"99_malformed_{self.request_id}_{suffix}.json", "w") as f:
+            json.dump(entry, f, indent=2)
+        with open(LOGS_DIR / "malformed_responses" / f"{self.request_id}_{suffix}.json", "w") as f:
+            json.dump(entry, f, indent=2)
 
     def log_completion(self, success: bool, summary: Dict[str, Any]):
         """Log completion of the entire request"""

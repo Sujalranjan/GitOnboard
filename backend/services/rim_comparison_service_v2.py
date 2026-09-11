@@ -15,18 +15,15 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from backend.agent.loop.contracts import AgentLoopConfig, StopReason
+from backend.agent.loop.contracts import StopReason
 from backend.ai.service import get_llm_service
 from backend.ai.tokencount import count_tokens
 from backend.intelligence.retrieval import HybridRetriever
-from backend.intelligence.retrieval.graph_traverser import FactStoreGraphTraverser
 from backend.models.user import User
 from backend.repository_tools import resolve_repo_root, RepositoryToolLayer
 from backend.summary.audit import redact_secrets, sanitize_dict_or_list
-from backend.services.qa_loop import QALoop, QALoopResult
-from backend.services.qa_protocol import QAProtocolAdapter
-from backend.services.llm_analysis_service import LLMAnalysisService
-from backend.services.tool_dispatch import ToolDispatchTable, TargetEntityResolver
+from backend.services.qa_loop import QALoopResult
+from backend.services.llm_analysis_service import build_analysis_service
 from backend.services.rim_metadata import build_rim_metadata_block
 from backend.logging import StructuredLogger
 from backend.agent.context.assembler import ContextAssembler
@@ -216,17 +213,7 @@ class RIMComparisonService:
             logger.error(f"Failed to initialize RepositoryToolLayer: {e}")
             raise
 
-        # 2. Configure agentic loop guardrails
-        config = AgentLoopConfig(
-            max_agent_turns=50,
-            max_tool_calls=15,
-            max_command_executions=0,
-            max_execution_seconds=180,
-            max_observation_bytes=8000,
-            max_repeated_tool_calls=3
-        )
-
-        # 2b. Assemble repository context using ContextAssembler
+        # 2. Assemble repository context using ContextAssembler
         logger.info(f"[RIM Comparison] Assembling repository context for: {question}")
         t0_ctx = time.perf_counter()
         assembler = ContextAssembler()
@@ -270,14 +257,15 @@ class RIMComparisonService:
         # 3. RUN BASELINE — with repository context (no RIM relationships)
         logger.info(f"[RIM Comparison] Running baseline (no RIM) for: {question}")
 
-        baseline_analysis_service = LLMAnalysisService(
+        baseline_analysis_service = build_analysis_service(
             llm_service=self.llm_service,
-            tool_layer=tool_layer,
-            graph_traverser=None,  # No RIM tools for baseline
-            target_resolver=None,  # No RIM tools for baseline
+            db=self.db,
+            repo_name=self.repo_name,
+            analysis_id=analysis_id,
+            user_id=self.current_user.id,
             model="qwen3:4b-instruct",
-            config=config,
-            rim_metadata_block=repository_context_block,  # Inject formatted context
+            tool_layer=tool_layer,
+            rim_metadata_block=repository_context_block,
             structured_logger=structured_log,
             request_id=request_id,
             repository=self.repo_name,
@@ -294,14 +282,6 @@ class RIMComparisonService:
             f"stop_reason={baseline_result.stop_reason}"
         )
 
-        # Reconstruct prompt_parts for baseline (for token accounting only)
-        baseline_dispatch = ToolDispatchTable(tool_layer)
-        baseline_protocol = QAProtocolAdapter()
-        baseline_prompt_parts = baseline_protocol.build_system_prompt(
-            tool_specs=baseline_dispatch.specs(include_rim=False),
-            rim_metadata_block=repository_context_block
-        )
-
         # 4. RUN RIM — with repository context + RIM relationships + query_rim tool
         logger.info(f"[RIM Comparison] Building RIM metadata block...")
         t0_meta = time.perf_counter()
@@ -316,16 +296,15 @@ class RIMComparisonService:
         combined_rim_block = self._combine_context_blocks(repository_context_block, rim_metadata.text)
 
         logger.info(f"[RIM Comparison] Running RIM comparison for: {question}")
-        graph_traverser = FactStoreGraphTraverser(self.db, analysis_id)
-        target_resolver = TargetEntityResolver(self.db, analysis_id)
 
-        rim_analysis_service = LLMAnalysisService(
+        rim_analysis_service = build_analysis_service(
             llm_service=self.llm_service,
-            tool_layer=tool_layer,
-            graph_traverser=graph_traverser,
-            target_resolver=target_resolver,
+            db=self.db,
+            repo_name=self.repo_name,
+            analysis_id=analysis_id,
+            user_id=self.current_user.id,
             model="qwen3:4b-instruct",
-            config=config,
+            tool_layer=tool_layer,
             rim_metadata_block=combined_rim_block,
             structured_logger=structured_log,
             request_id=request_id,
@@ -343,24 +322,16 @@ class RIMComparisonService:
             f"stop_reason={rim_result.stop_reason}"
         )
 
-        # Reconstruct prompt_parts for RIM (for token accounting only)
-        rim_dispatch = ToolDispatchTable(tool_layer, graph_traverser, target_resolver)
-        rim_protocol = QAProtocolAdapter()
-        rim_prompt_parts = rim_protocol.build_system_prompt(
-            tool_specs=rim_dispatch.specs(include_rim=True),
-            rim_metadata_block=combined_rim_block
-        )
-
         # 5. Compute token accounting for both sides
         logger.info("[RIM Comparison] Computing token accounting...")
 
         baseline_side = await self._assemble_comparison_side(
-            question, baseline_result, baseline_prompt_parts, baseline_elapsed_ms,
+            question, baseline_result, baseline_analysis_service.last_prompt_parts, baseline_elapsed_ms,
             rim_metadata_block=repository_context_block,
             retriever=retriever
         )
         rim_side = await self._assemble_comparison_side(
-            question, rim_result, rim_prompt_parts, rim_elapsed_ms,
+            question, rim_result, rim_analysis_service.last_prompt_parts, rim_elapsed_ms,
             rim_metadata_block=combined_rim_block,
             retriever=retriever
         )

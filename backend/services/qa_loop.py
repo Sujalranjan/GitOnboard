@@ -237,10 +237,7 @@ class QALoop:
                 print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} → FINAL_ANSWER")
                 logger.debug(f"[QALoop] Turn {turn_index}: FINAL_ANSWER")
             else:
-                # DIAGNOSTIC: Log raw LLM response for malformed
-                print(f"[QALoop:MALFORMED:RAW] turn={turn_index} len={len(llm_response.content)} content={repr(llm_response.content[:200])}")
-                print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} → MALFORMED: {parsed.get('error')}")
-                logger.debug(f"[QALoop] Turn {turn_index}: MALFORMED - {parsed.get('error')} | {llm_response.content[:100]}...")
+                pass
 
             turn = QALoopTurn(
                 turn_index=turn_index,
@@ -429,11 +426,28 @@ class QALoop:
 
             else:  # malformed
                 self.consecutive_malformed_count += 1
-                logger.warning(f"[QALoop] Malformed response #{self.consecutive_malformed_count}: {parsed.get('error', 'unknown')}")
+
+                if self.structured_logger and self.request_id:
+                    self.structured_logger.log_malformed_response(
+                        raw_content=llm_response.content,
+                        parse_error=parsed.get("error", "unknown"),
+                        turn_index=turn_index,
+                        consecutive_count=self.consecutive_malformed_count,
+                        mode=self.mode,
+                    )
 
                 # Terminate after 5 consecutive malformed responses
                 if self.consecutive_malformed_count >= 5:
                     logger.error(f"[QALoop] TERMINATING: 5 consecutive malformed responses. Model is stuck or out of context.")
+                    if self.structured_logger and self.request_id:
+                        self.structured_logger.log_malformed_response(
+                            raw_content=llm_response.content,
+                            parse_error=parsed.get("error", "unknown"),
+                            turn_index=turn_index,
+                            consecutive_count=self.consecutive_malformed_count,
+                            mode=self.mode,
+                            terminated=True,
+                        )
                     result.answer = "[LOOP TERMINATED] Model produced 5 consecutive malformed responses and could not recover. The model may be stuck or out of context."
                     result.stop_reason = StopReason.MODEL_ERROR
                     result.turns.append(turn)
