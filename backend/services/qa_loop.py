@@ -7,6 +7,7 @@ Tracks tool calls, file reads, and RIM metadata access separately.
 """
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional, TYPE_CHECKING
@@ -21,6 +22,19 @@ if TYPE_CHECKING:
     from backend.logging.structured_logger import StructuredLogger
 
 logger = logging.getLogger(__name__)
+
+
+def strip_xml_tags(text: str) -> str:
+    """Remove XML tags from text, keeping only markdown content."""
+    # Remove <tool_call>...</tool_call> wrapper
+    text = re.sub(r'<tool_call>|</tool_call>', '', text, flags=re.DOTALL)
+    # Remove <invoke name="...">...</invoke> wrapper
+    text = re.sub(r'<invoke[^>]*>|</invoke>', '', text, flags=re.DOTALL)
+    # Remove <parameter name="...">...</parameter> tags
+    text = re.sub(r'<parameter[^>]*>|</parameter>', '', text, flags=re.DOTALL)
+    # Clean up extra whitespace
+    text = re.sub(r'\n\s*\n', '\n\n', text).strip()
+    return text
 
 
 @dataclass
@@ -294,7 +308,7 @@ class QALoop:
                     # Continue loop to force retrieval
                     continue
 
-                result.answer = answer_candidate
+                result.answer = strip_xml_tags(answer_candidate)
                 result.stop_reason = StopReason.COMPLETED_FOR_VERIFICATION
                 result.turns.append(turn)
                 if self.on_turn:
@@ -330,7 +344,7 @@ class QALoop:
                     result.turns.append(final_turn)
                     if self.on_turn:
                         await self.on_turn(final_turn)
-                    result.answer = final_turn.raw_model_output
+                    result.answer = strip_xml_tags(final_turn.raw_model_output)
                     break
 
                 # 6. Execute tool
