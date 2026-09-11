@@ -150,6 +150,166 @@ class RIMComparisonService:
         self.current_user = current_user
         self.llm_service = get_llm_service()
 
+    async def get_shared_setup(self, question: str):
+        """Shared setup for both baseline and RIM runs."""
+        structured_log = StructuredLogger(
+            session_id=self.current_user.id if self.current_user else "unknown",
+            repository=self.repo_name
+        )
+        request_id = structured_log.log_query(question, self.current_user.email if self.current_user else None)
+
+        from backend.routers.repo.services.analysis import get_latest_analysis
+        from backend.routers.repo.semantic import get_chroma_collection
+
+        repo, analysis = get_latest_analysis(self.repo_name, self.db, self.current_user)
+        analysis_id = analysis.id
+
+        chroma_collection = None
+        try:
+            chroma_collection = get_chroma_collection(self.repo_name, self.current_user, self.db)
+        except Exception as e:
+            logger.debug(f"Chroma collection not available: {e}")
+
+        retriever = HybridRetriever(
+            db=self.db,
+            analysis_id=analysis_id,
+            chroma_collection=chroma_collection,
+            rrf_k=60,
+            enable_graph_expansion=True,
+            graph_expansion_depth=2,
+            graph_expansion_nodes_per_hop=3,
+            graph_expansion_max_total=30,
+        )
+
+        repo_root = resolve_repo_root(self.repo_name, self.current_user.id, self.db)
+        tool_layer = RepositoryToolLayer(
+            repo_name=self.repo_name,
+            analysis_id=analysis_id,
+            db=self.db,
+            repo_root=repo_root,
+            user_id=self.current_user.id
+        )
+
+        logger.info(f"[RIM Comparison] Assembling repository context for: {question}")
+        t0_ctx = time.perf_counter()
+        assembler = ContextAssembler()
+        context_request = ContextAssemblyRequest(
+            repository_id=self.repo_name,
+            requirement=question,
+            analysis_id=analysis_id,
+            worktree_path=repo_root,
+        )
+        repository_context = assembler.assemble(context_request, db=self.db)
+        context_elapsed_ms = (time.perf_counter() - t0_ctx) * 1000
+
+        formatter = RepositoryContextFormatter()
+
+        def file_reader(file_path: str) -> Optional[str]:
+            try:
+                result = tool_layer.read_file(file_path)
+                if result and isinstance(result, dict):
+                    return result.get('raw_text') or result.get('content')
+                elif isinstance(result, str):
+                    return result
+                return None
+            except Exception as e:
+                logger.debug(f"Failed to read {file_path}: {e}")
+                return None
+
+        repository_context_block = formatter.format_to_system_prompt_block(
+            repository_context,
+            max_chars=6000,
+            include_evidence_provenance=False,
+            file_reader=file_reader,
+        )
+
+        return {
+            'structured_log': structured_log,
+            'request_id': request_id,
+            'analysis_id': analysis_id,
+            'retriever': retriever,
+            'tool_layer': tool_layer,
+            'repository_context_block': repository_context_block,
+        }
+
+    async def run_baseline_only(self, question: str, setup: dict):
+        """Run baseline analysis only and return comparison side."""
+        logger.info(f"[RIM Comparison] Running baseline (no RIM) for: {question}")
+
+        baseline_analysis_service = build_analysis_service(
+            llm_service=self.llm_service,
+            db=self.db,
+            repo_name=self.repo_name,
+            analysis_id=setup['analysis_id'],
+            user_id=self.current_user.id,
+            model="qwen3:4b-instruct",
+            tool_layer=setup['tool_layer'],
+            rim_metadata_block=setup['repository_context_block'],
+            structured_logger=setup['structured_log'],
+            request_id=setup['request_id'],
+            repository=self.repo_name,
+            mode="baseline",
+        )
+
+        t0 = time.perf_counter()
+        baseline_result = await baseline_analysis_service.run(question, include_rim=False)
+        baseline_elapsed_ms = (time.perf_counter() - t0) * 1000
+
+        logger.info(
+            f"[RIM Comparison] Baseline complete: {len(baseline_result.turns)} turns, "
+            f"{baseline_result.tool_call_count} tool calls, stop_reason={baseline_result.stop_reason}"
+        )
+
+        return await self._assemble_comparison_side(
+            question, baseline_result, baseline_analysis_service.last_prompt_parts, baseline_elapsed_ms,
+            rim_metadata_block=setup['repository_context_block'],
+            retriever=setup['retriever']
+        )
+
+    async def run_rim_only(self, question: str, setup: dict, repository_context_block: str):
+        """Run RIM analysis only and return comparison side."""
+        logger.info(f"[RIM Comparison] Building RIM metadata block...")
+        t0_meta = time.perf_counter()
+        rim_metadata = build_rim_metadata_block(
+            self.db, setup['analysis_id'], question, setup['retriever'],
+            max_seed_entities=3, max_related_per_seed=8, max_block_chars=4000
+        )
+        metadata_elapsed_ms = (time.perf_counter() - t0_meta) * 1000
+        logger.info(f"[RIM Comparison] RIM metadata built in {metadata_elapsed_ms:.1f}ms")
+
+        combined_rim_block = self._combine_context_blocks(repository_context_block, rim_metadata.text)
+        logger.info(f"[RIM Comparison] Running RIM analysis for: {question}")
+
+        rim_analysis_service = build_analysis_service(
+            llm_service=self.llm_service,
+            db=self.db,
+            repo_name=self.repo_name,
+            analysis_id=setup['analysis_id'],
+            user_id=self.current_user.id,
+            model="qwen3:4b-instruct",
+            tool_layer=setup['tool_layer'],
+            rim_metadata_block=combined_rim_block,
+            structured_logger=setup['structured_log'],
+            request_id=setup['request_id'],
+            repository=self.repo_name,
+            mode="rim",
+        )
+
+        t0 = time.perf_counter()
+        rim_result = await rim_analysis_service.run(question, include_rim=True)
+        rim_elapsed_ms = (time.perf_counter() - t0) * 1000
+
+        logger.info(
+            f"[RIM Comparison] RIM complete: {len(rim_result.turns)} turns, "
+            f"{rim_result.tool_call_count} tool calls, stop_reason={rim_result.stop_reason}"
+        )
+
+        return await self._assemble_comparison_side(
+            question, rim_result, rim_analysis_service.last_prompt_parts, rim_elapsed_ms,
+            rim_metadata_block=combined_rim_block,
+            retriever=setup['retriever']
+        ), rim_metadata
+
     async def run_comparison(self, question: str) -> RIMComparisonResult:
         """
         Runs the same question through two identical agentic loops,
