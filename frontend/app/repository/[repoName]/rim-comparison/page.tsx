@@ -298,8 +298,8 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                       h1: (props) => <h1 className="text-lg font-bold mb-2" {...props} />,
                       h2: (props) => <h2 className="text-base font-bold mb-2" {...props} />,
                       h3: (props) => <h3 className="text-sm font-bold mb-2" {...props} />,
-                      ul: (props) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
-                      ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
+                      ul: (props) => <ul className="list-disc list-outside mb-3 space-y-1 ml-6" {...props} />,
+                      ol: (props) => <ol className="list-decimal list-outside mb-3 space-y-1 ml-6" {...props} />,
                       li: (props) => <li className="mb-1" {...props} />,
                       code: (props: any) => (
                         <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono" {...props} />
@@ -394,8 +394,8 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                       h1: (props) => <h1 className="text-lg font-bold mb-2" {...props} />,
                       h2: (props) => <h2 className="text-base font-bold mb-2" {...props} />,
                       h3: (props) => <h3 className="text-sm font-bold mb-2" {...props} />,
-                      ul: (props) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
-                      ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
+                      ul: (props) => <ul className="list-disc list-outside mb-3 space-y-1 ml-6" {...props} />,
+                      ol: (props) => <ol className="list-decimal list-outside mb-3 space-y-1 ml-6" {...props} />,
                       li: (props) => <li className="mb-1" {...props} />,
                       code: (props: any) => (
                         <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono" {...props} />
