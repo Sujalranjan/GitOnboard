@@ -154,6 +154,14 @@ def handle_read_file(args: Dict[str, Any], context: AgentToolContext) -> Dict[st
     return file_content
 
 
+def handle_get_tree(args: Dict[str, Any], context: AgentToolContext) -> Dict[str, Any]:
+    tool_layer = _get_tool_layer(context)
+    path = args.get("path", "")
+    depth = args.get("depth", 2)
+    tree_data = tool_layer.get_tree(path=path, depth=depth)
+    return tree_data
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Tool Definitions Catalog
 # ──────────────────────────────────────────────────────────────────────────────
@@ -288,5 +296,18 @@ REPOSITORY_TOOLS: List[ToolDefinition] = [
             "required": ["path"],
         },
         handler=handle_read_file,
+    ),
+    ToolDefinition(
+        name="get_tree",
+        description="Get directory tree structure of the repository from any path with specified depth",
+        category="repository",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "default": "", "description": "Starting path (e.g. 'backend', 'backend/routers'). Empty string = root"},
+                "depth": {"type": "integer", "default": 2, "description": "Directory depth to show (1-10)"},
+            },
+        },
+        handler=handle_get_tree,
     ),
 ]

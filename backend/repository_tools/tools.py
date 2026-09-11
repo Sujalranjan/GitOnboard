@@ -188,7 +188,117 @@ class RepositoryToolLayer:
         return results
 
     # ──────────────────────────────────────────────────────────────────────────
-    # 3. search_code (Lexical Search)
+    # 3. get_tree
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def get_tree(self, path: str = "", depth: int = 2) -> Dict[str, Any]:
+        """
+        Returns tree structure of repository files starting from given path.
+        Args:
+            path: Starting path (e.g. 'backend' or 'backend/routers'). Empty string = root
+            depth: How many directory levels to show (1-10)
+        """
+        if self.analysis_id is None or self.db is None:
+            return {
+                "error": "no_analysis",
+                "message": "Analysis context not available."
+            }
+
+        # Normalize path
+        clean_path = path.replace("\\", "/").strip("/") if path else ""
+        depth = max(1, min(10, depth))  # Clamp between 1 and 10
+
+        try:
+            # Get all files for this analysis
+            files = self.db.query(FactFile).filter(
+                FactFile.analysis_id == self.analysis_id
+            ).all()
+
+            # Filter files under the specified path
+            matching_files = []
+            for f in files:
+                if clean_path:
+                    if f.path.startswith(clean_path + "/"):
+                        matching_files.append(f.path)
+                else:
+                    matching_files.append(f.path)
+
+            if not matching_files:
+                return {
+                    "path": clean_path or "/",
+                    "tree": "No files found",
+                    "file_count": 0
+                }
+
+            # Build tree structure
+            tree_lines = []
+            if clean_path:
+                tree_lines.append(f"{clean_path}/")
+            else:
+                tree_lines.append(".")
+
+            # Build tree structure: use dict with '__dirs' and '__files' keys
+            def add_to_tree(tree, parts, depth_limit):
+                if not parts:
+                    return
+                if len(parts) > depth_limit + 1:
+                    return  # Beyond depth limit
+
+                current = tree
+                # Navigate/create directories
+                for part in parts[:-1]:
+                    if part not in current:
+                        current[part] = {}
+                    if not isinstance(current[part], dict):
+                        current[part] = {}
+                    current = current[part]
+
+                # Add the file to the current directory
+                if parts[-1]:
+                    current[parts[-1]] = None
+
+            dirs = {}
+            for file_path in sorted(matching_files):
+                # Remove the base path prefix
+                relative = file_path[len(clean_path)+1:] if clean_path else file_path
+                parts = relative.split("/")
+                add_to_tree(dirs, parts, depth)
+
+            # Format tree as string
+            def format_tree(node, prefix="", is_last=True):
+                lines = []
+                if isinstance(node, dict):
+                    items = sorted(node.items())
+                    for i, (name, subtree) in enumerate(items):
+                        is_last_item = (i == len(items) - 1)
+                        connector = "└── " if is_last_item else "├── "
+                        # subtree is None = file, dict = directory
+                        is_dir = isinstance(subtree, dict) and subtree
+                        lines.append(prefix + connector + name + ("/" if is_dir else ""))
+
+                        if is_dir:
+                            next_prefix = prefix + ("    " if is_last_item else "│   ")
+                            lines.extend(format_tree(subtree, next_prefix, is_last_item))
+                return lines
+
+            tree_lines.extend(format_tree(dirs))
+            tree_str = "\n".join(tree_lines)
+
+            return {
+                "path": clean_path or "/",
+                "depth": depth,
+                "tree": tree_str,
+                "file_count": len(matching_files)
+            }
+
+        except Exception as err:
+            return {
+                "error": "tree_error",
+                "message": f"Error building tree: {str(err)}"
+            }
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # 4. search_code (Lexical Search)
     # ──────────────────────────────────────────────────────────────────────────
 
     def search_code(
