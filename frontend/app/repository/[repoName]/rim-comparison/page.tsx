@@ -302,7 +302,7 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                       ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
                       li: (props) => <li className="mb-1" {...props} />,
                       code: (props: any) => (
-                        <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono whitespace-nowrap" {...props} />
+                        <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono whitespace-normal break-words" {...props} />
                       ),
                       pre: (props) => (
                         <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs">
@@ -398,7 +398,7 @@ function ComparisonResult({ run, index }: ComparisonResultProps) {
                       ol: (props) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
                       li: (props) => <li className="mb-1" {...props} />,
                       code: (props: any) => (
-                        <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono whitespace-nowrap" {...props} />
+                        <code className="!inline bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono whitespace-normal break-words" {...props} />
                       ),
                       pre: (props) => (
                         <pre className="bg-slate-900 text-slate-100 p-3 rounded mb-3 overflow-x-auto text-xs">
