@@ -228,6 +228,27 @@ class QALoop:
             # 3. Parse response: tool_call | final_answer | malformed (using format-specific parser)
             parsed = self.protocol_adapter.parse_response(llm_response.content)
 
+            # Log comprehensive turn diagnostics for debugging tool-calling issues
+            if self.structured_logger and self.request_id:
+                is_rim = self.mode == "rim"
+                tool_specs = self.tool_dispatch.specs(include_rim=is_rim)
+                available_tools = [spec.name for spec in tool_specs] if hasattr(tool_specs, '__iter__') else []
+                protocol_format = "hermes_xml" if self.protocol_adapter.is_qwen else "json"
+
+                self.structured_logger.log_turn_diagnostic(
+                    turn_index=turn_index,
+                    mode=self.mode,
+                    input_query=messages[-1].get("content", "") if messages else None,
+                    system_prompt_excerpt=self.system_prompt_parts.grounding_and_protocol_text[:1000],
+                    available_tools=available_tools,
+                    protocol_format=protocol_format,
+                    raw_llm_response=llm_response.content,
+                    parsed_action=parsed.get("action"),
+                    parsed_tool_name=parsed.get("tool_name"),
+                    parsed_arguments=parsed.get("arguments"),
+                    parse_error=parsed.get("error"),
+                )
+
             # Log all details to debug for troubleshooting
             elapsed = (time.perf_counter() - loop_start) * 1000
             if parsed["action"] == "tool_call":

@@ -394,6 +394,62 @@ class StructuredLogger:
         with open(LOGS_DIR / "malformed_responses" / f"{self.request_id}_{suffix}.json", "w") as f:
             json.dump(entry, f, indent=2)
 
+    def log_turn_diagnostic(
+        self,
+        turn_index: int,
+        mode: Optional[str] = None,
+        input_query: Optional[str] = None,
+        system_prompt_excerpt: Optional[str] = None,
+        available_tools: Optional[List[str]] = None,
+        protocol_format: Optional[str] = None,
+        raw_llm_response: Optional[str] = None,
+        parsed_action: Optional[str] = None,
+        parsed_tool_name: Optional[str] = None,
+        parsed_arguments: Optional[Dict[str, Any]] = None,
+        parse_error: Optional[str] = None,
+    ) -> None:
+        """Log detailed turn diagnostics for debugging tool-calling issues.
+
+        Captures: input, system prompt, available tools, protocol format,
+        raw LLM response, parsed action/tool, and any parse errors.
+        Separate files for each turn to avoid huge JSON objects.
+        """
+        entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "request_id": self.request_id,
+            "session_id": self.session_id,
+            "repository": self.repository,
+            "mode": mode,
+            "turn_index": turn_index,
+
+            # Input context
+            "input_query": input_query[:500] if input_query else None,
+
+            # System prompt (first 1000 chars to see protocol declaration)
+            "system_prompt_excerpt": system_prompt_excerpt[:1000] if system_prompt_excerpt else None,
+
+            # Tool availability
+            "available_tools": available_tools or [],
+            "tool_count": len(available_tools) if available_tools else 0,
+
+            # Protocol format used
+            "protocol_format": protocol_format,  # "hermes_xml", "json", etc
+
+            # Raw LLM output (full, no truncation - this is the source of truth)
+            "raw_llm_response": raw_llm_response,
+            "raw_response_length": len(raw_llm_response) if raw_llm_response else 0,
+
+            # What the parser extracted
+            "parsed_action": parsed_action,  # "tool_call", "final_answer", "malformed"
+            "parsed_tool_name": parsed_tool_name,
+            "parsed_arguments": parsed_arguments,
+            "parse_error": parse_error,
+        }
+
+        log_file = self.session_dir / f"20_turn_diagnostic_{self.request_id}_{mode}_turn{turn_index}.json"
+        with open(log_file, "w") as f:
+            json.dump(entry, f, indent=2)
+
     def log_completion(self, success: bool, summary: Dict[str, Any]):
         """Log completion of the entire request"""
         completion_log = {
