@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Agent } from "http";
+import { Agent as HttpsAgent } from "https";
 
 // 1800-second execution limit for long-running AI operations (Ollama local inference + RIM analysis)
 export const maxDuration = 1800;
 export const dynamic = "force-dynamic";
 
 const BACKEND_URL = process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:8000";
+
+// Create HTTP agents with extended timeouts to override Node.js Undici default 5-minute body timeout
+const httpAgent = new Agent({ keepAliveTimeout: 1800000, requestTimeout: 1800000 });
+const httpsAgent = new HttpsAgent({ keepAliveTimeout: 1800000, requestTimeout: 1800000 });
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return handleProxy(request, await params);
@@ -66,11 +72,12 @@ async function handleProxy(request: NextRequest, { path }: { path: string[] }) {
     }
   });
 
-  const fetchOptions: RequestInit = {
+  const fetchOptions: any = {
     method: request.method,
     headers: headers,
     cache: "no-store",
     redirect: "manual",
+    agent: targetUrl.startsWith("https") ? httpsAgent : httpAgent,
   };
 
   if (!isIdempotent) {
