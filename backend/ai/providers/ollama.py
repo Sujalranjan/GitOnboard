@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:4b-instruct")
+DEFAULT_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
 
 
 class OllamaProvider:
@@ -36,7 +37,7 @@ class OllamaProvider:
             "stream": False,
             "options": {
                 "temperature": request.temperature,
-                "num_ctx": 8192,
+                "num_ctx": DEFAULT_NUM_CTX,
                 "num_predict": request.max_tokens,
             },
         }
@@ -87,7 +88,16 @@ class OllamaProvider:
         eval_tokens = data.get("eval_count", 0)
         total_tokens = prompt_tokens + eval_tokens
 
-        # Log Ollama response metadata for context analysis
+        # Log complete Ollama response metadata for context analysis
+        done = data.get("done", None)
+        done_reason = data.get("done_reason", None)
+        prompt_eval_duration_ns = data.get("prompt_eval_duration", None)
+        eval_duration_ns = data.get("eval_duration", None)
+        total_duration_ns = data.get("total_duration", None)
+
+        logger.info(f"[OLLAMA_RESPONSE_COMPLETE] prompt_eval_count={prompt_tokens} eval_count={eval_tokens} total_tokens={total_tokens} response_chars={len(content)} done={done} done_reason={done_reason} prompt_eval_duration_ms={prompt_eval_duration_ns/1e6 if prompt_eval_duration_ns else 'N/A'} eval_duration_ms={eval_duration_ns/1e6 if eval_duration_ns else 'N/A'} total_duration_ms={total_duration_ns/1e6 if total_duration_ns else 'N/A'}")
+
+        # Keep original for backwards compatibility
         logger.info(f"[OLLAMA_RESPONSE] prompt_eval_count={prompt_tokens} eval_count={eval_tokens} total_tokens={total_tokens} response_chars={len(content)}")
 
         logger.info(f"[LLM_LIFECYCLE] OllamaProvider: Successfully extracted text ({len(content)} chars, {total_tokens} tokens)")

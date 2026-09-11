@@ -872,6 +872,19 @@ class QALoop:
             summary = f"[read_file] {path} lines {start_line}-{end_line}: {len(actual_content)} chars (total: {total_lines})\n"
             # Include actual file content so LLM can reason over code
             if actual_content:
+                # Cap individual file results at 25 KB to prevent context window overflow
+                # Evidence: Turn 8 file exceeded capacity; accumulated files hit 89.6 KB on turn 9
+                MAX_FILE_CONTENT_PER_RESULT = 25 * 1024  # 25 KB
+                if len(actual_content) > MAX_FILE_CONTENT_PER_RESULT:
+                    truncated_content = actual_content[:MAX_FILE_CONTENT_PER_RESULT]
+                    truncation_notice = (
+                        f"\n\n[TRUNCATED: File content exceeded {MAX_FILE_CONTENT_PER_RESULT // 1024} KB limit for LLM context. "
+                        f"Original: {len(actual_content)} chars. To read more:\n"
+                        f"  • Use read_file with a smaller line range (e.g., start_line=100, end_line=200)\n"
+                        f"  • Use search_repository to find specific functions/classes\n"
+                        f"  • Use get_symbol to inspect specific definitions]\n"
+                    )
+                    return summary + truncated_content + truncation_notice
                 return summary + actual_content
             return summary
         elif tool_name == "query_rim" and isinstance(data, dict):
