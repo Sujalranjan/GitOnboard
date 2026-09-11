@@ -148,7 +148,7 @@ def build_analysis_service(
 
     config = config or AgentLoopConfig(
         max_agent_turns=50,
-        max_tool_calls=15,
+        max_tool_calls=10,
         max_command_executions=0,
         max_execution_seconds=180,
         max_observation_bytes=256000,

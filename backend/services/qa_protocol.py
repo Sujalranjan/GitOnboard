@@ -218,14 +218,15 @@ ONLY TWO VALID ACTIONS EXIST:
 ⚠️  ALWAYS use: {{"action": "tool_call", "tool_name": "search_code"}} is CORRECT
 
 YOUR TASK (MANDATORY):
-YOU MUST ALWAYS use tools to investigate repository questions. NEVER provide final answers without using tools first.
+Use tools to investigate repository questions and gather evidence. Provide a final answer once you have sufficient information.
 
 1. Analyze the user's question
 2. Determine what tools you need to answer it
 3. Call those tools (one per turn) to gather repository evidence
 4. Once you have enough evidence from tools, provide your final answer
+5. If you're confident in your answer, provide it immediately - do NOT make unnecessary additional tool calls
 
-⚠️  NEVER skip directly to final answer. Repository questions REQUIRE tool usage.
+⚠️  Avoid redundant tool calls. Stop calling tools once you have sufficient evidence to answer the question confidently.
 
 RESPONSE FORMAT (MANDATORY - STRICT JSON ONLY):
 Each turn, output EXACTLY ONE complete JSON object with NO extra text:
@@ -254,14 +255,15 @@ EVERY response MUST use HERMES XML TOOL CALLING format. Output EITHER:
   2. A final answer wrapped in tags
 
 YOUR TASK (MANDATORY):
-YOU MUST ALWAYS use tools to investigate repository questions. NEVER provide final answers without using tools first.
+Use tools to investigate repository questions and gather evidence. Provide a final answer once you have sufficient information.
 
 1. Analyze the user's question
 2. Determine what tools you need to answer it
 3. Call those tools (one per turn) to gather repository evidence
 4. Once you have enough evidence from tools, provide your final answer
+5. If you're confident in your answer, provide it immediately - do NOT make unnecessary additional tool calls
 
-⚠️  NEVER skip directly to final answer. Repository questions REQUIRE tool usage.
+⚠️  Avoid redundant tool calls. Stop calling tools once you have sufficient evidence to answer the question confidently.
 
 RESPONSE FORMAT (MANDATORY - HERMES XML ONLY):
 For tool calls, use EXACTLY this structure:
