@@ -94,6 +94,7 @@ class QALoop:
         self.on_turn = on_turn
         # Create protocol adapter with model_id for format-specific parsing (Hermes XML for Qwen, JSON for others)
         self.protocol_adapter = QAProtocolAdapter(model_id=model)
+        self.consecutive_malformed_count = 0  # Track malformed responses to terminate early
 
     async def run(self, question: str) -> QALoopResult:
         """
@@ -253,6 +254,7 @@ class QALoop:
 
             # 4. Handle action: tool_call | final_answer | malformed
             if parsed["action"] == "final_answer":
+                self.consecutive_malformed_count = 0  # Reset on success
                 answer_candidate = parsed.get("answer", llm_response.content)
 
                 # PHASE 8A VERIFICATION GATE: Enforce retrieval for absence claims
@@ -283,6 +285,7 @@ class QALoop:
                 break
 
             elif parsed["action"] == "tool_call":
+                self.consecutive_malformed_count = 0  # Reset on success
                 tool_name = parsed.get("tool_name", "")
                 arguments = parsed.get("arguments", {})
 
@@ -425,7 +428,19 @@ class QALoop:
                 logger.debug(f"[QALoop] Turn {turn_index}: {tool_name} executed in {tool_elapsed*1000:.0f}ms")
 
             else:  # malformed
-                logger.warning(f"[QALoop] Malformed response: {parsed.get('error', 'unknown')}")
+                self.consecutive_malformed_count += 1
+                logger.warning(f"[QALoop] Malformed response #{self.consecutive_malformed_count}: {parsed.get('error', 'unknown')}")
+
+                # Terminate after 5 consecutive malformed responses
+                if self.consecutive_malformed_count >= 5:
+                    logger.error(f"[QALoop] TERMINATING: 5 consecutive malformed responses. Model is stuck or out of context.")
+                    result.answer = "[LOOP TERMINATED] Model produced 5 consecutive malformed responses and could not recover. The model may be stuck or out of context."
+                    result.stop_reason = StopReason.MODEL_ERROR
+                    result.turns.append(turn)
+                    if self.on_turn:
+                        await self.on_turn(turn)
+                    break
+
                 # Append response and ask LLM to clarify
                 messages.append({
                     "role": "assistant",
