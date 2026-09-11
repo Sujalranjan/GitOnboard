@@ -32,7 +32,9 @@ def strip_xml_tags(text: str) -> str:
     text = re.sub(r'<invoke[^>]*>|</invoke>', '', text, flags=re.DOTALL)
     # Remove <parameter name="...">...</parameter> tags
     text = re.sub(r'<parameter[^>]*>|</parameter>', '', text, flags=re.DOTALL)
-    # Clean up extra whitespace
+    # Fix numbering format: join number on same line as content (e.g., "1.\nText" → "1. Text")
+    text = re.sub(r'^(\d+\.)\s*\n\s*', r'\1 ', text, flags=re.MULTILINE)
+    # Clean up extra whitespace and normalize paragraph breaks
     text = re.sub(r'\n\s*\n', '\n\n', text).strip()
     return text
 
