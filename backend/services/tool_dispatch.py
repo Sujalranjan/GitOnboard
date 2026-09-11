@@ -94,12 +94,27 @@ class ToolDispatchTable:
         """
         Return tool specs for system prompt.
 
+        WITHOUT RIM (baseline): Only basic file access tools
+          - read_file: Read file content
+          - search_repository: Search by name/pattern
+          - get_tree: Show directory structure
+
+        WITH RIM: Full tool set including RIM comparison
+          - All baseline tools +
+          - get_symbol: Look up symbol definitions
+          - get_file_outline: Outline symbols in file
+          - get_callers: Find who calls this
+          - get_callees: Find what this calls
+          - search_code: Search file contents
+          - query_rim: Query RIM relationships
+
         Args:
-            include_rim: if True, include query_rim tool (RIM side only)
+            include_rim: if True, include advanced code navigation + RIM tool
 
         Returns:
             List of ToolSpec objects for the prompt builder
         """
+        # Always include: basic file access
         base_tools = [
             ToolSpec(
                 "read_file",
@@ -110,39 +125,6 @@ class ToolDispatchTable:
                         "path": {"type": "string", "description": "File path relative to repo root"},
                         "start_line": {"type": "integer", "description": "Starting line number (default 1)"},
                         "end_line": {"type": "integer", "description": "Ending line number (default: entire file up to 1000 lines)"},
-                    },
-                    "required": ["path"],
-                },
-            ),
-            ToolSpec(
-                "find_files",
-                "Find files matching a glob pattern. Returns list of matching files.",
-                {
-                    "type": "object",
-                    "properties": {
-                        "pattern": {"type": "string", "description": "Glob pattern (e.g., '*.tsx', 'src/**/*.py')"},
-                        "limit": {"type": "integer", "description": "Max results (default 50)"},
-                    },
-                },
-            ),
-            ToolSpec(
-                "get_symbol",
-                "Look up symbol definitions (functions, classes, methods) by name.",
-                {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string", "description": "Symbol name (substring match)"},
-                    },
-                    "required": ["name"],
-                },
-            ),
-            ToolSpec(
-                "get_file_outline",
-                "Get an outline of symbols (functions, classes) in a file.",
-                {
-                    "type": "object",
-                    "properties": {
-                        "path": {"type": "string", "description": "File path"},
                     },
                     "required": ["path"],
                 },
@@ -160,41 +142,10 @@ class ToolDispatchTable:
                     "required": ["query"],
                 },
             ),
-            ToolSpec(
-                "get_callers",
-                "Find symbols that call a given function/method.",
-                {
-                    "type": "object",
-                    "properties": {
-                        "symbol_name": {"type": "string", "description": "Function or method name"},
-                    },
-                    "required": ["symbol_name"],
-                },
-            ),
-            ToolSpec(
-                "get_callees",
-                "Find functions/methods called by a given function/method.",
-                {
-                    "type": "object",
-                    "properties": {
-                        "symbol_name": {"type": "string", "description": "Function or method name"},
-                    },
-                    "required": ["symbol_name"],
-                },
-            ),
-            ToolSpec(
-                "search_code",
-                "Search for text/regex in source code. Limited to first N files to avoid overwhelming results.",
-                {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "Text or regex pattern to search for"},
-                        "file_pattern": {"type": "string", "description": "Optional glob pattern to limit search scope"},
-                        "max_matches": {"type": "integer", "description": "Max results (default 25)"},
-                    },
-                    "required": ["query"],
-                },
-            ),
+        ]
+
+        # Add get_tree to baseline (always available)
+        base_tools.append(
             ToolSpec(
                 "get_tree",
                 "Get directory tree structure of the repository from any path with specified depth.",
@@ -205,9 +156,73 @@ class ToolDispatchTable:
                         "depth": {"type": "integer", "description": "Directory depth to show (0-10, default 0). depth=0 shows only immediate contents, depth=1 shows one level deeper, etc."},
                     },
                 },
-            ),
-        ]
+            )
+        )
 
+        # If RIM enabled, add advanced code navigation tools
+        if include_rim:
+            rim_tools = [
+                ToolSpec(
+                    "get_symbol",
+                    "Look up symbol definitions (functions, classes, methods) by name.",
+                    {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Symbol name (substring match)"},
+                        },
+                        "required": ["name"],
+                    },
+                ),
+                ToolSpec(
+                    "get_file_outline",
+                    "Get an outline of symbols (functions, classes) in a file.",
+                    {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string", "description": "File path"},
+                        },
+                        "required": ["path"],
+                    },
+                ),
+                ToolSpec(
+                    "get_callers",
+                    "Find symbols that call a given function/method.",
+                    {
+                        "type": "object",
+                        "properties": {
+                            "symbol_name": {"type": "string", "description": "Function or method name"},
+                        },
+                        "required": ["symbol_name"],
+                    },
+                ),
+                ToolSpec(
+                    "get_callees",
+                    "Find functions/methods called by a given function/method.",
+                    {
+                        "type": "object",
+                        "properties": {
+                            "symbol_name": {"type": "string", "description": "Function or method name"},
+                        },
+                        "required": ["symbol_name"],
+                    },
+                ),
+                ToolSpec(
+                    "search_code",
+                    "Search for text/regex in source code. Limited to first N files to avoid overwhelming results.",
+                    {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "Text or regex pattern to search for"},
+                            "file_pattern": {"type": "string", "description": "Optional glob pattern to limit search scope"},
+                            "max_matches": {"type": "integer", "description": "Max results (default 25)"},
+                        },
+                        "required": ["query"],
+                    },
+                ),
+            ]
+            base_tools.extend(rim_tools)
+
+        # Add query_rim if RIM enabled
         if include_rim and self.graph_traverser and self.target_resolver:
             base_tools.append(
                 ToolSpec(
