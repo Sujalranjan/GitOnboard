@@ -43,6 +43,71 @@ class QAProtocolAdapter:
         self.model_id = model_id or ""
         self.is_qwen = self.model_id.lower().startswith("qwen")
 
+    # Tool usage strategies indexed by tool name
+    # These are extracted from the original REPOSITORY_ANALYSIS_RULES and keyed by tool name
+    # so that build_system_prompt() can generate a dynamic TOOL USAGE STRATEGY section
+    # containing only descriptions for the tools that are actually available
+    TOOL_USAGE_STRATEGIES = {
+        "get_tree": """**get_tree**: Use to understand repository structure and discover top-level modules.
+  - Prefer when you don't know where relevant code is located
+  - Use when exploring unfamiliar paths (e.g., backend/intelligence, backend/agent)""",
+
+        "search_code": """**search_code**: Use to find text patterns, keywords, strings, imports, decorators, route fragments.
+  - Use when you know a meaningful text fragment (class name, function name, decorator, config key)
+  - Restrict with path_pattern when useful (e.g., "*.py", "backend/routers")
+  - Examples: "@app.get", "route(", "JWT", "blob_client\"""",
+
+        "search_symbols": """**search_symbols**: Use to discover symbols by name or glob pattern.
+  - Prefer when the question mentions a class, function, or method
+  - Use when exact symbol or location is uncertain
+  - Examples: "RepositoryToolLayer", "handle_*", "*ToolDefinition\"""",
+
+        "get_symbol": """**get_symbol**: Use when you know the symbol name and need definition/location info.
+  - Prefer for questions about specific functions, classes, or methods
+  - Use to identify where a symbol is defined
+  - Use before tracing callers/callees""",
+
+        "read_file": """**read_file**: Use to inspect actual source code and implementation details.
+  - This is the primary tool for understanding HOW something is implemented
+  - Use when you've identified a relevant file
+  - Use to verify implementation, understand control flow, check error handling
+  - Do not make detailed implementation claims from search results alone""",
+
+        "get_callers": """**get_callers**: Use to find what invokes a function or method.
+  - "Who calls X?" / "Where is X used?" / "What code reaches X?\"""",
+
+        "get_callees": """**get_callees**: Use to find what a function or method invokes.
+  - "What does X call?" / "What dependencies does X invoke?"
+  - Pair with read_file to understand actual behavior""",
+
+        "get_route": """**get_route**: Use for HTTP/REST API questions.
+  - Which endpoint handles a path?
+  - What handler serves an endpoint?
+  - What HTTP method is used?
+  - After identifying a route, use symbol/source tools to understand implementation""",
+
+        "get_file_outline": """**get_file_outline**: Get an outline of symbols in a file.
+  - Use to see all functions, classes, and methods in a file at once""",
+
+        "search_repository": """**search_repository**: Use to search by name or pattern across the repository.
+  - Use for initial discovery of files and symbols
+  - Supports comma-separated queries for batch lookups""",
+
+        "get_feature": """**get_feature**: Use for questions about detected architectural capabilities.
+  - Do not use as substitute for reading implementation code""",
+
+        "get_dependencies": """**get_dependencies**: Use for third-party package and dependency questions.
+  - Use source searches when asking HOW a dependency is used""",
+
+        "trace_feature": """**trace_feature**: Use for end-to-end architectural/execution tracing.
+  - Use when the question requires following: endpoint → handler → business logic → database
+  - Do not use merely because a question mentions an endpoint or function""",
+
+        "query_rim": """**query_rim**: Use to query the Repository Intelligence Model for structural facts.
+  - Use when the question involves relationships, dependencies, or connections
+  - Can identify: CALLS, IMPORTS, INHERITS, CONTAINS, ROUTE_HANDLER, DATABASE_ACCESS""",
+    }
+
     # Shared behavioral/grounding rules for all tool-calling formats
     REPOSITORY_ANALYSIS_RULES = """You are an expert software repository analysis assistant specialized in GitOnboard.
 
@@ -85,56 +150,6 @@ Do not stop investigating merely because the first search returns something plau
 If an important claim is not sufficiently supported, perform another targeted lookup.
 If the repository does not contain enough evidence to answer confidently, say so rather than guessing.
 A search returning no results does NOT prove that something does not exist.
-
-## TOOL USAGE STRATEGY
-
-**get_tree**: Use to understand repository structure and discover top-level modules.
-  - Prefer when you don't know where relevant code is located
-  - Use when exploring unfamiliar paths (e.g., backend/intelligence, backend/agent)
-
-**search_code**: Use to find text patterns, keywords, strings, imports, decorators, route fragments.
-  - Use when you know a meaningful text fragment (class name, function name, decorator, config key)
-  - Restrict with path_pattern when useful (e.g., "*.py", "backend/routers")
-  - Examples: "@app.get", "route(", "JWT", "blob_client"
-
-**search_symbols**: Use to discover symbols by name or glob pattern.
-  - Prefer when the question mentions a class, function, or method
-  - Use when exact symbol or location is uncertain
-  - Examples: "RepositoryToolLayer", "handle_*", "*ToolDefinition"
-
-**get_symbol**: Use when you know the symbol name and need definition/location info.
-  - Prefer for questions about specific functions, classes, or methods
-  - Use to identify where a symbol is defined
-  - Use before tracing callers/callees
-
-**read_file**: Use to inspect actual source code and implementation details.
-  - This is the primary tool for understanding HOW something is implemented
-  - Use when you've identified a relevant file
-  - Use to verify implementation, understand control flow, check error handling
-  - Do not make detailed implementation claims from search results alone
-
-**get_callers**: Use to find what invokes a function or method.
-  - "Who calls X?" / "Where is X used?" / "What code reaches X?"
-
-**get_callees**: Use to find what a function or method invokes.
-  - "What does X call?" / "What dependencies does X invoke?"
-  - Pair with read_file to understand actual behavior
-
-**get_route**: Use for HTTP/REST API questions.
-  - Which endpoint handles a path?
-  - What handler serves an endpoint?
-  - What HTTP method is used?
-  - After identifying a route, use symbol/source tools to understand implementation
-
-**get_feature**: Use for questions about detected architectural capabilities.
-  - Do not use as substitute for reading implementation code
-
-**get_dependencies**: Use for third-party package and dependency questions.
-  - Use source searches when asking HOW a dependency is used
-
-**trace_feature**: Use for end-to-end architectural/execution tracing.
-  - Use when the question requires following: endpoint → handler → business logic → database
-  - Do not use merely because a question mentions an endpoint or function
 
 ## PARALLEL TOOL CALLS
 
@@ -276,9 +291,43 @@ EXECUTION RULES:
         """Return format-specific grounding rules based on model type."""
         return self.GROUNDING_RULES_HERMES if self.is_qwen else self.GROUNDING_RULES_JSON
 
+    def _build_tool_usage_strategy(self, tool_specs: List[ToolSpec]) -> str:
+        """
+        Build TOOL USAGE STRATEGY section dynamically from available tools only.
+
+        This ensures that baseline runs (include_rim=False) only contain strategy
+        descriptions for the 3 baseline tools, and RIM runs contain descriptions
+        for all available tools. This prevents the LLM from learning about tools
+        it cannot use.
+
+        Args:
+            tool_specs: List of ToolSpec objects for available tools
+
+        Returns:
+            Formatted TOOL USAGE STRATEGY section string
+        """
+        if not tool_specs:
+            return "## TOOL USAGE STRATEGY\n\nNo tools available.\n"
+
+        # Extract tool names from specs
+        available_tool_names = {spec.name for spec in tool_specs}
+
+        # Build strategy lines for only available tools
+        strategy_lines = ["## TOOL USAGE STRATEGY\n"]
+        for spec in tool_specs:
+            if spec.name in self.TOOL_USAGE_STRATEGIES:
+                strategy_lines.append(self.TOOL_USAGE_STRATEGIES[spec.name])
+                strategy_lines.append("")  # Blank line between tools
+
+        return "\n".join(strategy_lines)
+
     def build_system_prompt(self, tool_specs: List[ToolSpec], rim_metadata_block: Optional[str]) -> SystemPromptParts:
         """
         Build decomposed system prompt with separate buckets for token accounting.
+
+        CRITICAL: Tool usage strategy is built DYNAMICALLY from tool_specs only.
+        This ensures baseline runs (include_rim=False) only see strategy for their 3 tools,
+        preventing the LLM from learning about unavailable RIM-only tools.
 
         Args:
             tool_specs: List of available tools (baseline + RIM-specific if RIM side)
@@ -287,13 +336,17 @@ EXECUTION RULES:
         Returns:
             SystemPromptParts with decomposed text for token counting
         """
-        # 1. Grounding rules + protocol (constant across turns)
+        # 1. Grounding rules + protocol (constant, already excludes tool strategy)
         grounding = self.GROUNDING_RULES
 
-        # 2. Tool catalog
+        # 2. Build tool usage strategy DYNAMICALLY from available tools only
+        # This is the critical fix: baseline gets strategy for 3 tools, RIM gets strategy for 9
+        tool_usage_strategy = self._build_tool_usage_strategy(tool_specs)
+
+        # 3. Tool catalog (JSON schema definitions)
         tool_catalog = self._build_tool_catalog(tool_specs)
 
-        # 3. RIM metadata (baseline gets empty, RIM side gets facts)
+        # 4. RIM metadata (baseline gets empty, RIM side gets facts)
         rim_section = ""
         if rim_metadata_block:
             rim_section = f"""
@@ -324,9 +377,10 @@ Use `query_rim` when the question involves relationships, dependencies, or conne
         else:
             rim_section = ""  # baseline gets no RIM section at all
 
-        # 4. Combine all sections
+        # 5. Combine all sections in order: grounding → strategy → catalog → RIM
         full_text = f"""{grounding}
 
+{tool_usage_strategy}
 {tool_catalog}{rim_section}"""
 
         return SystemPromptParts(
