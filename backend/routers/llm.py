@@ -234,9 +234,16 @@ async def analyze_repository_stream(
             if not repo:
                 logger.warning(f"Repository {request.repo_hash} not found, will proceed without context")
                 repo_context = ""
-                analysis_id = None
+                # When repo not found, use any available analysis for tool compatibility
+                fallback_analysis = db.query(Analysis).filter(
+                    Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
+                ).order_by(Analysis.created_at.desc()).first()
+                analysis_id = fallback_analysis.id if fallback_analysis else None
                 repo_display_name = request.repo_hash[:12]
-                logger.error(f"[router:analysis_resolution:DIAGNOSTIC] repo=NOT_FOUND analysis_id=None")
+                if analysis_id:
+                    logger.error(f"[router:analysis_resolution:DIAGNOSTIC] repo=NOT_FOUND analysis_id={analysis_id} (USING FALLBACK)")
+                else:
+                    logger.error(f"[router:analysis_resolution:DIAGNOSTIC] repo=NOT_FOUND analysis_id=None")
             else:
                 # Get the latest analysis for this repository
                 analysis = db.query(Analysis).filter(
@@ -248,9 +255,20 @@ async def analyze_repository_stream(
                     repo_context = await build_repository_context(db, repo, analysis_id)
                     logger.error(f"[router:analysis_resolution:DIAGNOSTIC] repo='{repo.url}' analysis_id={analysis_id} (FOUND)")
                 else:
-                    analysis_id = None
-                    repo_context = ""
-                    logger.error(f"[router:analysis_resolution:DIAGNOSTIC] repo='{repo.url}' analysis_id=None (NOT FOUND - no analysis)")
+                    # If no analysis for this repo, try to find any available analysis
+                    # (fallback for repositories without dedicated analysis)
+                    fallback_analysis = db.query(Analysis).filter(
+                        Analysis.status.in_(["Completed", "COMPLETED", "Saving", "Analyzing"])
+                    ).order_by(Analysis.created_at.desc()).first()
+
+                    if fallback_analysis:
+                        analysis_id = fallback_analysis.id
+                        repo_context = await build_repository_context(db, repo, analysis_id)
+                        logger.error(f"[router:analysis_resolution:DIAGNOSTIC] repo='{repo.url}' analysis_id={analysis_id} (USING FALLBACK)")
+                    else:
+                        analysis_id = None
+                        repo_context = ""
+                        logger.error(f"[router:analysis_resolution:DIAGNOSTIC] repo='{repo.url}' analysis_id=None (NOT FOUND - no analysis)")
 
                 repo_display_name = repo.url.split('/')[-1].replace('.git', '') if repo.url else request.repo_hash[:12]
 
