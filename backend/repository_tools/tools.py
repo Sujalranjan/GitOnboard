@@ -110,9 +110,9 @@ class RepositoryToolLayer:
                         # Try constructed blob name
                         blob_name = f"repositories/{repo.repository_hash}/snapshots/local_clone/{clean_path}"
             except Exception as e:
-                logger.debug(f"Could not construct blob name from analysis: {e}")
+                pass
 
-        # Strategy 3: Search all available blobs for matching path
+        # Strategy 3: Search all available blobs for matching path (only if needed)
         if not blob_name:
             try:
                 all_blobs = storage.list_objects()
@@ -120,8 +120,8 @@ class RepositoryToolLayer:
                     if blob.endswith(clean_path):
                         blob_name = blob
                         break
-            except Exception as e:
-                logger.debug(f"Could not search blobs for path: {e}")
+            except Exception:
+                pass
 
         # Try to fetch the file from blob storage
         if blob_name:
@@ -140,8 +140,8 @@ class RepositoryToolLayer:
                     "content": numbered_content,
                     "raw_text": "".join(selected_lines),
                 }
-            except Exception as err:
-                logger.debug(f"Error reading blob {blob_name}: {err}")
+            except Exception:
+                pass
 
         # File not found - return helpful error message
         return {
