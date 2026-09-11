@@ -283,6 +283,12 @@ class ToolDispatchTable:
 
         try:
             result = self.tool_layer.read_file(path, start_line, end_line)
+            # Check if result contains an error (file not found)
+            if "error" in result:
+                return ToolObservation(
+                    tool_call_id=tool_call_id, tool_name="read_file", success=False,
+                    error={"type": result.get("error"), "message": result.get("message")},
+                )
             return ToolObservation(
                 tool_call_id=tool_call_id, tool_name="read_file", success=True, data=result,
             )

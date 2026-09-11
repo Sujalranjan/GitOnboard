@@ -78,12 +78,16 @@ class RepositoryToolLayer:
     ) -> Dict[str, Any]:
         """
         Reads a slice of a file from Azure Blob Storage.
-        Worktrees are temporary and deleted after indexing.
-        All persistent file content is stored in blob storage.
+        First tries to get blob_name from FactFile index, then falls back to
+        direct blob storage search. Returns specified line range or full file.
         """
-        clean_path = path.replace("\\", "/").removeprefix("./").lstrip("/")
+        from backend.storage import get_storage
 
-        # Azure Blob Storage (source of truth for all persistent file content)
+        clean_path = path.replace("\\", "/").removeprefix("./").lstrip("/")
+        storage = get_storage()
+        blob_name = None
+
+        # Strategy 1: Use FactFile index if available
         if self.db is not None and self.analysis_id is not None:
             fact_file = (
                 self.db.query(FactFile)
@@ -94,30 +98,57 @@ class RepositoryToolLayer:
                 .first()
             )
             if fact_file and fact_file.blob_name:
-                try:
-                    from backend.storage import get_storage
-                    storage = get_storage()
-                    raw_text = storage.get_object_text(fact_file.blob_name)
-                    lines = raw_text.splitlines(keepends=True)
-                    total_lines = len(lines)
-                    s, e = clamp_line_range(total_lines, start_line, end_line)
-                    selected_lines = lines[s - 1 : e]
-                    numbered_content = "".join(f"{s + idx:4d} | {line}" for idx, line in enumerate(selected_lines))
-                    return {
-                        "path": clean_path,
-                        "start_line": s,
-                        "end_line": e,
-                        "total_lines": total_lines,
-                        "content": numbered_content,
-                        "raw_text": "".join(selected_lines),
-                    }
-                except Exception as err:
-                    logger.warning(f"Error reading blob {fact_file.blob_name}: {err}")
+                blob_name = fact_file.blob_name
 
-        raise RepositorySecurityError(
-            f"File not found in Blob Storage: '{path}'. "
-            f"Ensure indexing captured this file and stored it in Azure Blob Storage."
-        )
+        # Strategy 2: Construct blob name from analysis + repository hash
+        if not blob_name and self.analysis_id is not None and self.db is not None:
+            try:
+                analysis = self.db.query(Analysis).filter(Analysis.id == self.analysis_id).first()
+                if analysis:
+                    repo = self.db.query(Repository).filter(Repository.id == analysis.repository_id).first()
+                    if repo and repo.repository_hash:
+                        # Try constructed blob name
+                        blob_name = f"repositories/{repo.repository_hash}/snapshots/local_clone/{clean_path}"
+            except Exception as e:
+                logger.debug(f"Could not construct blob name from analysis: {e}")
+
+        # Strategy 3: Search all available blobs for matching path
+        if not blob_name:
+            try:
+                all_blobs = storage.list_objects()
+                for blob in all_blobs:
+                    if blob.endswith(clean_path):
+                        blob_name = blob
+                        break
+            except Exception as e:
+                logger.debug(f"Could not search blobs for path: {e}")
+
+        # Try to fetch the file from blob storage
+        if blob_name:
+            try:
+                raw_text = storage.get_object_text(blob_name)
+                lines = raw_text.splitlines(keepends=True)
+                total_lines = len(lines)
+                s, e = clamp_line_range(total_lines, start_line, end_line)
+                selected_lines = lines[s - 1 : e]
+                numbered_content = "".join(f"{s + idx:4d} | {line}" for idx, line in enumerate(selected_lines))
+                return {
+                    "path": clean_path,
+                    "start_line": s,
+                    "end_line": e,
+                    "total_lines": total_lines,
+                    "content": numbered_content,
+                    "raw_text": "".join(selected_lines),
+                }
+            except Exception as err:
+                logger.debug(f"Error reading blob {blob_name}: {err}")
+
+        # File not found - return helpful error message
+        return {
+            "path": clean_path,
+            "error": "wrong_path",
+            "message": f"File not found: '{path}'. Check that the path is correct."
+        }
 
     # ──────────────────────────────────────────────────────────────────────────
     # 2. find_files
