@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// 600-second execution limit for long-running AI operations (Ollama local inference)
-export const maxDuration = 600;
+// 1800-second execution limit for long-running AI operations (Ollama local inference + RIM analysis)
+export const maxDuration = 1800;
 export const dynamic = "force-dynamic";
 
 const BACKEND_URL = process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:8000";
@@ -93,7 +93,7 @@ async function handleProxy(request: NextRequest, { path }: { path: string[] }) {
   let timeoutId: NodeJS.Timeout | null = null;
 
   if (!isStreamRequest) {
-    timeoutId = setTimeout(() => controller.abort(), 600000);
+    timeoutId = setTimeout(() => controller.abort(), 1800000);  // 1800 seconds = 30 minutes
   }
   fetchOptions.signal = controller.signal;
 
