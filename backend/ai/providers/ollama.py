@@ -36,6 +36,7 @@ class OllamaProvider:
             "stream": False,
             "options": {
                 "temperature": request.temperature,
+                "num_ctx": 8192,
                 "num_predict": request.max_tokens,
             },
         }
