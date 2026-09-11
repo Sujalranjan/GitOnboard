@@ -89,6 +89,9 @@ class ToolDispatchTable:
         self.tool_layer = tool_layer
         self.graph_traverser = graph_traverser
         self.target_resolver = target_resolver
+        # Determine include_rim from presence of graph_traverser/target_resolver
+        # If both are None, this is baseline (no RIM); if both present, this is RIM mode
+        self.include_rim = graph_traverser is not None and target_resolver is not None
 
     def specs(self, include_rim: bool) -> List[ToolSpec]:
         """
@@ -257,8 +260,34 @@ class ToolDispatchTable:
 
         Catches all exceptions and returns ToolObservation(success=False, error=...).
         Never raises into the loop.
+
+        CRITICAL: Enforces tool restrictions based on mode (baseline vs RIM).
+        Baseline can only access: read_file, search_repository, get_tree
+        RIM can access all tools including query_rim.
         """
         tool_call_id = f"{tool_name}:{hash(str(arguments))}"
+
+        # ENFORCE TOOL RESTRICTIONS BY MODE
+        allowed_baseline_tools = {"read_file", "search_repository", "get_tree"}
+        allowed_rim_tools = {
+            "read_file", "search_repository", "get_tree",  # baseline + these:
+            "get_symbol", "get_file_outline", "get_callers", "get_callees",
+            "search_code", "query_rim"
+        }
+
+        allowed_tools = allowed_rim_tools if self.include_rim else allowed_baseline_tools
+
+        if tool_name not in allowed_tools:
+            return ToolObservation(
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                success=False,
+                error={
+                    "type": "tool_not_allowed",
+                    "message": f"Tool '{tool_name}' is not available in {'RIM' if self.include_rim else 'baseline'} mode. "
+                               f"Allowed tools: {', '.join(sorted(allowed_tools))}"
+                },
+            )
 
         try:
             if tool_name == "read_file":
