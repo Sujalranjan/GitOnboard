@@ -179,7 +179,7 @@ class QALoop:
                     messages=llm_messages,
                     model=self.model,
                     temperature=0.2,
-                    max_tokens=4096,
+                    max_tokens=8192,
                 )
                 llm_response = await self.llm_service.generate(request)
                 logger.debug(f"[QALoop] Turn {turn_index}: LLM response ({len(llm_response.content)} chars)")
@@ -539,7 +539,7 @@ class QALoop:
                 messages=llm_messages,
                 model=self.model,
                 temperature=0.2,
-                max_tokens=4096,
+                max_tokens=8192,
             )
             llm_response = await self.llm_service.generate(request)
         except Exception as e:
