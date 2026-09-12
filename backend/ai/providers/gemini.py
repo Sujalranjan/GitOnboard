@@ -96,7 +96,7 @@ class GeminiProvider:
             logger.error(f"[GEMINI_ERROR] ratelimit_reset_after={response_headers['ratelimit-reset-after']}")
 
     async def _enforce_rate_limit(self) -> None:
-        """Enforce 5 requests per minute for Gemini API.
+        """Enforce 10 requests per minute for Gemini API.
 
         Blocks until a request slot is available in the current 1-minute window.
         """
@@ -108,18 +108,18 @@ class GeminiProvider:
                 if now - ts < 60
             ]
 
-            if len(GeminiProvider._request_times) >= 5:
+            if len(GeminiProvider._request_times) >= 10:
                 # Hit the limit, calculate wait time
                 oldest_request = GeminiProvider._request_times[0]
                 wait_time = 60 - (now - oldest_request)
                 if wait_time > 0:
                     logger.warning(
-                        f"Gemini rate limit: 5 requests reached, waiting {wait_time:.1f}s before next request"
+                        f"Gemini rate limit: 10 requests reached, waiting {wait_time:.1f}s before next request"
                     )
                     # Release lock before sleeping to allow other code to proceed
 
         # Sleep outside the lock
-        if len(GeminiProvider._request_times) >= 5:
+        if len(GeminiProvider._request_times) >= 10:
             now = time.time()
             oldest_request = GeminiProvider._request_times[0]
             wait_time = 60 - (now - oldest_request)

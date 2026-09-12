@@ -1,8 +1,11 @@
 """OpenRouter LLM provider adapter."""
 from __future__ import annotations
+import asyncio
 import json
 import logging
 import ssl
+import threading
+import time
 from typing import Any, Dict, Optional, Type, TypeVar
 
 import certifi
@@ -23,11 +26,56 @@ class OpenRouterProvider:
 
     provider_name = "openrouter"
 
+    # Class-level rate limiter (shared across all instances)
+    _rate_limit_lock = threading.Lock()
+    _request_times: list[float] = []
+
     def __init__(self, api_key: str, model: Optional[str] = None, timeout: float = 60.0):
         import os
         self.api_key = api_key
         self.default_model = model or os.environ.get("OPENROUTER_MODEL", DEFAULT_MODEL)
         self.timeout = timeout
+
+    async def _enforce_rate_limit(self) -> None:
+        """Enforce 15 requests per minute for OpenRouter API.
+
+        Blocks until a request slot is available in the current 1-minute window.
+        """
+        with OpenRouterProvider._rate_limit_lock:
+            now = time.time()
+            # Remove timestamps older than 1 minute
+            OpenRouterProvider._request_times = [
+                ts for ts in OpenRouterProvider._request_times
+                if now - ts < 60
+            ]
+
+            if len(OpenRouterProvider._request_times) >= 15:
+                # Hit the limit, calculate wait time
+                oldest_request = OpenRouterProvider._request_times[0]
+                wait_time = 60 - (now - oldest_request)
+                if wait_time > 0:
+                    logger.warning(
+                        f"OpenRouter rate limit: 15 requests reached, waiting {wait_time:.1f}s before next request"
+                    )
+                    # Release lock before sleeping to allow other code to proceed
+
+        # Sleep outside the lock
+        if len(OpenRouterProvider._request_times) >= 15:
+            now = time.time()
+            oldest_request = OpenRouterProvider._request_times[0]
+            wait_time = 60 - (now - oldest_request)
+            if wait_time > 0:
+                await asyncio.sleep(wait_time)
+                logger.info("OpenRouter rate limit wait complete, resuming requests")
+
+        # Record this request
+        with OpenRouterProvider._rate_limit_lock:
+            now = time.time()
+            OpenRouterProvider._request_times = [
+                ts for ts in OpenRouterProvider._request_times
+                if now - ts < 60
+            ]
+            OpenRouterProvider._request_times.append(now)
 
     def _get_ca_bundle_path(self) -> str:
         """Get CA bundle path, preferring combined bundle if available."""
@@ -69,6 +117,9 @@ class OpenRouterProvider:
         return body
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
+        # Enforce rate limit before making the request
+        await self._enforce_rate_limit()
+
         # Create SSL context with proper certificate verification
         # Use combined CA bundle that includes both certifi and Kaspersky root (for HTTPS inspection)
         ca_bundle = self._get_ca_bundle_path()
