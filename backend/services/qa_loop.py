@@ -40,6 +40,23 @@ def strip_xml_tags(text: str) -> str:
     return text
 
 
+def extract_json_answer(text: str) -> str:
+    """Extract answer text from JSON-wrapped response."""
+    import json
+
+    # Try to parse as JSON and extract answer field
+    try:
+        # Handle case where response starts with {"action": "final_answer", "answer": "..."}
+        data = json.loads(text)
+        if isinstance(data, dict) and "answer" in data:
+            return str(data["answer"]).strip()
+    except (json.JSONDecodeError, ValueError):
+        # Not JSON, return as-is
+        pass
+
+    return text.strip()
+
+
 def _tool_specs_to_schema_tools(tool_specs: List[Any]) -> List[Tool]:
     """Convert ToolSpec objects from tool_dispatch to ai.schemas.Tool objects."""
     return [
@@ -333,7 +350,10 @@ class QALoop:
                     # Continue loop to force retrieval
                     continue
 
-                result.answer = strip_xml_tags(answer_candidate)
+                # Strip both XML tags and JSON wrappers
+                answer = strip_xml_tags(answer_candidate)
+                answer = extract_json_answer(answer)
+                result.answer = answer
                 result.stop_reason = StopReason.COMPLETED_FOR_VERIFICATION
                 result.turns.append(turn)
                 if self.on_turn:
@@ -375,10 +395,13 @@ class QALoop:
                     result.turns.append(final_turn)
                     if self.on_turn:
                         await self.on_turn(final_turn)
-                    # Parse the final answer response to extract the answer field, then strip XML tags
+                    # Parse the final answer response to extract the answer field, then strip XML/JSON tags
                     parsed_final = self.protocol_adapter.parse_response(final_turn.raw_model_output)
                     answer_text = parsed_final.get("answer", final_turn.raw_model_output)
-                    result.answer = strip_xml_tags(answer_text)
+                    # Strip both XML tags and JSON wrappers
+                    answer = strip_xml_tags(answer_text)
+                    answer = extract_json_answer(answer)
+                    result.answer = answer
                     break
 
                 # 6. Execute tool
