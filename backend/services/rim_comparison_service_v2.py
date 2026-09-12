@@ -290,7 +290,7 @@ class RIMComparisonService:
         # Select model based on deployment mode
         rim_model = (
             settings.gemini_model if settings.deployment_type == "PROD"
-            else settings.model_local_quality  # Use same quality Qwen model for LOCAL
+            else settings.model_local_default  # Use same default Qwen model for LOCAL
         )
 
         rim_analysis_service = build_analysis_service(
@@ -479,7 +479,7 @@ class RIMComparisonService:
         # Select model based on deployment mode
         rim_model = (
             settings.gemini_model if settings.deployment_type == "PROD"
-            else settings.model_local_quality  # Use same quality Qwen model for LOCAL
+            else settings.model_local_default  # Use same default Qwen model for LOCAL
         )
 
         rim_analysis_service = build_analysis_service(
