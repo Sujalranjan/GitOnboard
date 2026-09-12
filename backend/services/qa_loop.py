@@ -15,7 +15,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, TYPE_CHECKING
 from backend.agent.loop.contracts import AgentLoopConfig, StopReason, ToolObservation
 from backend.agent.loop.guardrails import LoopGuardrails
 from backend.ai.service import LLMService
-from backend.ai.schemas import LLMRequest, Message, MessageRole
+from backend.ai.schemas import LLMRequest, Message, MessageRole, Tool
 from backend.services.qa_protocol import QAProtocolAdapter
 
 if TYPE_CHECKING:
@@ -37,6 +37,14 @@ def strip_xml_tags(text: str) -> str:
     # Clean up extra whitespace and normalize paragraph breaks
     text = re.sub(r'\n\s*\n', '\n\n', text).strip()
     return text
+
+
+def _tool_specs_to_schema_tools(tool_specs: List[Any]) -> List[Tool]:
+    """Convert ToolSpec objects from tool_dispatch to ai.schemas.Tool objects."""
+    return [
+        Tool(name=spec.name, description=spec.description, parameters=spec.parameters)
+        for spec in tool_specs
+    ]
 
 
 @dataclass
@@ -198,11 +206,18 @@ class QALoop:
                         raise
 
                 logger.debug(f"[QALoop] Turn {turn_index}: Built {len(llm_messages)} messages (system + {len(messages)} conversation)")
+
+                # Compute tool specs for this request (needed for native tool-calling providers like Gemini)
+                is_rim = self.mode == "rim"
+                tool_specs = self.tool_dispatch.specs(include_rim=is_rim)
+                schema_tools = _tool_specs_to_schema_tools(tool_specs) if tool_specs else None
+
                 request = LLMRequest(
                     messages=llm_messages,
                     model=self.model,
                     temperature=0.2,
                     max_tokens=8192,
+                    tools=schema_tools,
                 )
                 llm_response = await self.llm_service.generate(request)
                 logger.debug(f"[QALoop] Turn {turn_index}: LLM response ({len(llm_response.content)} chars)")
@@ -249,7 +264,7 @@ class QALoop:
                 )
 
             # 3. Parse response: tool_call | final_answer | malformed (using format-specific parser)
-            parsed = self.protocol_adapter.parse_response(llm_response.content)
+            parsed = self.protocol_adapter.parse_response_from_llm_response(llm_response)
 
             # Log comprehensive turn diagnostics for debugging tool-calling issues
             if self.structured_logger and self.request_id:
@@ -327,8 +342,14 @@ class QALoop:
 
             elif parsed["action"] == "tool_call":
                 self.consecutive_malformed_count = 0  # Reset on success
-                tool_name = parsed.get("tool_name", "")
-                arguments = parsed.get("arguments", {})
+                # Extract first (and only) tool call from the normalized list
+                tool_calls = parsed.get("tool_calls", [])
+                if not tool_calls:
+                    logger.error(f"[QALoop] tool_call action but no tool_calls in parsed response")
+                    continue
+                tool_call = tool_calls[0]
+                tool_name = tool_call.get("tool_name", "")
+                arguments = tool_call.get("arguments", {})
 
                 # 5. Check guardrails on tool call
                 stop_reason, should_warn = self.guardrails.record_tool_call(tool_name, arguments)

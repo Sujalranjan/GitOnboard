@@ -123,11 +123,22 @@ class RepositoryToolLayer:
                     "message": "Repository not found."
                 }
 
-            # Construct blob name directly
-            blob_name = f"repositories/{repo.repository_hash}/snapshots/local_clone/{clean_path}"
+            # Try to find the file by searching across all snapshot directories for this repo
+            repo_prefix = f"repositories/{repo.repository_hash}/snapshots/"
+            all_blobs = storage.list_objects(prefix=repo_prefix)
+
+            # Look for the file in any snapshot directory
+            matching_blob = None
+            for blob in all_blobs:
+                if blob.endswith(f"/{clean_path}"):
+                    matching_blob = blob
+                    break
+
+            if not matching_blob:
+                raise FileNotFoundError(f"File not found in any snapshot: {clean_path}")
 
             # Fetch from blob storage
-            raw_text = storage.get_object_text(blob_name)
+            raw_text = storage.get_object_text(matching_blob)
             lines = raw_text.splitlines(keepends=True)
             total_lines = len(lines)
             s, e = clamp_line_range(total_lines, start_line, end_line)
@@ -147,7 +158,7 @@ class RepositoryToolLayer:
             return {
                 "path": clean_path,
                 "error": "wrong_path",
-                "message": f"File not found: '{path}'. Check that the path is correct."
+                "message": f"File not found: '{clean_path}'. Check that the path is correct."
             }
         except Exception as err:
             return {
@@ -226,31 +237,34 @@ class RepositoryToolLayer:
             # List all objects in Blob Storage for this repository snapshot
             from backend.storage import get_storage
             storage = get_storage()
-            blob_prefix = f"repositories/{repo.repository_hash}/snapshots/local_clone/"
+            repo_prefix = f"repositories/{repo.repository_hash}/snapshots/"
 
-            # Add path filter if specified
-            if clean_path:
-                blob_prefix += clean_path + "/"
+            # List all blobs in all snapshots for this repo
+            all_blobs = storage.list_objects(repo_prefix)
 
-            # List all blobs under this prefix
-            blob_names = storage.list_objects(blob_prefix)
-
-            if not blob_names:
-                return {
-                    "path": clean_path or "/",
-                    "depth": depth,
-                    "tree": "No files found",
-                    "file_count": 0
-                }
-
-            # Extract relative paths from blob names
-            base_prefix_len = len(f"repositories/{repo.repository_hash}/snapshots/local_clone/")
+            # Filter to only blobs under the requested path (or all if no path specified)
             matching_files = []
-            for blob_name in blob_names:
-                if blob_name.startswith(blob_prefix):
-                    relative = blob_name[len(blob_prefix):]
-                    if relative:  # Skip empty paths
-                        matching_files.append(relative)
+
+            for blob_name in all_blobs:
+                # Extract the relative path from the blob
+                # blob_name format: repositories/{hash}/snapshots/{snapshot_id}/{file_path}
+                parts = blob_name.split("/")
+                if len(parts) >= 5:  # repo/hash/snapshots/snapshot_id/file_path...
+                    # Everything after snapshots/{snapshot_id}/ is the file path
+                    file_path = "/".join(parts[4:])
+
+                    # Filter by clean_path if specified
+                    if clean_path:
+                        if file_path.startswith(clean_path + "/"):
+                            relative = file_path[len(clean_path) + 1:]
+                            if relative:
+                                matching_files.append(relative)
+                    else:
+                        # Include all files
+                        matching_files.append(file_path)
+
+            # Remove duplicates (same file in multiple snapshots)
+            matching_files = sorted(set(matching_files))
 
             if not matching_files:
                 return {

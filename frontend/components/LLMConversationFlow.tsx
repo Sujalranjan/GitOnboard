@@ -98,7 +98,7 @@ interface ModelOption {
   category: 'fast' | 'quality' | 'cloud';
 }
 
-const AVAILABLE_MODELS: ModelOption[] = [
+const ALL_MODELS: ModelOption[] = [
   {
     id: 'qwen3:4b-instruct',
     name: 'Qwen 3 4B (Fast)',
@@ -125,6 +125,18 @@ const AVAILABLE_MODELS: ModelOption[] = [
   },
 ];
 
+// Filter models based on deployment type
+const getAvailableModels = (): ModelOption[] => {
+  const isProd = process.env.NEXT_PUBLIC_DEPLOYMENT_TYPE?.toUpperCase() === 'PROD';
+  if (isProd) {
+    // Hide local Qwen models in PROD mode
+    return ALL_MODELS.filter(m => m.category === 'cloud');
+  }
+  return ALL_MODELS;
+};
+
+const AVAILABLE_MODELS = getAvailableModels();
+
 interface LLMConversationFlowProps {
   repoName: string;
 }
@@ -138,7 +150,8 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
   const [elapsed, setElapsed] = useState(0);
   const [done, setDone] = useState(false);
   const [showToolDetails, setShowToolDetails] = useState(true);
-  const [selectedModel, setSelectedModel] = useState<string>('qwen3:4b-instruct');
+  const isProd = process.env.NEXT_PUBLIC_DEPLOYMENT_TYPE?.toUpperCase() === 'PROD';
+  const [selectedModel, setSelectedModel] = useState<string>(isProd ? 'cloud-gemini' : 'qwen3:4b-instruct');
   const [changingModel, setChangingModel] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [totalTokens, setTotalTokens] = useState(0);

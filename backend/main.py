@@ -40,6 +40,89 @@ def cleanup_tmp_dirs():
             except Exception:
                 pass
 
+def ensure_ca_bundle_with_kaspersky():
+    """Ensure CA bundle exists with Kaspersky root cert for HTTPS inspection compatibility."""
+    import certifi
+    import socket
+    import ssl
+
+    combined_path = Path("/app/backend/data/ca_bundle_combined.pem")
+    combined_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # If bundle already exists and is recent, skip regeneration
+    if combined_path.exists() and combined_path.stat().st_size > 1000:
+        logger.debug(f"CA bundle already exists at {combined_path}")
+        return
+
+    logger.info("Creating combined CA bundle with Kaspersky root certificate...")
+
+    try:
+        # Read the original certifi bundle
+        certifi_path = certifi.where()
+        with open(certifi_path, 'r') as f:
+            ca_bundle = f.read()
+
+        # Try to extract Kaspersky's root CA from openrouter.ai
+        kaspersky_cert = None
+        try:
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+
+            with socket.create_connection(("openrouter.ai", 443), timeout=5) as sock:
+                with context.wrap_socket(sock, server_hostname="openrouter.ai") as ssock:
+                    # Get the certificate chain
+                    der_certs = ssock.getpeercert_chain() if hasattr(ssock, 'getpeercert_chain') else []
+                    if der_certs and len(der_certs) > 1:
+                        # Use the root CA (usually the last cert in the chain)
+                        from cryptography import x509
+                        from cryptography.hazmat.backends import default_backend
+                        from cryptography.hazmat.primitives import serialization
+
+                        # Try the second cert (issuer) first
+                        try:
+                            cert = x509.load_der_x509_certificate(der_certs[1], default_backend())
+                            kaspersky_cert = cert.public_bytes(serialization.Encoding.PEM).decode('utf-8')
+                        except:
+                            pass
+
+                        # If that didn't work, try using openssl command
+                        if not kaspersky_cert:
+                            import subprocess
+                            result = subprocess.run(
+                                ["bash", "-c", "echo | openssl s_client -connect openrouter.ai:443 -showcerts 2>/dev/null | awk '/-----BEGIN CERTIFICATE-----/{if(++count==2) flag=1} flag && /-----END CERTIFICATE-----/{print; exit} flag'"],
+                                capture_output=True,
+                                text=True,
+                                timeout=10
+                            )
+                            if result.stdout and "BEGIN CERTIFICATE" in result.stdout:
+                                kaspersky_cert = result.stdout
+        except Exception as e:
+            logger.warning(f"Could not extract Kaspersky CA: {e}")
+
+        # Combine certificates
+        combined = ca_bundle
+        if kaspersky_cert:
+            combined = ca_bundle + '\n' + kaspersky_cert
+            logger.info("Added Kaspersky root CA to bundle")
+
+        # Write combined bundle
+        with open(combined_path, 'w') as f:
+            f.write(combined)
+
+        cert_count = combined.count('-----BEGIN CERTIFICATE-----')
+        logger.info(f"Created combined CA bundle at {combined_path} with {cert_count} certificates")
+
+    except Exception as e:
+        logger.error(f"Failed to create combined CA bundle: {e}")
+        # Fall back to just copying certifi
+        try:
+            certifi_path = certifi.where()
+            shutil.copy(certifi_path, combined_path)
+            logger.info(f"Copied certifi bundle to {combined_path} as fallback")
+        except Exception as copy_err:
+            logger.error(f"Fallback also failed: {copy_err}")
+
 def ensure_db_schema_up_to_date(bind_engine):
     from sqlalchemy import text
     try:
@@ -132,10 +215,13 @@ async def lifespan(app: FastAPI):
     # Wire the running event loop into TaskManager so background
     # threads can safely push SSE notifications via call_soon_threadsafe
     task_manager.set_loop(asyncio.get_event_loop())
-    
+
     # Cleanup orphaned temp directories
     cleanup_tmp_dirs()
-    
+
+    # Ensure CA bundle with Kaspersky root cert for HTTPS inspection
+    ensure_ca_bundle_with_kaspersky()
+
     # Start worker queue
     repo_queue.start()
     

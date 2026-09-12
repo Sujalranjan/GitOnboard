@@ -286,12 +286,56 @@ async def analyze_repository_stream(
             if request.model:
                 os.environ["OLLAMA_MODEL"] = model
 
+            # Normalize cloud model sentinels to None so providers use env vars / defaults
+            # "cloud-gemini" → None (GeminiProvider uses GEMINI_MODEL env var)
+            # "cloud-openrouter" → None (OpenRouterProvider uses OPENROUTER_MODEL env var)
+            model_for_llm = None if model in ("cloud-gemini", "cloud-openrouter") else model
+
             # 4. Initialize structured logging
             structured_log = StructuredLogger(session_id=current_user.id, repository=repo_display_name)
             request_id = structured_log.log_query(request.query, current_user.email)
 
-            # 5. Construct LLM service and resolve repo root
-            llm_service = get_llm_service()
+            # 5. Construct LLM service based on selected model
+            # Route to provider based on model selection - NO FALLBACK FOR EXPLICIT MODEL SELECTION
+            from backend.ai.service import LLMService
+
+            if model.startswith("qwen"):
+                # Local Qwen model - Ollama-only service
+                from backend.ai.providers.ollama import OllamaProvider
+                ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+                ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
+                primary_provider = OllamaProvider(base_url=ollama_url, model=model, timeout=ollama_timeout)
+
+                # Add fallback provider if different model configured
+                fallback_model = os.environ.get("OLLAMA_FALLBACK_MODEL", "qwen2.5-coder:7b")
+                if fallback_model and fallback_model != model:
+                    fallback_provider = OllamaProvider(base_url=ollama_url, model=fallback_model, timeout=ollama_timeout)
+                    llm_service = LLMService(providers=[primary_provider, fallback_provider])
+                else:
+                    llm_service = LLMService(providers=[primary_provider])
+                logger.info(f"[router] Using Ollama provider for model {model}")
+
+            elif model == "cloud-gemini":
+                # Gemini-only service - NO FALLBACK
+                from backend.ai.providers.gemini import GeminiProvider
+                gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+                gemini_provider = GeminiProvider(api_key=gemini_api_key)
+                llm_service = LLMService(providers=[gemini_provider])
+                logger.info(f"[router] Using Gemini-only provider for model {model}")
+
+            elif model == "cloud-openrouter":
+                # OpenRouter-only service - NO FALLBACK
+                from backend.ai.providers.openrouter import OpenRouterProvider
+                openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "")
+                openrouter_provider = OpenRouterProvider(api_key=openrouter_api_key)
+                llm_service = LLMService(providers=[openrouter_provider])
+                logger.info(f"[router] Using OpenRouter-only provider for model {model}")
+
+            else:
+                # Unknown model - use default service chain (should not reach here due to validation)
+                llm_service = get_llm_service()
+                logger.info(f"[router] Using default cloud provider chain for model {model}")
+
             repo_root = resolve_repo_root(repo_name=repo_display_name, user_id=current_user.id, db=db) if repo else None
 
             # 6. Create event queue for real-time tool visibility
@@ -342,7 +386,7 @@ async def analyze_repository_stream(
                 repo_name=repo_display_name,
                 analysis_id=analysis_id,
                 user_id=current_user.id,
-                model=model,
+                model=model_for_llm,
                 repo_root=repo_root,
                 rim_metadata_block=repo_context or None,
                 on_turn_callback=on_turn_callback,

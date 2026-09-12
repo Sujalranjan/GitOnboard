@@ -7,7 +7,10 @@ Decomposes system prompt into buckets for token accounting.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.ai.schemas import LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -441,6 +444,34 @@ Use `query_rim` when the question involves relationships, dependencies, or conne
             return self._parse_json_response(text)
         else:
             return self._parse_json_response(text)
+
+    def parse_response_from_llm_response(self, llm_response: "LLMResponse") -> Dict[str, Any]:
+        """
+        Normalize native tool calls or text-parsed tool calls into a uniform list format.
+
+        If llm_response.tool_calls is populated (native provider tool calls, e.g. Gemini):
+            takes only the FIRST tool call and wraps it into the standard dict shape.
+            (Multi-tool parallelism not supported; agent enforces one-tool-per-turn semantics.)
+        Otherwise, falls through to parse_response (text parsing) and wraps single result.
+        For final_answer/malformed, passes through unchanged (no "tool_calls" key).
+        """
+        if llm_response.tool_calls:
+            tc = llm_response.tool_calls[0]  # Take only first tool call
+            return {
+                "action": "tool_call",
+                "tool_calls": [
+                    {"tool_name": tc.tool_name, "arguments": tc.parameters}
+                ],
+            }
+        result = self.parse_response(llm_response.content)
+        if result.get("action") == "tool_call":
+            return {
+                "action": "tool_call",
+                "tool_calls": [
+                    {"tool_name": result["tool_name"], "arguments": result["arguments"]}
+                ],
+            }
+        return result
 
     def _parse_hermes_response(self, text: str) -> Dict[str, Any]:
         """Parse Hermes XML tool calling format (for Qwen models)."""

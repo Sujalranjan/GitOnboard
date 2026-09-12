@@ -2,8 +2,10 @@
 from __future__ import annotations
 import json
 import logging
-from typing import Any, Dict, Type, TypeVar
+import ssl
+from typing import Any, Dict, Optional, Type, TypeVar
 
+import certifi
 import httpx
 
 from ..interfaces import LLMProvider
@@ -27,6 +29,14 @@ class OpenRouterProvider:
         self.default_model = model or os.environ.get("OPENROUTER_MODEL", DEFAULT_MODEL)
         self.timeout = timeout
 
+    def _get_ca_bundle_path(self) -> str:
+        """Get CA bundle path, preferring combined bundle if available."""
+        import os
+        combined_path = "/app/backend/data/ca_bundle_combined.pem"
+        if os.path.exists(combined_path):
+            return combined_path
+        return certifi.where()
+
     def _headers(self) -> Dict[str, str]:
         return {
             "Authorization": f"Bearer {self.api_key}",
@@ -47,7 +57,12 @@ class OpenRouterProvider:
         return body
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        # Create SSL context with proper certificate verification
+        # Use combined CA bundle that includes both certifi and Kaspersky root (for HTTPS inspection)
+        ca_bundle = self._get_ca_bundle_path()
+        ssl_context = ssl.create_default_context(cafile=ca_bundle)
+
+        async with httpx.AsyncClient(verify=ssl_context, timeout=self.timeout) as client:
             try:
                 resp = await client.post(
                     f"{OPENROUTER_BASE_URL}/chat/completions",

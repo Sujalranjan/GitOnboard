@@ -69,7 +69,7 @@ class TestGeminiTokenCounter:
         """If no API key, fall back to heuristic."""
         with patch.dict('os.environ', {'GEMINI_API_KEY': ''}):
             counter = GeminiTokenCounter()
-            result = await counter.count("hello", "gemini", "gemini-2.0-flash")
+            result = await counter.count("hello", "gemini", "gemini-3.6-flash")
             assert result.method == "heuristic"
             assert result.estimated is True
 
@@ -94,7 +94,7 @@ class TestGeminiTokenCounter:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(
                 side_effect=Exception("API Error")
             )
-            result = await counter.count("hello", "gemini", "gemini-2.0-flash")
+            result = await counter.count("hello", "gemini", "gemini-3.6-flash")
             # Should fall back to heuristic
             assert result.method == "heuristic"
             assert result.estimated is True
@@ -219,7 +219,7 @@ class TestTokenCountingIntegration:
         result = await count_tokens(
             "hello world",
             provider="gemini",
-            model="gemini-2.0-flash"
+            model="gemini-3.6-flash"
         )
         assert isinstance(result, TokenCountResult)
         assert result.count > 0
