@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from backend.agent.loop.contracts import StopReason
 from backend.ai.service import get_llm_service
 from backend.ai.tokencount import count_tokens
+from backend.config import settings
 from backend.intelligence.retrieval import HybridRetriever
 from backend.models.user import User
 from backend.repository_tools import resolve_repo_root, RepositoryToolLayer
@@ -592,37 +593,46 @@ class RIMComparisonService:
         actual_completion_tokens = sum(turn.completion_tokens for turn in loop_result.turns)
         actual_total_tokens = actual_prompt_tokens + actual_completion_tokens
 
-        # Estimate token breakdown
-        t0_counting = time.perf_counter()
+        # In PROD mode, skip token estimation and use API-returned tokens only
+        if settings.deployment_type == "PROD":
+            estimated_system = None
+            estimated_other = None
+            estimated_rim = None
+            estimated_source = None
+            token_counting_ms = 0.0
+            reconciliation_diff = 0
+        else:
+            # Estimate token breakdown (LOCAL mode only)
+            t0_counting = time.perf_counter()
 
-        estimated_system = await count_tokens(prompt_parts.grounding_and_protocol_text, "ollama", "qwen")
-        estimated_other = await count_tokens(prompt_parts.tool_catalog_text + question, "ollama", "qwen")
-        estimated_rim = await count_tokens(rim_metadata_block or "", "ollama", "qwen") if rim_metadata_block else None
+            estimated_system = await count_tokens(prompt_parts.grounding_and_protocol_text, "ollama", "qwen")
+            estimated_other = await count_tokens(prompt_parts.tool_catalog_text + question, "ollama", "qwen")
+            estimated_rim = await count_tokens(rim_metadata_block or "", "ollama", "qwen") if rim_metadata_block else None
 
-        # Source tokens are estimated by accumulating tool observations
-        source_texts = []
-        for turn in loop_result.turns:
-            if turn.tool_observation:
-                # Use formatted message (actual text sent to LLM) for source token estimation
-                obs = turn.tool_observation
-                if obs.get("error"):
-                    source_texts.append(str(obs.get("error")))
-                else:
-                    # Use the formatted message that was actually sent to the LLM
-                    formatted_msg = obs.get("formatted_message", "")
-                    if formatted_msg:
-                        source_texts.append(formatted_msg)
+            # Source tokens are estimated by accumulating tool observations
+            source_texts = []
+            for turn in loop_result.turns:
+                if turn.tool_observation:
+                    # Use formatted message (actual text sent to LLM) for source token estimation
+                    obs = turn.tool_observation
+                    if obs.get("error"):
+                        source_texts.append(str(obs.get("error")))
+                    else:
+                        # Use the formatted message that was actually sent to the LLM
+                        formatted_msg = obs.get("formatted_message", "")
+                        if formatted_msg:
+                            source_texts.append(formatted_msg)
 
-        estimated_source = await count_tokens("\n".join(source_texts), "ollama", "qwen") if source_texts else None
+            estimated_source = await count_tokens("\n".join(source_texts), "ollama", "qwen") if source_texts else None
 
-        token_counting_ms = (time.perf_counter() - t0_counting) * 1000
+            token_counting_ms = (time.perf_counter() - t0_counting) * 1000
 
-        # Reconciliation
-        est_total = (estimated_system.count if estimated_system else 0) + \
-                   (estimated_other.count if estimated_other else 0) + \
-                   (estimated_rim.count if estimated_rim else 0) + \
-                   (estimated_source.count if estimated_source else 0)
-        reconciliation_diff = actual_prompt_tokens - est_total
+            # Reconciliation
+            est_total = (estimated_system.count if estimated_system else 0) + \
+                       (estimated_other.count if estimated_other else 0) + \
+                       (estimated_rim.count if estimated_rim else 0) + \
+                       (estimated_source.count if estimated_source else 0)
+            reconciliation_diff = actual_prompt_tokens - est_total
 
         # Build source context block (concatenation of actual tool observations sent to LLM)
         source_context_lines = []
@@ -669,8 +679,8 @@ class RIMComparisonService:
                 estimated_rim_tokens=estimated_rim.count if estimated_rim else 0,
                 estimated_source_tokens=estimated_source.count if estimated_source else 0,
                 estimated_other_tokens=estimated_other.count if estimated_other else 0,
-                token_estimation_method="heuristic",
-                token_estimation_is_approximate=True,
+                token_estimation_method="api_response" if settings.deployment_type == "PROD" else "heuristic",
+                token_estimation_is_approximate=False if settings.deployment_type == "PROD" else True,
                 token_reconciliation_diff=reconciliation_diff,
                 llm_latency_ms=loop_result.latency_ms.get("llm_total", 0),
                 retrieval_latency_ms=loop_result.latency_ms.get("tool_total", 0),
