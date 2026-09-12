@@ -155,12 +155,12 @@ def get_valid_models() -> Dict[str, str]:
     Return available models based on deployment mode.
 
     LOCAL mode: Qwen/Ollama models only
-    PROD mode: Cloud providers (Gemini, OpenRouter)
+    PROD mode: Cloud providers (Gemini, OpenRouter) with actual model names
     """
     if settings.deployment_type == "PROD":
         return {
-            settings.model_prod_gemini: "Gemini (Cloud)",
-            settings.model_prod_openrouter: "OpenRouter (Cloud)",
+            settings.gemini_model: f"Gemini ({settings.gemini_model})",
+            settings.openrouter_model: f"OpenRouter ({settings.openrouter_model})",
         }
     else:  # LOCAL or any other mode defaults to local models
         return {
@@ -235,10 +235,10 @@ def set_model(
     os.environ["OLLAMA_MODEL"] = request.model
 
     # For cloud models, check that API keys are configured
-    if request.model == "cloud-gemini" and not os.environ.get("GEMINI_API_KEY"):
-        logger.warning("Gemini model selected but GEMINI_API_KEY not configured")
-    if request.model == "cloud-openrouter" and not os.environ.get("OPENROUTER_API_KEY"):
-        logger.warning("OpenRouter model selected but OPENROUTER_API_KEY not configured")
+    if request.model == settings.gemini_model and not os.environ.get("GEMINI_API_KEY"):
+        logger.warning(f"Gemini model '{request.model}' selected but GEMINI_API_KEY not configured")
+    if request.model == settings.openrouter_model and not os.environ.get("OPENROUTER_API_KEY"):
+        logger.warning(f"OpenRouter model '{request.model}' selected but OPENROUTER_API_KEY not configured")
 
     logger.info(f"User {current_user.username} switched model to {request.model} ({settings.deployment_type} mode)")
 
@@ -327,10 +327,8 @@ async def analyze_repository_stream(
             if request.model:
                 os.environ["OLLAMA_MODEL"] = model
 
-            # Normalize cloud model sentinels to None so providers use env vars / defaults
-            # "cloud-gemini" → None (GeminiProvider uses GEMINI_MODEL env var)
-            # "cloud-openrouter" → None (OpenRouterProvider uses OPENROUTER_MODEL env var)
-            model_for_llm = None if model in ("cloud-gemini", "cloud-openrouter") else model
+            # Cloud models use their actual model names (gemini-2.0-flash, gpt-4-turbo, etc.)
+            model_for_llm = None if model in (settings.gemini_model, settings.openrouter_model) else model
 
             # 4. Initialize structured logging
             structured_log = StructuredLogger(session_id=current_user.id, repository=repo_display_name)
@@ -356,21 +354,21 @@ async def analyze_repository_stream(
                     llm_service = LLMService(providers=[primary_provider])
                 logger.info(f"[router] Using Ollama provider for model {model}")
 
-            elif model == "cloud-gemini":
+            elif model == settings.gemini_model:
                 # Gemini-only service - NO FALLBACK
                 from backend.ai.providers.gemini import GeminiProvider
                 gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-                gemini_provider = GeminiProvider(api_key=gemini_api_key)
+                gemini_provider = GeminiProvider(api_key=gemini_api_key, model=model)
                 llm_service = LLMService(providers=[gemini_provider])
-                logger.info(f"[router] Using Gemini-only provider for model {model}")
+                logger.info(f"[router] Using Gemini provider for model {model}")
 
-            elif model == "cloud-openrouter":
+            elif model == settings.openrouter_model:
                 # OpenRouter-only service - NO FALLBACK
                 from backend.ai.providers.openrouter import OpenRouterProvider
                 openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "")
-                openrouter_provider = OpenRouterProvider(api_key=openrouter_api_key)
+                openrouter_provider = OpenRouterProvider(api_key=openrouter_api_key, model=model)
                 llm_service = LLMService(providers=[openrouter_provider])
-                logger.info(f"[router] Using OpenRouter-only provider for model {model}")
+                logger.info(f"[router] Using OpenRouter provider for model {model}")
 
             else:
                 # Unknown model - use default service chain (should not reach here due to validation)

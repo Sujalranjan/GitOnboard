@@ -84,9 +84,10 @@ class Settings(BaseSettings):
     model_local_quality: str = "qwen2.5-coder:7b"
 
     # PROD mode models (Cloud providers: Gemini, OpenRouter)
-    model_prod_default: str = "cloud-gemini"
-    model_prod_gemini: str = "cloud-gemini"
-    model_prod_openrouter: str = "cloud-openrouter"
+    # Use actual model names (e.g., "gemini-2.0-flash", "gpt-4-turbo")
+    model_prod_default: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-2.0-flash"
+    openrouter_model: str = "gpt-4-turbo"
 
     class Config:
         env_file = ".env"
