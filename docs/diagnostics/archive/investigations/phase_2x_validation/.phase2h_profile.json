@@ -1,0 +1,79 @@
+{
+  "repository": "GitOnboard-E2E-Validation",
+  "file_count": 1970,
+  "ast_count": 1109,
+  "analyzers": {
+    "ConfigAnalyzer": {
+      "duration_seconds": 0.0003743171691894531,
+      "entities_added": 0,
+      "relationships_added": 0,
+      "total_entities": 0,
+      "total_relationships": 0
+    },
+    "DependencyAnalyzer": {
+      "duration_seconds": 0.000232696533203125,
+      "entities_added": 0,
+      "relationships_added": 0,
+      "total_entities": 0,
+      "total_relationships": 0
+    },
+    "SymbolAnalyzer": {
+      "duration_seconds": 1.808579444885254,
+      "entities_added": 8052,
+      "relationships_added": 6707,
+      "total_entities": 8052,
+      "total_relationships": 6707
+    },
+    "ImportAnalyzer": {
+      "duration_seconds": 1.618159294128418,
+      "entities_added": 7365,
+      "relationships_added": 7510,
+      "total_entities": 15417,
+      "total_relationships": 14217
+    },
+    "TypeAnalyzer": {
+      "duration_seconds": 1.3829376697540283,
+      "entities_added": 0,
+      "relationships_added": 662,
+      "total_entities": 15417,
+      "total_relationships": 14879
+    },
+    "CallGraphAnalyzer": {
+      "duration_seconds": 4.149345397949219,
+      "entities_added": 0,
+      "relationships_added": 13880,
+      "total_entities": 15417,
+      "total_relationships": 28759
+    },
+    "UsesAnalyzer": {
+      "duration_seconds": 2.6933341026306152,
+      "entities_added": 0,
+      "relationships_added": 10092,
+      "total_entities": 15417,
+      "total_relationships": 38851
+    },
+    "RouteAnalyzer": {
+      "duration_seconds": 1.3546979427337646,
+      "entities_added": 190,
+      "relationships_added": 190,
+      "total_entities": 15607,
+      "total_relationships": 39041
+    },
+    "DatabaseAnalyzer": {
+      "duration_seconds": 1.3146889209747314,
+      "entities_added": 26,
+      "relationships_added": 52,
+      "total_entities": 15633,
+      "total_relationships": 39093
+    },
+    "TestAnalyzer": {
+      "duration_seconds": 1.4410054683685303,
+      "entities_added": 1613,
+      "relationships_added": 0,
+      "total_entities": 17246,
+      "total_relationships": 39093
+    }
+  },
+  "total_entities": 17246,
+  "total_relationships": 39093
+}

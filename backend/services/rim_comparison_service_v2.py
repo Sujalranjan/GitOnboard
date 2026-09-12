@@ -240,7 +240,7 @@ class RIMComparisonService:
         # Select model based on deployment mode
         baseline_model = (
             settings.openrouter_model if settings.deployment_type == "PROD"
-            else settings.model_local_quality  # Use quality Qwen model for LOCAL
+            else settings.model_local_default  # Use default Qwen model for LOCAL (qwen3:4b-instruct)
         )
 
         baseline_analysis_service = build_analysis_service(
@@ -433,7 +433,7 @@ class RIMComparisonService:
         # Select model based on deployment mode
         baseline_model = (
             settings.openrouter_model if settings.deployment_type == "PROD"
-            else settings.model_local_quality  # Use quality Qwen model for LOCAL
+            else settings.model_local_default  # Use default Qwen model for LOCAL (qwen3:4b-instruct)
         )
 
         baseline_analysis_service = build_analysis_service(

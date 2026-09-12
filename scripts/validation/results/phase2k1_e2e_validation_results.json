@@ -1,0 +1,49 @@
+{
+  "timestamp": "2026-09-06T02:24:19.448692",
+  "repository": "GitOnboard",
+  "stages": {
+    "parse_analyze": {
+      "status": "success",
+      "elapsed": 14.379205703735352,
+      "entities": 10221,
+      "relationships": 22761
+    },
+    "factstore": {
+      "status": "success",
+      "elapsed": 7.8889830112457275,
+      "analysis_id": 847138,
+      "files": 840,
+      "symbols": 9380,
+      "relationships": 21957,
+      "routes": 102,
+      "database_objects": 26,
+      "capabilities": 0
+    },
+    "bm25": {
+      "status": "success",
+      "elapsed": 1.0075056552886963,
+      "indexed_documents": 10348
+    },
+    "semantic": {
+      "status": "partial",
+      "elapsed": 97.65445590019226,
+      "error": "skipped by user"
+    },
+    "hybrid_retrieval": {
+      "status": "success",
+      "elapsed": 7.426987648010254,
+      "queries_tested": 8,
+      "results_per_query": {
+        "authentication": 5,
+        "repository analysis": 5,
+        "analysis pipeline": 5,
+        "API routes": 5,
+        "database models": 5,
+        "agent context": 5,
+        "parser": 5,
+        "symbol resolution": 5
+      },
+      "total_unique_results": 21
+    }
+  }
+}
