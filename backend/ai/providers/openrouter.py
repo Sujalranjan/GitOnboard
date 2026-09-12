@@ -9,7 +9,7 @@ import certifi
 import httpx
 
 from ..interfaces import LLMProvider
-from ..schemas import LLMRequest, LLMResponse, TokenUsage, NonRetriableError, RetriableError
+from ..schemas import LLMRequest, LLMResponse, TokenUsage, NonRetriableError, RetriableError, ToolCall
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -54,6 +54,18 @@ class OpenRouterProvider:
         }
         if request.response_format:
             body["response_format"] = request.response_format
+        if request.tools:
+            body["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters,
+                    }
+                }
+                for tool in request.tools
+            ]
         return body
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
@@ -88,8 +100,23 @@ class OpenRouterProvider:
 
         data = resp.json()
         usage_data = data.get("usage", {})
+
+        message = data["choices"][0]["message"]
+        content = message.get("content") or ""
+
+        tool_calls = None
+        if "tool_calls" in message and message["tool_calls"]:
+            tool_calls = [
+                ToolCall(
+                    tool_name=tc["function"]["name"],
+                    parameters=json.loads(tc["function"].get("arguments", "{}")) if isinstance(tc["function"].get("arguments"), str) else tc["function"].get("arguments", {}),
+                    tool_call_id=tc.get("id", f"openrouter-{i}"),
+                )
+                for i, tc in enumerate(message["tool_calls"])
+            ]
+
         return LLMResponse(
-            content=data["choices"][0]["message"]["content"],
+            content=content,
             model=data.get("model", self.default_model),
             provider=self.provider_name,
             usage=TokenUsage(
@@ -97,6 +124,7 @@ class OpenRouterProvider:
                 completion_tokens=usage_data.get("completion_tokens", 0),
                 total_tokens=usage_data.get("total_tokens", 0),
             ),
+            tool_calls=tool_calls,
         )
 
     async def generate_structured(self, request: LLMRequest, schema: Type[T]) -> T:
