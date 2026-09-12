@@ -15,6 +15,7 @@ class MessageRole(str, Enum):
 class Message(BaseModel):
     role: MessageRole
     content: str
+    tool_calls: Optional[List[Dict[str, Any]]] = None  # Native tool calls for providers like OpenRouter/Gemini
 
 
 class Tool(BaseModel):

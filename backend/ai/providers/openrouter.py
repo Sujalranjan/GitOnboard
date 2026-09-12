@@ -94,9 +94,18 @@ class OpenRouterProvider:
         }
 
     def _build_body(self, request: LLMRequest) -> Dict[str, Any]:
+        # Build messages, preserving native tool_calls from previous responses
+        messages = []
+        for m in request.messages:
+            msg_dict = {"role": m.role.value, "content": m.content}
+            # Include native tool_calls if present (for tool call continuation)
+            if m.tool_calls:
+                msg_dict["tool_calls"] = m.tool_calls
+            messages.append(msg_dict)
+
         body: Dict[str, Any] = {
             "model": request.model or self.default_model,
-            "messages": [{"role": m.role.value, "content": m.content} for m in request.messages],
+            "messages": messages,
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
         }
@@ -150,8 +159,19 @@ class OpenRouterProvider:
 
 
         data = resp.json()
-        usage_data = data.get("usage", {})
 
+        # Check for error payload at HTTP 200 (OpenRouter can return errors with success status)
+        if "error" in data:
+            error_info = data.get("error", {})
+            error_msg = error_info.get("message", "Unknown error")
+            error_code = error_info.get("code", 500)
+            # Treat provider errors as retriable (they may recover)
+            raise RetriableError(f"OpenRouter provider error {error_code}: {error_msg}", error_code)
+
+        if "choices" not in data:
+            raise NonRetriableError(f"OpenRouter invalid response: missing 'choices' field. Response keys: {list(data.keys())}", 200)
+
+        usage_data = data.get("usage", {})
         message = data["choices"][0]["message"]
         content = message.get("content") or ""
 

@@ -6,6 +6,7 @@ Enforces one tool call per turn (files fetched one-at-a-time), never pre-fetches
 Tracks tool calls, file reads, and RIM metadata access separately.
 """
 
+import json
 import logging
 import re
 import time
@@ -218,7 +219,9 @@ class QALoop:
                         role_str = msg.get("role", "user").lower() if isinstance(msg, dict) else "user"
                         role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
                         content = msg.get("content", "") if isinstance(msg, dict) else str(msg)
-                        llm_messages.append(Message(role=role, content=content))
+                        # Preserve native tool_calls from providers (e.g., OpenRouter, Gemini)
+                        tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else None
+                        llm_messages.append(Message(role=role, content=content, tool_calls=tool_calls))
                     except Exception as msg_err:
                         logger.error(f"[QALoop] Error processing message: {msg_err}, msg type: {type(msg)}")
                         raise
@@ -491,10 +494,26 @@ class QALoop:
                             result.rim_relationship_types_used.append(rel_type)
 
                 # 8. Append LLM response + tool observation to conversation
-                messages.append({
+                # Preserve native tool_calls from providers (e.g., OpenRouter, Gemini)
+                assistant_message = {
                     "role": "assistant",
                     "content": llm_response.content,
-                })
+                }
+                if llm_response.tool_calls:
+                    # Include native tool_calls for providers that support them
+                    assistant_message["tool_calls"] = [
+                        {
+                            "type": "function",
+                            "id": tc.tool_call_id,
+                            "function": {
+                                "name": tc.tool_name,
+                                "arguments": tc.parameters if isinstance(tc.parameters, str) else json.dumps(tc.parameters),
+                            },
+                        }
+                        for tc in llm_response.tool_calls
+                    ]
+                messages.append(assistant_message)
+
                 messages.append({
                     "role": "user",
                     "content": self._format_tool_observation(tool_name, tool_observation, sanitized_data),
