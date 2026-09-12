@@ -98,7 +98,8 @@ interface ModelOption {
   category: 'fast' | 'quality' | 'cloud';
 }
 
-const ALL_MODELS: ModelOption[] = [
+// Static fallback models (in case API is not available)
+const FALLBACK_MODELS: ModelOption[] = [
   {
     id: 'qwen3:4b-instruct',
     name: 'Qwen 3 4B (Fast)',
@@ -125,18 +126,6 @@ const ALL_MODELS: ModelOption[] = [
   },
 ];
 
-// Filter models based on deployment type
-const getAvailableModels = (): ModelOption[] => {
-  const isProd = process.env.NEXT_PUBLIC_DEPLOYMENT_TYPE?.toUpperCase() === 'PROD';
-  if (isProd) {
-    // Hide local Qwen models in PROD mode
-    return ALL_MODELS.filter(m => m.category === 'cloud');
-  }
-  return ALL_MODELS;
-};
-
-const AVAILABLE_MODELS = getAvailableModels();
-
 interface LLMConversationFlowProps {
   repoName: string;
 }
@@ -150,8 +139,9 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
   const [elapsed, setElapsed] = useState(0);
   const [done, setDone] = useState(false);
   const [showToolDetails, setShowToolDetails] = useState(true);
-  const isProd = process.env.NEXT_PUBLIC_DEPLOYMENT_TYPE?.toUpperCase() === 'PROD';
-  const [selectedModel, setSelectedModel] = useState<string>(isProd ? 'cloud-gemini' : 'qwen3:4b-instruct');
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>(FALLBACK_MODELS);
+  const [deploymentType, setDeploymentType] = useState<string>('LOCAL');
+  const [selectedModel, setSelectedModel] = useState<string>('qwen3:4b-instruct');
   const [changingModel, setChangingModel] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [totalTokens, setTotalTokens] = useState(0);
@@ -168,6 +158,58 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Fetch available models from backend API
+  useEffect(() => {
+    const fetchAvailableModels = async () => {
+      try {
+        const response = await fetch('/api/llm/models');
+        if (response.ok) {
+          const data = await response.json();
+          setDeploymentType(data.deployment_type);
+
+          // Convert backend model dict to ModelOption array
+          const models: ModelOption[] = Object.entries(data.models).map(([modelId, displayName]) => {
+            // Determine category based on model ID
+            let category: 'fast' | 'quality' | 'cloud' = 'cloud';
+            if (modelId.includes('qwen3:4b')) {
+              category = 'fast';
+            } else if (modelId.includes('qwen2.5-coder')) {
+              category = 'quality';
+            } else if (modelId.includes('cloud')) {
+              category = 'cloud';
+            }
+
+            return {
+              id: modelId,
+              name: displayName as string,
+              description: category === 'cloud' ? 'Cloud-based model' : `${category} local model`,
+              category,
+            };
+          });
+
+          setAvailableModels(models);
+
+          // Set model: prefer localStorage, then first available
+          const savedModel = localStorage.getItem('selectedModel');
+          if (savedModel && models.some((m) => m.id === savedModel)) {
+            setSelectedModel(savedModel);
+          } else if (models.length > 0) {
+            setSelectedModel(models[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch available models:', error);
+        // Fall back to static models and localStorage
+        const savedModel = localStorage.getItem('selectedModel');
+        if (savedModel) {
+          setSelectedModel(savedModel);
+        }
+      }
+    };
+
+    fetchAvailableModels();
+  }, []);
 
   // Close settings menu when clicking outside
   useEffect(() => {
@@ -216,6 +258,8 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
       });
       if (response.ok) {
         setSelectedModel(modelId);
+        // Persist model selection to localStorage
+        localStorage.setItem('selectedModel', modelId);
       } else {
         console.error('Failed to change model');
       }
@@ -702,14 +746,14 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                       disabled={changingModel || running}
                       className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
                     >
-                      {AVAILABLE_MODELS.map((model) => (
+                      {availableModels.map((model) => (
                         <option key={model.id} value={model.id}>
                           {model.name}
                         </option>
                       ))}
                     </select>
                     <p className="text-xs text-slate-400 mt-2">
-                      {AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.description}
+                      {availableModels.find((m) => m.id === selectedModel)?.description}
                     </p>
                   </div>
                 </div>

@@ -150,12 +150,26 @@ async def build_repository_context(db: Session, repo: Repository, analysis_id: O
 
 # ===== Model Configuration =====
 
-VALID_MODELS = {
-    "qwen3:4b-instruct": "Qwen 3 4B (Fast)",
-    "qwen2.5-coder:7b": "Qwen 2.5 Coder 7B (Quality)",
-    "cloud-gemini": "Gemini (Cloud)",
-    "cloud-openrouter": "OpenRouter (Cloud)",
-}
+def get_valid_models() -> Dict[str, str]:
+    """
+    Return available models based on deployment mode.
+
+    LOCAL mode: Qwen/Ollama models only
+    PROD mode: Cloud providers (Gemini, OpenRouter)
+    """
+    if settings.deployment_type == "PROD":
+        return {
+            settings.model_prod_gemini: "Gemini (Cloud)",
+            settings.model_prod_openrouter: "OpenRouter (Cloud)",
+        }
+    else:  # LOCAL or any other mode defaults to local models
+        return {
+            settings.model_local_fast: "Qwen 3 4B (Fast)",
+            settings.model_local_quality: "Qwen 2.5 Coder 7B (Quality)",
+        }
+
+
+VALID_MODELS = get_valid_models()
 
 
 class SetModelRequest(BaseModel):
@@ -168,11 +182,31 @@ class ModelResponse(BaseModel):
     status: str
 
 
+class ModelsListResponse(BaseModel):
+    """Response with list of available models."""
+    deployment_type: str
+    models: Dict[str, str]  # model_id -> display_name
+
+
 class AnalyzeRequest(BaseModel):
     query: str
     repo_hash: str
     model: str = None
     show_tool_details: bool = True
+
+
+@router.get("/models", response_model=ModelsListResponse)
+def get_models():
+    """
+    Get list of available models for the current deployment mode.
+
+    LOCAL mode returns Qwen/Ollama models.
+    PROD mode returns cloud models (Gemini, OpenRouter).
+    """
+    return ModelsListResponse(
+        deployment_type=settings.deployment_type,
+        models=get_valid_models(),
+    )
 
 
 @router.post("/set-model", response_model=ModelResponse)
@@ -183,11 +217,18 @@ def set_model(
 ):
     """
     Change the active LLM model for this session.
+
+    Available models depend on deployment mode:
+    - LOCAL: Qwen/Ollama models (fast, local inference)
+    - PROD: Cloud models (Gemini, OpenRouter)
     """
-    if request.model not in VALID_MODELS:
+    # Refresh valid models for current deployment
+    valid_models = get_valid_models()
+
+    if request.model not in valid_models:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid model. Valid options: {list(VALID_MODELS.keys())}",
+            detail=f"Invalid model for {settings.deployment_type} mode. Valid options: {list(valid_models.keys())}",
         )
 
     # Set model in environment (affects new requests)
@@ -199,11 +240,11 @@ def set_model(
     if request.model == "cloud-openrouter" and not os.environ.get("OPENROUTER_API_KEY"):
         logger.warning("OpenRouter model selected but OPENROUTER_API_KEY not configured")
 
-    logger.info(f"User {current_user.username} switched model to {request.model}")
+    logger.info(f"User {current_user.username} switched model to {request.model} ({settings.deployment_type} mode)")
 
     return ModelResponse(
         current_model=request.model,
-        model_name=VALID_MODELS[request.model],
+        model_name=valid_models[request.model],
         status="Model switched successfully. New requests will use the selected model.",
     )
 

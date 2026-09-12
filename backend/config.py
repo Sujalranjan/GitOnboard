@@ -78,6 +78,16 @@ class Settings(BaseSettings):
     model_terminal_plan: str = "qwen3:4b-instruct"
     model_terminal_implement: str = "qwen3:4b-instruct"
 
+    # LOCAL mode models (Ollama/Qwen)
+    model_local_default: str = "qwen3:4b-instruct"
+    model_local_fast: str = "qwen3:4b-instruct"
+    model_local_quality: str = "qwen2.5-coder:7b"
+
+    # PROD mode models (Cloud providers: Gemini, OpenRouter)
+    model_prod_default: str = "cloud-gemini"
+    model_prod_gemini: str = "cloud-gemini"
+    model_prod_openrouter: str = "cloud-openrouter"
+
     class Config:
         env_file = ".env"
         extra = "ignore"
