@@ -237,13 +237,19 @@ class RIMComparisonService:
         """Run baseline analysis only and return comparison side."""
         logger.info(f"[RIM Comparison] Running baseline (no RIM) for: {question}")
 
+        # Select model based on deployment mode
+        baseline_model = (
+            settings.openrouter_model if settings.deployment_type == "PROD"
+            else settings.model_local_quality  # Use quality Qwen model for LOCAL
+        )
+
         baseline_analysis_service = build_analysis_service(
             llm_service=self.llm_service,
             db=self.db,
             repo_name=self.repo_name,
             analysis_id=setup['analysis_id'],
             user_id=self.current_user.id,
-            model=settings.openrouter_model,  # Use OpenRouter for baseline (without RIM)
+            model=baseline_model,
             tool_layer=setup['tool_layer'],
             rim_metadata_block=setup['repository_context_block'],
             structured_logger=setup['structured_log'],
@@ -281,13 +287,19 @@ class RIMComparisonService:
         combined_rim_block = self._combine_context_blocks(repository_context_block, rim_metadata.text)
         logger.info(f"[RIM Comparison] Running RIM analysis for: {question}")
 
+        # Select model based on deployment mode
+        rim_model = (
+            settings.gemini_model if settings.deployment_type == "PROD"
+            else settings.model_local_quality  # Use same quality Qwen model for LOCAL
+        )
+
         rim_analysis_service = build_analysis_service(
             llm_service=self.llm_service,
             db=self.db,
             repo_name=self.repo_name,
             analysis_id=setup['analysis_id'],
             user_id=self.current_user.id,
-            model=settings.gemini_model,  # Use Gemini for RIM-enhanced analysis
+            model=rim_model,
             tool_layer=setup['tool_layer'],
             rim_metadata_block=combined_rim_block,
             structured_logger=setup['structured_log'],
@@ -418,13 +430,19 @@ class RIMComparisonService:
         # 3. RUN BASELINE — with repository context (no RIM relationships)
         logger.info(f"[RIM Comparison] Running baseline (no RIM) for: {question}")
 
+        # Select model based on deployment mode
+        baseline_model = (
+            settings.openrouter_model if settings.deployment_type == "PROD"
+            else settings.model_local_quality  # Use quality Qwen model for LOCAL
+        )
+
         baseline_analysis_service = build_analysis_service(
             llm_service=self.llm_service,
             db=self.db,
             repo_name=self.repo_name,
             analysis_id=analysis_id,
             user_id=self.current_user.id,
-            model=settings.openrouter_model,  # Use OpenRouter for baseline (without RIM)
+            model=baseline_model,
             tool_layer=tool_layer,
             rim_metadata_block=repository_context_block,
             structured_logger=structured_log,
@@ -458,13 +476,19 @@ class RIMComparisonService:
 
         logger.info(f"[RIM Comparison] Running RIM comparison for: {question}")
 
+        # Select model based on deployment mode
+        rim_model = (
+            settings.gemini_model if settings.deployment_type == "PROD"
+            else settings.model_local_quality  # Use same quality Qwen model for LOCAL
+        )
+
         rim_analysis_service = build_analysis_service(
             llm_service=self.llm_service,
             db=self.db,
             repo_name=self.repo_name,
             analysis_id=analysis_id,
             user_id=self.current_user.id,
-            model=settings.gemini_model,  # Use Gemini for RIM-enhanced analysis
+            model=rim_model,
             tool_layer=tool_layer,
             rim_metadata_block=combined_rim_block,
             structured_logger=structured_log,
