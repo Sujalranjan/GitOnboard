@@ -17,3 +17,10 @@ out/
 .vscode/
 .idea/
 *.log
+# Audit and documentation files with potential secrets
+IMPLEMENTATION_STATUS_ACCURATE.md
+FINAL_AUDIT_REPORT.md
+
+# Large log files
+logs/app.log.*
+logs/*/
