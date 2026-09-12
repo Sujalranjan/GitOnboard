@@ -82,12 +82,14 @@ class Settings(BaseSettings):
     model_local_default: str = "qwen3:4b-instruct"
     model_local_fast: str = "qwen3:4b-instruct"
     model_local_quality: str = "qwen2.5-coder:7b"
+    model_local_max_tokens: int = 8192
 
     # PROD mode models (Cloud providers: Gemini, OpenRouter)
     # Use actual model names (e.g., "gemini-2.0-flash", "gpt-4-turbo")
     model_prod_default: str = "gemini-2.0-flash"
     gemini_model: str = "gemini-2.0-flash"
     openrouter_model: str = "gpt-4-turbo"
+    model_prod_max_tokens: int = 65536
 
     class Config:
         env_file = ".env"
@@ -104,5 +106,12 @@ class Settings(BaseSettings):
         if self.deployment_type == "PROD" and self.prod_frontend_url.strip():
             return self.prod_frontend_url
         return self.local_frontend_url
+
+    @property
+    def llm_max_tokens(self) -> int:
+        """Return max tokens based on deployment mode."""
+        if self.deployment_type == "PROD":
+            return self.model_prod_max_tokens
+        return self.model_local_max_tokens
 
 settings = Settings()

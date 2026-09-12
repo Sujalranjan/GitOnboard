@@ -16,6 +16,7 @@ from backend.agent.loop.contracts import AgentLoopConfig, StopReason, ToolObserv
 from backend.agent.loop.guardrails import LoopGuardrails
 from backend.ai.service import LLMService
 from backend.ai.schemas import LLMRequest, Message, MessageRole, Tool
+from backend.config import settings
 from backend.services.qa_protocol import QAProtocolAdapter
 
 if TYPE_CHECKING:
@@ -216,7 +217,7 @@ class QALoop:
                     messages=llm_messages,
                     model=self.model,
                     temperature=0.2,
-                    max_tokens=8192,
+                    max_tokens=settings.llm_max_tokens,
                     tools=schema_tools,
                 )
                 llm_response = await self.llm_service.generate(request)
@@ -593,7 +594,7 @@ class QALoop:
                 messages=llm_messages,
                 model=self.model,
                 temperature=0.2,
-                max_tokens=8192,
+                max_tokens=settings.llm_max_tokens,
             )
             llm_response = await self.llm_service.generate(request)
         except Exception as e:
