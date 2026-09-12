@@ -382,6 +382,8 @@ async def analyze_repository_stream(
 
             async def on_turn_callback(turn: QALoopTurn) -> None:
                 """Called when each turn completes; emits structured events to queue."""
+                nonlocal total_prompt_tokens, total_completion_tokens
+
                 if not request.show_tool_details:
                     print(f"[on_turn] show_tool_details=False, skipping event queue")
                     return
@@ -417,6 +419,23 @@ async def analyze_repository_stream(
                         print(f"[on_turn] tool-response queued: turn={turn.turn_index} tool={event['tool_name']} success={event['success']}")
                     except Exception as e:
                         print(f"[on_turn] ERROR queueing tool-response: {e}")
+
+                # Emit token update after every turn
+                total_prompt_tokens += turn.prompt_tokens
+                total_completion_tokens += turn.completion_tokens
+                token_event = {
+                    "type": "token-update",
+                    "prompt_tokens": total_prompt_tokens,
+                    "completion_tokens": total_completion_tokens,
+                    "total_tokens": total_prompt_tokens + total_completion_tokens,
+                    "turn_index": turn.turn_index,
+                    "timestamp": (datetime.now() - start_time).total_seconds(),
+                }
+                try:
+                    event_queue.put_nowait(token_event)
+                    print(f"[on_turn] token-update queued: total_tokens={token_event['total_tokens']}")
+                except Exception as e:
+                    print(f"[on_turn] ERROR queueing token-update: {e}")
 
             # 7. Build analysis service using shared factory (eliminates duplication with RIM comparison)
             analysis_service = build_analysis_service(
@@ -485,9 +504,7 @@ async def analyze_repository_stream(
                 # Get final result
                 result = await loop_task
                 total_tool_calls = result.tool_call_count
-                for turn in result.turns:
-                    total_prompt_tokens += turn.prompt_tokens
-                    total_completion_tokens += turn.completion_tokens
+                # Note: tokens already accumulated in on_turn_callback, no need to re-add
 
             except Exception as e:
                 logger.error(f"Error during QALoop execution: {e}", exc_info=True)

@@ -332,7 +332,10 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
             try {
               const data = JSON.parse(line.slice(6));
 
-              if (data.type === 'completed') {
+              if (data.type === 'token-update') {
+                // Update token count in real-time after each response
+                setTotalTokens(data.total_tokens || 0);
+              } else if (data.type === 'completed') {
                 // Stream finished - capture metrics
                 setDone(true);
                 setTotalTokens(data.total_tokens || 0);
