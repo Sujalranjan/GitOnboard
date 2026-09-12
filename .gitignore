@@ -24,3 +24,4 @@ FINAL_AUDIT_REPORT.md
 # Large log files
 logs/app.log.*
 logs/*/
+azurite_data/
