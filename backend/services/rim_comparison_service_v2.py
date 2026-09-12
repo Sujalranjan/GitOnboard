@@ -243,7 +243,7 @@ class RIMComparisonService:
             repo_name=self.repo_name,
             analysis_id=setup['analysis_id'],
             user_id=self.current_user.id,
-            model="qwen3:4b-instruct",
+            model=settings.openrouter_model,  # Use OpenRouter for baseline (without RIM)
             tool_layer=setup['tool_layer'],
             rim_metadata_block=setup['repository_context_block'],
             structured_logger=setup['structured_log'],
@@ -287,7 +287,7 @@ class RIMComparisonService:
             repo_name=self.repo_name,
             analysis_id=setup['analysis_id'],
             user_id=self.current_user.id,
-            model="qwen3:4b-instruct",
+            model=settings.gemini_model,  # Use Gemini for RIM-enhanced analysis
             tool_layer=setup['tool_layer'],
             rim_metadata_block=combined_rim_block,
             structured_logger=setup['structured_log'],
@@ -424,7 +424,7 @@ class RIMComparisonService:
             repo_name=self.repo_name,
             analysis_id=analysis_id,
             user_id=self.current_user.id,
-            model="qwen3:4b-instruct",
+            model=settings.openrouter_model,  # Use OpenRouter for baseline (without RIM)
             tool_layer=tool_layer,
             rim_metadata_block=repository_context_block,
             structured_logger=structured_log,
@@ -464,7 +464,7 @@ class RIMComparisonService:
             repo_name=self.repo_name,
             analysis_id=analysis_id,
             user_id=self.current_user.id,
-            model="qwen3:4b-instruct",
+            model=settings.gemini_model,  # Use Gemini for RIM-enhanced analysis
             tool_layer=tool_layer,
             rim_metadata_block=combined_rim_block,
             structured_logger=structured_log,
