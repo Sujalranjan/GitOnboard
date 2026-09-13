@@ -26,3 +26,4 @@ logs/app.log.*
 logs/*/
 azurite_data/
 postgres_data/
+graphify-out/
