@@ -102,7 +102,7 @@ If the Docker daemon isn't running at all, `DynamicVerifier` logs a warning and 
 
 ## 3.1 Verifying & Testing Storage (Azurite)
 
-See [docs/STORAGE_ARCHITECTURE_AND_AZURITE.md](docs/STORAGE_ARCHITECTURE_AND_AZURITE.md) for full testing workflows with Azure CLI, PowerShell, and Python.
+See [STORAGE_ARCHITECTURE_AND_AZURITE.md](../architecture/STORAGE_ARCHITECTURE_AND_AZURITE.md) for full testing workflows with Azure CLI, PowerShell, and Python.
 
 **Quick Verification Command**:
 ```bash

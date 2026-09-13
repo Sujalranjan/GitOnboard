@@ -30,6 +30,29 @@ LEGACY (Archived Historical Material)
 
 ---
 
+## Quick Start (5 minutes)
+
+1. **Prerequisites**: Docker, Docker Compose, Node.js 18+, Python 3.10+, `uv`
+
+2. **Start services** (from project root):
+   ```bash
+   docker compose up --build -d
+   ```
+
+3. **Frontend** (in a new terminal):
+   ```bash
+   cd frontend && npm install && npm run dev
+   ```
+
+4. **Access**:
+   - Frontend: `http://localhost:3000`
+   - Backend API: `http://localhost:8000` (Swagger docs: `http://localhost:8000/docs`)
+   - Database UI: `http://localhost:5050` (pgAdmin)
+
+For detailed setup including environment variables, migrations, and troubleshooting, see [Development Guide](guides/DEVELOPMENT.md).
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |

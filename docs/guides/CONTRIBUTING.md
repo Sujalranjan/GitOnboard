@@ -24,7 +24,6 @@ The `pre-push` hook automatically fetches from origin and verifies that your loc
 3. **Layer 4 Fact Store Persistence**: All structural facts must be persisted to PostgreSQL Fact Store tables (`files`, `symbols`, `relationships`, `routes`, `database_objects`, `capabilities`, `capability_members`, `evidence`).
 4. **Real-Time Task Updates**: Long-running background operations must publish progress through `task_manager.notify(...)` to push real-time status to the frontend via SSE.
 5. **No Duplicate Implementations**: Never introduce parallel versions (`_v2`, `_new`, `_old`) of any module. Modify existing code in place.
-6. **Cross-Database Compatibility**: Ensure all SQLAlchemy models use `JSONType = JSON().with_variant(JSONB, "postgresql")` to keep SQLite unit tests operational.
 
 ---
 
