@@ -22,6 +22,7 @@ IMPLEMENTATION_STATUS_ACCURATE.md
 FINAL_AUDIT_REPORT.md
 
 # Large log files
+logs/
 logs/app.log.*
 logs/*/
 azurite_data/
