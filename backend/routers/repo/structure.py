@@ -395,9 +395,9 @@ def get_architecture(repo_name: str, node_id: str = "root", db: Session = Depend
     return {"nodes": nodes}
 
 
-@structure_router.get("/{repo_name}/file")
+@structure_router.get("/{repo_hash}/file")
 async def get_raw_file(
-    repo_name: str,
+    repo_hash: str,
     path: str,
     start_line: int = None,
     end_line: int = None,
@@ -411,9 +411,9 @@ async def get_raw_file(
     if not path or not path.strip():
         raise HTTPException(status_code=400, detail="Invalid empty file path")
 
-    repo, analysis = get_latest_analysis(repo_name, db, current_user)
+    repo, analysis = get_latest_analysis(repo_hash, db, current_user)
 
-    logger.info(f"[FILE_API] GET /{repo_name}/file?path={path}")
+    logger.info(f"[FILE_API] GET /{repo_hash}/file?path={path}")
     if start_line or end_line:
         logger.info(f"[FILE_API] Line range: {start_line}-{end_line}")
 

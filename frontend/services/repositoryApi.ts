@@ -17,9 +17,9 @@ export interface SymbolItem {
 /**
  * 1. Fetches real repository directory structure.
  */
-export async function getRepositoryStructure(repoName: string): Promise<FileTreeNode> {
+export async function getRepositoryStructure(repoHash: string): Promise<FileTreeNode> {
   try {
-    const res = await fetch(`${API_BASE}/${encodeURIComponent(repoName)}/scan`);
+    const res = await fetch(`${API_BASE}/${encodeURIComponent(repoHash)}/scan`);
     if (res.ok) {
       const data = await res.json();
       if (data.hierarchy && data.hierarchy.children && data.hierarchy.children.length > 0) {
@@ -32,7 +32,7 @@ export async function getRepositoryStructure(repoName: string): Promise<FileTree
 
   // Empty tree — no real scan data available yet
   return {
-    name: repoName,
+    name: repoHash,
     type: 'directory',
     path: '',
     children: [],
@@ -44,7 +44,7 @@ export async function getRepositoryStructure(repoName: string): Promise<FileTree
  * Explicitly surfaces 401, 404, 403, 500 without fabricating placeholder content.
  */
 export async function getFileContent(
-  repoName: string,
+  repoHash: string,
   filePath: string
 ): Promise<{ content: string; language?: string }> {
   if (!filePath || !filePath.trim()) {
@@ -56,7 +56,7 @@ export async function getFileContent(
   }
 
   const res = await fetch(
-    `${API_BASE}/${encodeURIComponent(repoName)}/file?path=${encodeURIComponent(filePath)}`
+    `${API_BASE}/${encodeURIComponent(repoHash)}/file?path=${encodeURIComponent(filePath)}`
   );
 
   if (!res.ok) {
@@ -89,14 +89,14 @@ export async function getFileContent(
  * 3. Fetches real AST symbols (functions, classes, imports) for the file.
  */
 export async function getFileSymbols(
-  repoName: string,
+  repoHash: string,
   filePath: string
 ): Promise<SymbolItem[]> {
   if (!filePath || !filePath.trim() || filePath.startsWith('virtual://') || filePath.startsWith('plan://')) {
     return [];
   }
   try {
-    const res = await fetch(`${API_BASE}/${encodeURIComponent(repoName)}/parse?file_path=${encodeURIComponent(filePath)}`);
+    const res = await fetch(`${API_BASE}/${encodeURIComponent(repoHash)}/parse?file_path=${encodeURIComponent(filePath)}`);
     if (res.ok) {
       const data = await res.json();
       const symbols: SymbolItem[] = [];
