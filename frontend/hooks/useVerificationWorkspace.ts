@@ -60,7 +60,9 @@ export function useVerificationWorkspace(initialRepoName: string = "default") {
   }, []);
 
   const handleSelectFile = useCallback((filePath: string) => {
+    // Only update state - no routing, no page reloads
     setActiveFile(filePath);
+    // Ensure file is in open tabs
     setOpenTabs((prev) => {
       if (!prev.includes(filePath)) {
         return [...prev, filePath];

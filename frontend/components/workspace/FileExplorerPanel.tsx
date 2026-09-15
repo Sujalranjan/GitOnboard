@@ -197,9 +197,9 @@ function TreeNode({
 
         {isOpen && node.children && (
           <div>
-            {node.children.map((child, idx) => (
+            {node.children.map((child) => (
               <TreeNode
-                key={`${child.path || node.path}-${child.name}-${idx}`}
+                key={child.path || `dir-${child.name}`}
                 node={child}
                 activeFile={activeFile}
                 onSelectFile={onSelectFile}
