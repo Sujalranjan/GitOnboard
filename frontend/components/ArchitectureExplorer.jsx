@@ -72,7 +72,7 @@ const nodeTypes = {
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 40, edgesep: 15, ranksep: 70 });
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 30, edgesep: 10, ranksep: 50 });
 
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, { width: 220, height: 60 });
@@ -158,7 +158,6 @@ export default function ArchitectureExplorer({ repoName }) {
         source: 'root',
         target: n.id,
         type: 'smoothstep',
-        animated: true,
         style: { stroke: '#94a3b8', strokeWidth: 1.5 },
         markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
       }));
@@ -274,6 +273,27 @@ export default function ArchitectureExplorer({ repoName }) {
       return currentNodes;
     });
   }, [repoName]);
+
+  // Keyboard shortcuts for zoom
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!rfInstance.current) return;
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === '+' || e.key === '=') {
+          e.preventDefault();
+          rfInstance.current.zoomIn();
+        } else if (e.key === '-') {
+          e.preventDefault();
+          rfInstance.current.zoomOut();
+        } else if (e.key === '0') {
+          e.preventDefault();
+          rfInstance.current.fitView({ padding: 0.2 });
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (repoName) {
@@ -392,9 +412,11 @@ export default function ArchitectureExplorer({ repoName }) {
           nodeTypes={nodeTypes}
           onInit={(instance) => { rfInstance.current = instance; instance.fitView(); }}
           fitView
-          minZoom={0.05}
-          maxZoom={2}
+          minZoom={0.1}
+          maxZoom={3}
           nodesDraggable={false}
+          zoomOnScroll
+          zoomOnPinch
         >
           <Background color="#94a3b8" gap={20} size={1} />
           <Controls />
