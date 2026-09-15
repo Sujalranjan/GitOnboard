@@ -459,45 +459,67 @@ async def get_raw_file(
 
     if not fact_file:
         logger.warning(f"[FILE_API] File not found in analysis {analysis.id}: {clean_path}")
-        raise HTTPException(
-            status_code=404,
-            detail=f"File '{clean_path}' not found in repository analysis (analysis_id={analysis.id})"
-        )
-
-    # Step 3: Retrieve file content from storage
-    logger.info(f"[FILE_API] FactFile found - blob_name: {fact_file.blob_name}, size: {fact_file.size}")
-
-    if not fact_file.blob_name:
-        logger.warning(f"[FILE_API] FactFile exists but has no blob_name: {clean_path}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"File exists in index but content is not available (blob_name missing)"
-        )
-
-    try:
-        storage = get_storage()
-        logger.info(f"[FILE_API] Attempting to read blob: {fact_file.blob_name}")
-        content = storage.get_object_text(fact_file.blob_name)
-        logger.info(f"[FILE_API] Blob read successful, content size: {len(content) if content else 0}")
-
-        if content is None:
-            logger.error(f"[FILE_API] Blob returned None for {fact_file.blob_name}")
+        # Try to fetch from GitHub API as fallback even if not in FactStore
+        logger.info(f"[FILE_API] File not in FactStore, attempting GitHub API fallback: {clean_path}")
+        try:
+            parts = repo.url.rstrip("/").split("/")
+            owner = parts[-2]
+            content = await fetch_file_content(owner, repo.repository_hash, repo.default_branch, clean_path, current_user.github_access_token)
+            if content:
+                logger.info(f"[FILE_API] GitHub API fetch successful for unindexed file {clean_path}")
+                # Continue to line range extraction with fetched content
+            else:
+                raise FileNotFoundError(f"GitHub API returned empty content for {clean_path}")
+        except Exception as gh_err:
+            logger.warning(f"[FILE_API] GitHub API fallback failed: {type(gh_err).__name__}: {gh_err}")
             raise HTTPException(
-                status_code=500,
-                detail="Failed to retrieve file content from storage"
+                status_code=404,
+                detail=f"File '{clean_path}' not found in repository analysis (analysis_id={analysis.id})"
             )
 
-    except FileNotFoundError:
-        logger.warning(f"[FILE_API] Blob not found in storage: {fact_file.blob_name}")
+        # Skip blob storage fetch and use GitHub content directly
+        fact_file = None
+        logger.info(f"[FILE_API] Using GitHub API content for {clean_path}, skipping blob storage")
+
+    # Step 3: Retrieve file content from storage
+    content = None
+
+    # Skip blob storage if content already fetched from GitHub (when file wasn't in FactStore)
+    if fact_file is None:
+        logger.info(f"[FILE_API] Content already fetched from GitHub API in step 2, using that")
+    else:
+        logger.info(f"[FILE_API] FactFile found - blob_name: {fact_file.blob_name}, size: {fact_file.size}")
+
+    # Priority 1: Fetch from Azure Blob Storage via FactFile blob_name
+    if fact_file and fact_file.blob_name:
+        try:
+            storage = get_storage()
+            logger.info(f"[FILE_API] Attempting to read blob: {fact_file.blob_name}")
+            content = storage.get_object_text(fact_file.blob_name)
+            logger.info(f"[FILE_API] Blob read successful, content size: {len(content) if content else 0}")
+        except FileNotFoundError:
+            logger.warning(f"[FILE_API] Blob not found in storage: {fact_file.blob_name}, falling back to GitHub API")
+        except Exception as e:
+            logger.warning(f"[FILE_API] Error reading blob {fact_file.blob_name}: {type(e).__name__}: {e}, falling back to GitHub API")
+    else:
+        logger.info(f"[FILE_API] FactFile has no blob_name, attempting GitHub API fallback")
+
+    # Priority 2: Fallback to GitHub API if blob_name missing or blob read failed
+    if not content:
+        try:
+            logger.info(f"[FILE_API] Fetching from GitHub API: {repo.url} ({repo.default_branch})")
+            parts = repo.url.rstrip("/").split("/")
+            owner = parts[-2]
+            content = await fetch_file_content(owner, repo.repository_hash, repo.default_branch, clean_path, current_user.github_access_token)
+            logger.info(f"[FILE_API] GitHub API fetch successful, content size: {len(content) if content else 0}")
+        except Exception as gh_err:
+            logger.warning(f"[FILE_API] GitHub API fetch also failed: {type(gh_err).__name__}: {gh_err}")
+
+    if not content:
+        logger.error(f"[FILE_API] Failed to retrieve content from both blob storage and GitHub API for {clean_path}")
         raise HTTPException(
             status_code=500,
-            detail=f"File content missing from storage (blob not found)"
-        )
-    except Exception as e:
-        logger.error(f"[FILE_API] Error reading blob {fact_file.blob_name}: {type(e).__name__}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to read file: {type(e).__name__}"
+            detail=f"File content unavailable (blob missing and GitHub fetch failed)"
         )
 
     # Step 4: Extract line range if requested
@@ -521,9 +543,9 @@ async def get_raw_file(
     return {
         "path": clean_path,
         "content": extracted_content,
-        "size": fact_file.size,
-        "language": fact_file.language,
-        "content_type": fact_file.content_type,
+        "size": fact_file.size if fact_file else len(extracted_content.encode("utf-8")),
+        "language": fact_file.language if fact_file else None,
+        "content_type": fact_file.content_type if fact_file else "text/plain",
         "total_lines": total_lines,
         "line_start": returned_start_line,
         "line_end": returned_end_line,
