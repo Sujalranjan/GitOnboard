@@ -249,7 +249,7 @@ export function FileExplorerPanel({
   const [loadingStructure, setLoadingStructure] = useState(true);
   const [isOutlineExpanded, setIsOutlineExpanded] = useState(true);
 
-  // Fetch real directory structure on mount or repo change
+  // Fetch real directory structure on mount or repo change (NOT on file selection)
   useEffect(() => {
     let isMounted = true;
     setLoadingStructure(true);
@@ -277,7 +277,7 @@ export function FileExplorerPanel({
     return () => {
       isMounted = false;
     };
-  }, [repoName, activeFile, onSelectFile]);
+  }, [repoName]);
 
   // Fetch real AST symbols for active file
   useEffect(() => {
