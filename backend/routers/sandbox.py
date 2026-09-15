@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from typing import Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 import jwt
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from backend.config import settings
 from backend.database import SessionLocal, get_db
-from backend.dependencies.auth import get_current_user
+from backend.dependencies.auth import get_current_user, get_or_create_local_dev_user
 from backend.models.implementation import AgentRun, Implementation
 from backend.models.repository import Repository
 from backend.models.user import User
@@ -39,7 +40,10 @@ def verify_sandbox_run_owner(
 ) -> AgentRun:
     """
     Verifies that the authenticated user owns the AgentRun or Repository associated with run_id.
+    In LOCAL mode, bypasses ownership checks.
     """
+    is_local_mode = str(settings.deployment_type).upper() == "LOCAL"
+
     run = db.query(AgentRun).filter((AgentRun.id == run_id) | (AgentRun.task_id == run_id)).first()
     if not run:
         # Check if run_id is a repository owned by current_user
@@ -64,22 +68,18 @@ def verify_sandbox_run_owner(
                 user_id=current_user.id,
                 user_requirement=f"Workspace shell for {run_id}",
             )
-        if getattr(settings, "deployment_type", "").upper() == "TEST" or os.environ.get("DEPLOYMENT_TYPE", "").upper() == "TEST":
-            run = AgentRun(
+        if is_local_mode or getattr(settings, "deployment_type", "").upper() == "TEST" or os.environ.get("DEPLOYMENT_TYPE", "").upper() == "TEST":
+            return AgentRun(
                 id=run_id,
-                task_id=f"task_{run_id}",
-                repository_id="test_repo",
+                task_id=f"workspace_{run_id}",
+                repository_id="local_repo",
                 user_id=current_user.id,
-                user_requirement=f"Transient test run {run_id}",
+                user_requirement=f"Workspace shell for {run_id}",
             )
-            db.add(run)
-            db.commit()
-            db.refresh(run)
-            return run
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"AgentRun or repository '{run_id}' not found")
 
     if run.user_id is not None:
-        if run.user_id != current_user.id:
+        if run.user_id != current_user.id and not is_local_mode:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: not run owner")
         return run
 
@@ -99,7 +99,7 @@ def verify_sandbox_run_owner(
         if impl and impl.user_id == current_user.id:
             is_owned = True
 
-    if not is_owned:
+    if not is_owned and not is_local_mode:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: unverified legacy run owner")
 
     return run
@@ -108,24 +108,43 @@ def verify_sandbox_run_owner(
 def _authenticate_ws_run(websocket: WebSocket, run_id: str) -> Tuple[User, AgentRun]:
     """
     Authenticates and authorizes WebSocket connection from cookie before accepting.
+    In LOCAL mode, bypasses authentication if no token is present.
     """
+    is_local_mode = str(settings.deployment_type).upper() == "LOCAL"
     token = websocket.cookies.get("access_token")
-    if not token:
+    user_id = None
+
+    if token:
+        try:
+            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+            user_id = payload.get("user_id") or payload.get("sub")
+            if not user_id and not is_local_mode:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token claims")
+        except jwt.PyJWTError:
+            if not is_local_mode:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired authentication token")
+        except Exception:
+            if not is_local_mode:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired authentication token")
+    elif not is_local_mode:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication token cookie required")
 
-    try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-        user_id = payload.get("user_id") or payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token claims")
-        user_id = int(user_id)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired authentication token")
-
     with SessionLocal() as db:
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        if user_id:
+            try:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if not user:
+                    if is_local_mode:
+                        user = get_or_create_local_dev_user(db)
+                    else:
+                        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+            except (ValueError, TypeError):
+                if is_local_mode:
+                    user = get_or_create_local_dev_user(db)
+                else:
+                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user ID")
+        else:
+            user = get_or_create_local_dev_user(db)
 
         run = db.query(AgentRun).filter((AgentRun.id == run_id) | (AgentRun.task_id == run_id)).first()
         if not run:
@@ -151,6 +170,14 @@ def _authenticate_ws_run(websocket: WebSocket, run_id: str) -> Tuple[User, Agent
                     user_id=user.id,
                     user_requirement=f"Workspace shell for {run_id}",
                 )
+            if is_local_mode or os.environ.get("DEPLOYMENT_TYPE", "").upper() == "TEST":
+                return user, AgentRun(
+                    id=run_id,
+                    task_id=f"workspace_{run_id}",
+                    repository_id="local_repo",
+                    user_id=user.id,
+                    user_requirement=f"Workspace shell for {run_id}",
+                )
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"AgentRun or repository '{run_id}' not found")
 
         is_owned = False
@@ -170,7 +197,7 @@ def _authenticate_ws_run(websocket: WebSocket, run_id: str) -> Tuple[User, Agent
                 if impl and impl.user_id == user.id:
                     is_owned = True
 
-        if not is_owned:
+        if not is_owned and not is_local_mode:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: not run owner")
 
         return user, run

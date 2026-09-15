@@ -7,17 +7,49 @@ import { useTaskStatus } from '../hooks/useTaskStatus';
 export default function SemanticSearch({ repoName }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
-  
+  const [repositoryHash, setRepositoryHash] = useState(null);
+  const [hashLoading, setHashLoading] = useState(true);
+
   const [indexState, setIndexState] = useState('checking');
   const [indexMessage, setIndexMessage] = useState("");
   const taskStatus = useTaskStatus(repoName, 'semantic_index');
-  
+
   // Selected symbol for explanation drawer
   const [selectedItem, setSelectedItem] = useState(null);
   const [explanationData, setExplanationData] = useState(null);
   const [isExplaining, setIsExplaining] = useState(false);
   const [explainError, setExplainError] = useState(null);
   const [explanationCache, setExplanationCache] = useState({});
+
+  // Fetch repository hash on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchRepositoryHash = async () => {
+      try {
+        const res = await fetch(`/api/repos/lookup-hash?name=${encodeURIComponent(repoName)}`);
+        if (!res.ok) {
+          throw new Error("Failed to resolve repository");
+        }
+        const data = await res.json();
+        if (isMounted) {
+          setRepositoryHash(data.repository_hash);
+        }
+      } catch (err) {
+        console.error("Failed to fetch repository hash:", err);
+      } finally {
+        if (isMounted) {
+          setHashLoading(false);
+        }
+      }
+    };
+
+    fetchRepositoryHash();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [repoName]);
 
   useEffect(() => {
     if (taskStatus === 'processing') {
@@ -38,16 +70,18 @@ export default function SemanticSearch({ repoName }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (!repositoryHash || hashLoading) return;
+
     let isMounted = true;
-    
+
     const buildIndex = async () => {
       setError(null);
-      
+
       try {
-        const statusRes = await fetch(`/api/repos/${repoName}/semantic-status`);
+        const statusRes = await fetch(`/api/repos/${repositoryHash}/semantic-status`);
         if (!statusRes.ok) throw new Error("Failed to check index status");
         const statusData = await statusRes.json();
-        
+
         if (isMounted) {
           if (statusData.has_index) {
             setIndexState('ready');
@@ -56,11 +90,11 @@ export default function SemanticSearch({ repoName }) {
             setIndexMessage("Building the semantic index for the first time. This may take a moment.");
           }
         }
-        
-        const res = await fetch(`/api/repos/${repoName}/semantic-index`, {
+
+        const res = await fetch(`/api/repos/${repositoryHash}/semantic-index`, {
           method: 'POST'
         });
-        
+
         if (!res.ok) {
           throw new Error("Failed to build semantic index");
         }
@@ -78,9 +112,9 @@ export default function SemanticSearch({ repoName }) {
         }
       }
     };
-    
+
     buildIndex();
-    
+
     // Safety fallback: ensure UI does not get stuck in full-page loading spinner
     const timer = setTimeout(() => {
       if (isMounted) {
@@ -92,18 +126,18 @@ export default function SemanticSearch({ repoName }) {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [repoName]);
+  }, [repositoryHash, hashLoading]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
-    if (!query.trim()) return;
+    if (!query.trim() || !repositoryHash) return;
 
     setIsSearching(true);
     setError(null);
     setHasSearched(true);
 
     try {
-      const res = await fetch(`/api/repos/${repoName}/semantic-search?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/repos/${repositoryHash}/semantic-search?q=${encodeURIComponent(query)}`);
       if (!res.ok) {
         throw new Error("Semantic search failed");
       }
@@ -117,8 +151,13 @@ export default function SemanticSearch({ repoName }) {
   };
 
   const fetchExplanation = useCallback(async (item, forceRegenerate = false) => {
+    if (!repositoryHash) {
+      setExplainError("Repository not loaded");
+      return;
+    }
+
     const cacheKey = item.symbol_id || `${item.file_path}:${item.match_name}`;
-    
+
     // Instant cache retrieval if available in local state and not forcing regeneration
     if (!forceRegenerate && explanationCache[cacheKey]) {
       setExplanationData(explanationCache[cacheKey]);
@@ -129,7 +168,7 @@ export default function SemanticSearch({ repoName }) {
     setExplainError(null);
 
     try {
-      const res = await fetch(`/api/repos/${repoName}/symbols/explain`, {
+      const res = await fetch(`/api/repos/${repositoryHash}/symbols/explain`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -159,7 +198,7 @@ export default function SemanticSearch({ repoName }) {
     } finally {
       setIsExplaining(false);
     }
-  }, [repoName, explanationCache]);
+  }, [repositoryHash, explanationCache]);
 
   const handleSelectSymbol = (item) => {
     setSelectedItem(item);
