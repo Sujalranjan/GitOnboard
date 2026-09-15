@@ -255,6 +255,16 @@ def save_rim_to_fact_store(db: Session, analysis_id: int, model: RepositoryModel
             logger.debug(f"  - {blob_count} files WITH blob_name (uploaded to Azure)")
             logger.debug(f"  - {no_blob_count} files WITHOUT blob_name (upload failed or skipped)")
 
+            # INSTRUMENTATION: Log details about FILE entities
+            logger.info(f"[INSTRUMENTATION] FactFile summary: {len(file_records)} total")
+            logger.info(f"[INSTRUMENTATION]   - With blob_name: {blob_count}")
+            logger.info(f"[INSTRUMENTATION]   - Without blob_name: {no_blob_count}")
+
+            # Log examples of files without blob_name
+            no_blob_files = [f.path for f in file_records if not f.blob_name]
+            if no_blob_files:
+                logger.warning(f"[INSTRUMENTATION] Files without blob_name: {no_blob_files[:10]}")
+
             if no_blob_count > 0:
                 no_blob_files = [f.path for f in file_records if not f.blob_name]
                 logger.warning(f"[FACT_STORE] {no_blob_count} files without blob_name: {no_blob_files[:5]}" +

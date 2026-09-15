@@ -265,9 +265,23 @@ class AnalysisWorker(WorkerInterface):
                     progress = ProgressTracker(db, analysis.id)
                     total_files = len(all_files)
 
+                    # INSTRUMENTATION: Log file discovery
+                    logger.info(f"[INSTRUMENTATION] Physical files discovered: {total_files}")
+                    logger.info(f"[INSTRUMENTATION] RIM FILE entities before upload: {len(file_entities_by_path)}")
+
                     # Upload files with progress tracking
+                    upload_stats = {
+                        "attempted": 0,
+                        "successful": 0,
+                        "failed": 0,
+                        "object_exists_failed": 0,
+                        "exceptions": []
+                    }
+
                     for file_idx, full_p in enumerate(all_files):
                         rel_p = str(full_p.relative_to(target_dir)).replace("\\", "/").removeprefix("./").lstrip("/")
+                        upload_stats["attempted"] += 1
+
                         try:
                             blob_key = build_blob_key(repo_hash, snapshot_id, rel_p)
                             content_type, _ = mimetypes.guess_type(str(full_p))
@@ -278,13 +292,21 @@ class AnalysisWorker(WorkerInterface):
                             with open(full_p, "rb") as fh:
                                 storage.put_object(blob_key, fh, content_type=content_type)
 
+                            logger.debug(f"[INSTRUMENTATION] put_object succeeded for: {rel_p} ({file_size} bytes)")
+
                             # Verify blob exists in storage before recording in database
-                            if not storage.object_exists(blob_key):
+                            blob_exists_result = storage.object_exists(blob_key)
+                            if not blob_exists_result:
+                                upload_stats["object_exists_failed"] += 1
                                 raise FileNotFoundError(f"Blob upload succeeded but verification failed: {blob_key} not found in storage")
+
+                            logger.debug(f"[INSTRUMENTATION] object_exists returned True for: {rel_p}")
+                            upload_stats["successful"] += 1
 
                             # Create or update file entity
                             f_ent = file_entities_by_path.get(rel_p)
                             if not f_ent:
+                                logger.info(f"[INSTRUMENTATION] Creating new FILE entity for: {rel_p} (was in all_files but not in RIM)")
                                 f_id = generate_entity_id(EntityType.FILE, rel_p, rel_p)
                                 f_ent = Entity(
                                     id=f_id,
@@ -318,7 +340,18 @@ class AnalysisWorker(WorkerInterface):
                                     "files"
                                 )
                         except Exception as up_err:
-                            logger.error(f"[BLOB_FAILED] Failed to upload blob for {rel_p}: {type(up_err).__name__}: {up_err}")
+                            upload_stats["failed"] += 1
+                            error_msg = f"[BLOB_FAILED] Failed to upload blob for {rel_p}: {type(up_err).__name__}: {up_err}"
+                            logger.error(error_msg)
+                            upload_stats["exceptions"].append({
+                                "path": rel_p,
+                                "exception_type": type(up_err).__name__,
+                                "message": str(up_err)
+                            })
+
+                    # INSTRUMENTATION: Log upload summary
+                    logger.info(f"[INSTRUMENTATION] Upload summary: {upload_stats['successful']}/{upload_stats['attempted']} successful, {upload_stats['failed']} failed, {upload_stats['object_exists_failed']} object_exists failures")
+                    logger.info(f"[INSTRUMENTATION] RIM FILE entities after upload: {len(file_entities_by_path)}")
 
                     # Run Capability Engine
                     capability_engine = CapabilityBuilderEngine()

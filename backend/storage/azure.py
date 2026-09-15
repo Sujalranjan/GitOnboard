@@ -172,7 +172,9 @@ class AzureBlobStorage(ObjectStorage):
     def object_exists(self, key: str) -> bool:
         self.ensure_container_exists()
         blob_client = self.container_client.get_blob_client(key)
-        return blob_client.exists()
+        result = blob_client.exists()
+        logger.debug(f"[INSTRUMENTATION] object_exists({key}) = {result}")
+        return result
 
     def list_objects(self, prefix: str = "") -> List[str]:
         self.ensure_container_exists()
