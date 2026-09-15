@@ -107,10 +107,13 @@ function renderFileIcon(fileName: string) {
 function sanitizeFileTree(node: FileTreeNode): FileTreeNode {
   if (node.type === "directory") {
     const validChildren = (node.children || [])
-      .filter((child) => child.type === "directory" || child.type === "file" || child.name.includes("."))
+      .filter((child) => {
+        // Include: directories, files, AND anything with a dot (file extensions or hidden files)
+        return child.type === "directory" || child.type === "file" || child.name.includes(".");
+      })
       .map((child) => {
-        // If node is a file, strip any AST symbol children
-        if (child.type === "file" || (!child.type && child.name.includes("."))) {
+        // If node is a file (has extension or is hidden file like .gitignore), strip any AST symbol children
+        if (child.type === "file" || (!child.type && (child.name.includes(".") || child.name.startsWith(".")))) {
           return {
             name: child.name,
             type: "file" as const,
@@ -261,13 +264,7 @@ export function FileExplorerPanel({
           setTreeHierarchy(sanitizedTree);
           setLoadingStructure(false);
 
-          // Automatically select the first valid file if none is active
-          if (!activeFile && sanitizedTree) {
-            const firstFile = findFirstValidFile(sanitizedTree);
-            if (firstFile) {
-              onSelectFile(firstFile);
-            }
-          }
+          // Don't auto-select first file - keep code area clean until user clicks
         }
       })
       .catch(() => {
