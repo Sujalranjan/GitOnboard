@@ -449,8 +449,10 @@ async def get_raw_file(
 
     # Construct blob_name directly and fetch from Azure
     try:
-        blob_name = build_blob_key(repo.repository_hash, analysis.snapshot_id, clean_path)
-        logger.info(f"[FILE_API] Constructed blob_name: {blob_name}")
+        # snapshot_id is either the git commit hash or snap_{analysis.id}
+        snapshot_id = analysis.commit_sha or f"snap_{analysis.id}"
+        blob_name = build_blob_key(repo.repository_hash, snapshot_id, clean_path)
+        logger.info(f"[FILE_API] Snapshot ID: {snapshot_id}, Blob name: {blob_name}")
 
         storage = get_storage()
         logger.info(f"[FILE_API] Fetching from Azure: {blob_name}")
