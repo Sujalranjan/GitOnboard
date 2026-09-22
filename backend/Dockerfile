@@ -2,7 +2,9 @@
 FROM python:3.11-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1
 
 # Install build dependencies for PostgreSQL (psycopg) and others
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -48,7 +50,7 @@ COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 
 # Set PYTHONPATH so the app can find modules
-ENV PYTHONPATH="/app:$PYTHONPATH"
+ENV PYTHONPATH="/app"
 
 EXPOSE 8000
 
