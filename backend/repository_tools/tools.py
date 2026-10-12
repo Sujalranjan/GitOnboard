@@ -27,6 +27,7 @@ from .security import (
     is_binary_file,
 )
 from .resolver import resolve_repo_root
+from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +76,21 @@ class RepositoryToolLayer:
         path: str,
         start_line: int = 1,
         end_line: Optional[int] = None,
+        context_lines: int = 0,
+        symbol: Optional[str] = None,
+        max_content_tokens: Optional[int] = None,
+        control_reservation_tokens: int = 60,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """
-        Reads a slice of a file from Azure Blob Storage.
-        Requires analysis_id to be set. Constructs blob name from repo hash and path,
-        fetches from blob storage, and returns specified line range.
+        Reads a slice of a file from Azure Blob Storage or local clone.
+        Requires analysis_id to be set when using blob storage.
+        Supports optional context_lines to expand surrounding window.
+        Supports optional symbol to auto-locate function/class definitions.
+        Uses semantic truncation if max_content_tokens is provided.
         """
         from backend.storage import get_storage
+        from .truncation import truncate_semantically
 
         clean_path = path.replace("\\", "/").removeprefix("./").lstrip("/")
         storage = get_storage()
@@ -90,68 +99,258 @@ class RepositoryToolLayer:
         try:
             start_line = int(start_line) if start_line else 1
             end_line = int(end_line) if end_line else None
+            context_lines = max(0, int(context_lines)) if context_lines else 0
         except (ValueError, TypeError):
             return {
                 "path": clean_path,
                 "error": "invalid_range",
-                "message": "start_line and end_line must be valid integers."
+                "message": "start_line, end_line, and context_lines must be valid integers."
             }
 
-        # Need analysis_id to get repo hash
-        if self.analysis_id is None or self.db is None:
-            return {
-                "path": clean_path,
-                "error": "no_analysis",
-                "message": "Analysis context not available. Cannot read file."
-            }
-
-        # Get repository hash from analysis
         try:
-            analysis = self.db.query(Analysis).filter(Analysis.id == self.analysis_id).first()
-            if not analysis:
-                return {
-                    "path": clean_path,
-                    "error": "no_analysis",
-                    "message": f"Analysis {self.analysis_id} not found."
-                }
+            # Check if reading from local repo_root or remote blob storage
+            resolved_text = None
+            if self.repo_root and Path(self.repo_root).exists():
+                try:
+                    full_path = validate_repo_path(Path(self.repo_root), clean_path)
+                    if full_path.exists() and full_path.is_file():
+                        resolved_text = full_path.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    pass
 
-            repo = self.db.query(Repository).filter(Repository.id == analysis.repository_id).first()
-            if not repo or not repo.repository_hash:
-                return {
-                    "path": clean_path,
-                    "error": "no_repo",
-                    "message": "Repository not found."
-                }
+                # If direct path wasn't found in repo_root, search for suffix / basename match within repo_root
+                if resolved_text is None:
+                    repo_path_obj = Path(self.repo_root)
+                    for candidate in repo_path_obj.rglob("*"):
+                        if candidate.is_file():
+                            rel_cand = candidate.relative_to(repo_path_obj).as_posix()
+                            if rel_cand.endswith(clean_path) or clean_path.endswith(rel_cand):
+                                resolved_text = candidate.read_text(encoding="utf-8", errors="replace")
+                                clean_path = rel_cand
+                                break
 
-            # Try to find the file by searching across all snapshot directories for this repo
-            repo_prefix = f"repositories/{repo.repository_hash}/snapshots/"
-            all_blobs = storage.list_objects(prefix=repo_prefix)
+            if resolved_text is None:
+                # Need analysis_id to get repo hash
+                if self.analysis_id is None or self.db is None:
+                    return {
+                        "path": clean_path,
+                        "error": "wrong_path",
+                        "message": f"File '{clean_path}' not found in repository."
+                    }
 
-            # Look for the file in any snapshot directory
-            matching_blob = None
-            for blob in all_blobs:
-                if blob.endswith(f"/{clean_path}"):
-                    matching_blob = blob
-                    break
+                # Get repository hash from analysis
+                try:
+                    analysis = self.db.query(Analysis).filter(Analysis.id == self.analysis_id).first()
+                    if not analysis:
+                        return {
+                            "path": clean_path,
+                            "error": "no_analysis",
+                            "message": f"Analysis {self.analysis_id} not found."
+                        }
 
-            if not matching_blob:
-                raise FileNotFoundError(f"File not found in any snapshot: {clean_path}")
+                    repo = self.db.query(Repository).filter(Repository.id == analysis.repository_id).first()
+                    if not repo or not repo.repository_hash:
+                        return {
+                            "path": clean_path,
+                            "error": "no_repo",
+                            "message": "Repository not found."
+                        }
 
-            # Fetch from blob storage
-            raw_text = storage.get_object_text(matching_blob)
-            lines = raw_text.splitlines(keepends=True)
+                    # Try to find the file by searching across all snapshot directories for this repo
+                    repo_prefix = f"repositories/{repo.repository_hash}/snapshots/"
+                    all_blobs = storage.list_objects(prefix=repo_prefix)
+
+                    # Look for the file in any snapshot directory
+                    matching_blob = None
+                    for blob in all_blobs:
+                        if blob.endswith(f"/{clean_path}") or clean_path.endswith(blob.split("/snapshots/")[-1].split("/", 1)[-1]):
+                            matching_blob = blob
+                            break
+
+                    if not matching_blob:
+                        # Fallback: match by basename if unique
+                        base_name = clean_path.split("/")[-1]
+                        basename_matches = [b for b in all_blobs if b.endswith(f"/{base_name}")]
+                        if len(basename_matches) == 1:
+                            matching_blob = basename_matches[0]
+
+                    if not matching_blob:
+                        raise FileNotFoundError(f"File not found in any snapshot: {clean_path}")
+
+                    # Fetch from blob storage
+                    raw_text = storage.get_object_text(matching_blob)
+                    from backend.intelligence.notebook import resolve_source_document
+                    doc = resolve_source_document(clean_path, raw_text)
+                    resolved_text = doc.source if not doc.conversion_error else raw_text
+                except Exception as e:
+                    raise e
+
+            lines = resolved_text.splitlines(keepends=True)
             total_lines = len(lines)
-            s, e = clamp_line_range(total_lines, start_line, end_line)
-            selected_lines = lines[s - 1 : e]
+
+            # 1. Resolve symbol if requested BEFORE context-overflow validation
+            target_symbol = (symbol or kwargs.get("symbol") or "").strip()
+            if target_symbol:
+                sym_found = False
+                if self.db is not None and self.analysis_id is not None:
+                    try:
+                        from backend.models.fact_store import FactSymbol, FactFile
+                        # Scope search to this file first, fallback to analysis-wide match
+                        sym_fact = (
+                            self.db.query(FactSymbol)
+                            .join(FactFile, FactSymbol.file_id == FactFile.id)
+                            .filter(
+                                FactSymbol.analysis_id == self.analysis_id,
+                                FactFile.path == clean_path,
+                                FactSymbol.name == target_symbol,
+                            )
+                            .first()
+                        )
+                        if not sym_fact:
+                            # Try suffix match on path or case-insensitive match
+                            sym_fact = (
+                                self.db.query(FactSymbol)
+                                .join(FactFile, FactSymbol.file_id == FactFile.id)
+                                .filter(
+                                    FactSymbol.analysis_id == self.analysis_id,
+                                    FactFile.path.endswith(clean_path),
+                                    FactSymbol.name.ilike(target_symbol),
+                                )
+                                .first()
+                            )
+                        if not sym_fact:
+                            sym_fact = (
+                                self.db.query(FactSymbol)
+                                .filter(
+                                    FactSymbol.analysis_id == self.analysis_id,
+                                    FactSymbol.name == target_symbol,
+                                )
+                                .first()
+                            )
+                        if sym_fact and sym_fact.line_start:
+                            start_line = max(1, sym_fact.line_start)
+                            end_line = min(total_lines, sym_fact.line_end) if sym_fact.line_end else min(total_lines, start_line + 120)
+                            sym_found = True
+                    except Exception:
+                        pass
+
+                # If FactStore didn't find it, inspect source lines directly via AST/regex definition patterns
+                if not sym_found:
+                    import re
+                    pattern = re.compile(rf"(?:async\s+)?(?:function\s+{re.escape(target_symbol)}\b|(?:const|let|var)\s+{re.escape(target_symbol)}\s*=|class\s+{re.escape(target_symbol)}\b|def\s+{re.escape(target_symbol)}\b)")
+                    for idx, line in enumerate(lines, start=1):
+                        if pattern.search(line):
+                            start_line = idx
+                            # Read until next top-level function or up to 60 lines
+                            end_line = min(total_lines, idx + 60)
+                            sym_found = True
+                            break
+
+            safe_limit = getattr(settings, "investigation_read_file_max_lines", 600)
+
+            # 2. Check unbounded read on large files (> safe_limit lines)
+            if end_line is None and total_lines > safe_limit:
+                return {
+                    "path": clean_path,
+                    "error": "context_overflow_protection",
+                    "message": (
+                        f"Refusing full file read: '{clean_path}' has {total_lines} lines. "
+                        f"Reading the entire file without line boundaries will cause context overflow. "
+                        f"Please use start_line and end_line (safe read limit is {safe_limit} lines), "
+                        f"or run get_file_outline first."
+                    ),
+                    "total_lines": total_lines,
+                }
+
+            # 3. Handle invalid/reversed/out-of-bounds line ranges consistently
+            # If end_line was provided and end_line < start_line, swap them
+            if end_line is not None and end_line < start_line:
+                start_line, end_line = end_line, start_line
+
+            # If start_line exceeds total_lines, return a clean error without crashing
+            if start_line > total_lines:
+                return {
+                    "path": clean_path,
+                    "error": "invalid_range",
+                    "message": f"Start line {start_line} exceeds total file lines ({total_lines}).",
+                    "total_lines": total_lines,
+                }
+
+            orig_requested_start = max(1, start_line)
+            orig_requested_end = min(total_lines, end_line) if end_line is not None else min(total_lines, orig_requested_start + safe_limit - 1)
+
+            # 3. Enforce safe line range limit
+            range_clamped = False
+            SAFE_MAX_LINES = safe_limit
+            if (orig_requested_end - orig_requested_start + 1) > SAFE_MAX_LINES:
+                target_end = orig_requested_start + SAFE_MAX_LINES - 1
+                range_clamped = True
+            else:
+                target_end = orig_requested_end
+
+            s = orig_requested_start
+            e = target_end
+            if context_lines > 0:
+                s = max(1, s - context_lines)
+                e = min(total_lines, e + context_lines)
+
+            requested_slice = lines[s - 1 : e]
+
+            # Semantic truncation based on pre-calculated budget
+            # Default fallback: ~2500 tokens (enough for full 200-250 lines of code)
+            budget_tokens = max_content_tokens if max_content_tokens and max_content_tokens > 0 else 2500
+
+            selected_lines, count_taken, was_clamped = truncate_semantically(
+                lines=requested_slice,
+                max_tokens=budget_tokens,
+                file_path=clean_path,
+                reserved_control_tokens=control_reservation_tokens,
+            )
+
+            actual_end = s + count_taken - 1
             numbered_content = "".join(f"{s + idx:4d} | {line}" for idx, line in enumerate(selected_lines))
+
+            # Provide transparent notices so the model knows exact status and how to fetch remaining content
+            effective_is_truncated = (was_clamped and actual_end < e) or (range_clamped and target_end < orig_requested_end)
+            if range_clamped and target_end < orig_requested_end:
+                next_start = target_end + 1
+                notice = (
+                    f"\n\n[Notice: Requested range {orig_requested_start}-{orig_requested_end} exceeds safe limit of {SAFE_MAX_LINES} lines; "
+                    f"clamped to lines {s}-{target_end}. "
+                    f"Returned lines {s}-{target_end} of {total_lines}.\n"
+                    f"Still unread: lines {next_start}-{orig_requested_end}.\n"
+                    f"To inspect further, call read_file(path=\"{clean_path}\", start_line={next_start}, end_line={orig_requested_end}) "
+                    f"or call get_file_outline(path=\"{clean_path}\") to locate symbols.]"
+                )
+                numbered_content += notice
+            elif was_clamped and actual_end < e:
+                next_start = actual_end + 1
+                remaining_lines_count = e - actual_end
+                unread_end = min(e, total_lines)
+                notice = (
+                    f"\n\n[CONTEXT PROTECTION - FILE TRUNCATED]\n"
+                    f"File: {clean_path} (total {total_lines} lines)\n"
+                    f"- Returned lines: {s}-{actual_end}\n"
+                    f"- Still unread in this request: lines {next_start}-{unread_end} ({remaining_lines_count} lines remaining)\n"
+                    f"Continue inspection with: read_file(path=\"{clean_path}\", start_line={next_start}, end_line={unread_end})."
+                )
+                numbered_content += notice
+
+            effective_remaining = (orig_requested_end - actual_end) if actual_end < orig_requested_end else 0
+            effective_next_start = (actual_end + 1) if actual_end < orig_requested_end else None
 
             return {
                 "path": clean_path,
                 "start_line": s,
-                "end_line": e,
+                "end_line": actual_end,
+                "requested_start_line": orig_requested_start,
+                "requested_end_line": orig_requested_end,
                 "total_lines": total_lines,
                 "content": numbered_content,
                 "raw_text": "".join(selected_lines),
+                "is_truncated": effective_is_truncated,
+                "next_start_line": effective_next_start,
+                "remaining_lines": effective_remaining,
             }
 
         except FileNotFoundError:
@@ -195,6 +394,24 @@ class RepositoryToolLayer:
                     })
                     if len(results) >= limit:
                         break
+        elif self.repo_root and os.path.exists(self.repo_root):
+            root_path = Path(self.repo_root)
+            for file_path in root_path.rglob("*"):
+                if not file_path.is_file():
+                    continue
+                rel_path = file_path.relative_to(root_path).as_posix()
+                if fnmatch.fnmatch(rel_path, pattern) or fnmatch.fnmatch(file_path.name, pattern):
+                    results.append({
+                        "path": rel_path,
+                        "language": "python" if rel_path.endswith(".py") else "text",
+                        "size": file_path.stat().st_size,
+                        "is_documentation": False,
+                        "is_agent_instruction": False,
+                        "is_test": False,
+                        "is_binary": False,
+                    })
+                    if len(results) >= limit:
+                        break
 
         return results
 
@@ -214,6 +431,31 @@ class RepositoryToolLayer:
         Note: Uses Blob Storage for complete picture, not PostgreSQL (which only indexes code files).
         """
         if self.analysis_id is None:
+            if self.repo_root and os.path.exists(self.repo_root):
+                clean_path = path.replace("\\", "/").strip("/") if path and path != "." else ""
+                target_dir = Path(self.repo_root) / clean_path if clean_path else Path(self.repo_root)
+                if not target_dir.exists():
+                    return {"path": clean_path or "/", "tree": "Directory not found", "file_count": 0}
+                
+                lines = [f"{clean_path}/" if clean_path else "."]
+                count = 0
+                for item in sorted(target_dir.rglob("*")):
+                    if ".git" in item.parts or ".venv" in item.parts or "__pycache__" in item.parts or "node_modules" in item.parts:
+                        continue
+                    rel = item.relative_to(target_dir).as_posix()
+                    depth_level = len(rel.split("/")) - 1
+                    if depth > 0 and depth_level >= depth:
+                        continue
+                    indent = "  " * (depth_level + 1)
+                    prefix = "[dir]  " if item.is_dir() else "[file] "
+                    lines.append(f"{indent}{prefix}{item.name}")
+                    if item.is_file():
+                        count += 1
+                    if count >= 100:
+                        lines.append(f"  ... ({count}+ files, truncated)")
+                        break
+                return {"path": clean_path or "/", "depth": depth, "tree": "\n".join(lines), "file_count": count}
+
             return {
                 "error": "no_analysis",
                 "message": "Analysis context not available."
@@ -371,16 +613,102 @@ class RepositoryToolLayer:
         # DIAGNOSTIC: Log precondition state at entry
         logger.error(f"[search_code:DIAGNOSTIC] ENTRY query='{query[:50]}' repo='{self.repo_name}' db={self.db is not None} analysis_id={self.analysis_id}")
 
+        def _pattern_matches(path: str, pat: Optional[str]) -> bool:
+            if not pat:
+                return True
+            base = os.path.basename(path)
+            # Standard glob check
+            if fnmatch.fnmatch(path, pat) or fnmatch.fnmatch(base, pat):
+                return True
+            # When searching for python source files (e.g. *.py, **/*.py), also match jupyter notebooks
+            if pat.endswith(".py") or pat == "*.py":
+                if path.endswith(".ipynb") or base.endswith(".ipynb"):
+                    return True
         # Validate preconditions
-        if self.db is None:
+        if self.db is None or self.analysis_id is None:
+            if self.repo_root and os.path.exists(self.repo_root):
+                root_path = Path(self.repo_root)
+                IGNORED_DIRS = {".git", ".venv", "__pycache__", "node_modules", ".pytest_cache", "dist", "build", ".idea", ".vscode", "azurite_data", "archive"}
+                SOURCE_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".sql", ".ipynb"}
+
+                # Extract individual search terms (length >= 3, skipping common stop words)
+                raw_words = [w for w in re.findall(r'\b[a-zA-Z_]{3,}\b', query.lower()) if w not in {"how", "what", "where", "from", "into", "and", "the", "that", "this", "which"}]
+                try:
+                    pattern = re.compile(query, re.IGNORECASE)
+                except re.error:
+                    pattern = re.compile(re.escape(query), re.IGNORECASE)
+
+                term_pattern = re.compile("|".join(re.escape(w) for w in raw_words), re.IGNORECASE) if raw_words else None
+
+                # Collect candidate source files and sort core backend code first
+                candidate_paths = []
+                for p in root_path.rglob("*"):
+                    if p.is_file() and not any(part in IGNORED_DIRS for part in p.parts):
+                        if p.suffix.lower() in SOURCE_EXTS:
+                            candidate_paths.append(p)
+
+                def _sort_priority(p: Path) -> Tuple[int, str]:
+                    rel = p.relative_to(root_path).as_posix()
+                    is_code = rel.endswith((".py", ".ts", ".tsx"))
+                    is_core = any(rel.startswith(pr) for pr in ("backend/agent/", "backend/intelligence/", "backend/repository_tools/", "backend/tests/", "backend/models/"))
+                    # Score by matching query terms in file name or directory
+                    query_match_bonus = sum(1 for w in raw_words if w in rel.lower())
+                    category = 0 if (is_code and is_core) else (1 if is_code else 2)
+                    return (category, -query_match_bonus, rel)
+
+                candidate_paths.sort(key=_sort_priority)
+
+                from backend.intelligence.notebook import resolve_source_document
+                scanned = 0
+                max_scanned = max(max_files_scanned, 100)
+
+                for file_path in candidate_paths:
+                    rel_path = file_path.relative_to(root_path).as_posix()
+                    if not _pattern_matches(rel_path, file_pattern):
+                        continue
+                    scanned += 1
+                    try:
+                        raw_content = file_path.read_text(encoding="utf-8", errors="replace")
+                        if rel_path.endswith(".ipynb"):
+                            doc = resolve_source_document(rel_path, raw_content)
+                            content = doc.source if not doc.conversion_error else raw_content
+                        else:
+                            content = raw_content
+
+                        matches_in_this_file = 0
+                        for idx, line in enumerate(content.splitlines(), start=1):
+                            line_hit = False
+                            # Exact regex match
+                            if pattern.search(line):
+                                line_hit = True
+                            # Or multi-term density match (at least 2 query terms on the line)
+                            elif term_pattern:
+                                hits = set(term_pattern.findall(line.lower()))
+                                if len(hits) >= 2 or ("isolation" in hits and "analysis" in hits):
+                                    line_hit = True
+
+                            if line_hit:
+                                results.append({
+                                    "path": rel_path,
+                                    "file": rel_path,
+                                    "line": idx,
+                                    "snippet": line.strip()[:200],
+                                    "query": query,
+                                })
+                                matches_in_this_file += 1
+                                if matches_in_this_file >= 1:
+                                    break
+                        if len(results) >= max_matches:
+                            return results
+
+                    except Exception:
+                        pass
+                    if scanned >= max_files_scanned:
+                        break
+                return results
+
             try:
-                logger.error(f"[search_code:FAILURE] Database session is None. Cannot search repository '{self.repo_name}'.")
-            except:
-                pass
-            return results
-        if self.analysis_id is None:
-            try:
-                logger.error(f"[search_code:FAILURE] Analysis ID is None for repository '{self.repo_name}'. Analysis may not be complete.")
+                logger.error(f"[search_code:FAILURE] Database session is None or Analysis ID is None. Cannot search repository '{self.repo_name}'.")
             except:
                 pass
             return results
@@ -418,7 +746,7 @@ class RepositoryToolLayer:
         files_with_matches = 0
 
         for f_rec in files:
-            if file_pattern and not fnmatch.fnmatch(f_rec.path, file_pattern) and not fnmatch.fnmatch(os.path.basename(f_rec.path), file_pattern):
+            if not _pattern_matches(f_rec.path, file_pattern):
                 continue
             if not f_rec.blob_name:
                 try:
@@ -437,7 +765,11 @@ class RepositoryToolLayer:
                 break
 
             try:
-                text = storage.get_object_text(f_rec.blob_name)
+                raw_text = storage.get_object_text(f_rec.blob_name)
+                from backend.intelligence.notebook import resolve_source_document
+                doc = resolve_source_document(f_rec.path, raw_text)
+                text = doc.source if not doc.conversion_error else raw_text
+
                 matches_in_file = 0
                 for line_idx, line in enumerate(text.splitlines(), start=1):
                     if pattern.search(line):
@@ -470,205 +802,28 @@ class RepositoryToolLayer:
         return results
 
     # ──────────────────────────────────────────────────────────────────────────
-    # 4. get_symbol & get_file_outline
+    # 5. Symbol & Call Graph Queries
     # ──────────────────────────────────────────────────────────────────────────
 
     def get_symbol(self, name: str) -> List[Dict[str, Any]]:
-        """
-        Looks up symbol definitions (functions, classes, methods) in the Fact Store.
-        """
-        if not self.db or not self.analysis_id:
-            return []
-
-        symbols = (
-            self.db.query(FactSymbol, FactFile.path)
-            .join(FactFile, FactSymbol.file_id == FactFile.id)
-            .filter(
-                FactSymbol.analysis_id == self.analysis_id,
-                FactSymbol.name.ilike(f"%{name}%"),
-            )
-            .limit(20)
-            .all()
-        )
-
-        return [
-            {
-                "symbol_id": sym.id,
-                "name": sym.name,
-                "qualified_name": sym.qualified_name,
-                "symbol_type": sym.symbol_type,
-                "file": path,
-                "line_start": sym.line_start,
-                "line_end": sym.line_end,
-            }
-            for sym, path in symbols
-        ]
+        from .symbol_ops import get_symbol_ops
+        return get_symbol_ops(self.db, self.analysis_id, name)
 
     def get_file_outline(self, path: str) -> Dict[str, Any]:
-        """
-        Returns an outline of symbols (classes, functions, routes) in a file.
-        """
-        if not self.db or not self.analysis_id:
-            return {"file": path, "symbols": []}
-
-        symbols = (
-            self.db.query(FactSymbol)
-            .join(FactFile, FactSymbol.file_id == FactFile.id)
-            .filter(
-                FactSymbol.analysis_id == self.analysis_id,
-                FactFile.path == path,
-            )
-            .order_by(FactSymbol.line_start)
-            .all()
-        )
-
-        return {
-            "file": path,
-            "symbols": [
-                {
-                    "name": sym.name,
-                    "type": sym.symbol_type,
-                    "line_start": sym.line_start,
-                    "line_end": sym.line_end,
-                }
-                for sym in symbols
-            ],
-        }
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # 5. Call graph: get_callers & get_callees
-    # ──────────────────────────────────────────────────────────────────────────
+        from .symbol_ops import get_file_outline_ops
+        return get_file_outline_ops(self.db, self.analysis_id, path)
 
     def get_callers(self, symbol_name: str) -> List[Dict[str, Any]]:
-        """Finds symbols that invoke or call the given symbol."""
-        if not self.db or not self.analysis_id:
-            return []
-
-        # First, find the target symbol ID
-        target_symbol = (
-            self.db.query(FactSymbol.id)
-            .filter(
-                FactSymbol.analysis_id == self.analysis_id,
-                FactSymbol.name.ilike(f"%{symbol_name}%"),
-            )
-            .first()
-        )
-
-        if not target_symbol:
-            return []
-
-        target_id = target_symbol.id
-
-        # Find all symbols that call this target
-        rel_rows = (
-            self.db.query(FactRelationship, FactSymbol.name, FactSymbol.symbol_type)
-            .join(FactSymbol, FactRelationship.from_symbol_id == FactSymbol.id)
-            .filter(
-                FactRelationship.analysis_id == self.analysis_id,
-                FactRelationship.rel_type == "CALLS",
-                FactRelationship.to_symbol_id == target_id,
-            )
-            .limit(20)
-            .all()
-        )
-
-        results = []
-        for rel, name, sym_type in rel_rows:
-            item = {
-                "caller_symbol": name,
-                "symbol_type": sym_type,
-                "relationship": rel.rel_type,
-            }
-            if rel.evidence_line is not None:
-                item["evidence_line"] = rel.evidence_line
-            if rel.evidence_snippet is not None:
-                item["snippet"] = rel.evidence_snippet
-            results.append(item)
-        return results
+        from .symbol_ops import get_callers_ops
+        return get_callers_ops(self.db, self.analysis_id, symbol_name)
 
     def get_callees(self, symbol_name: str) -> List[Dict[str, Any]]:
-        """Finds symbols that are called by the given symbol."""
-        if not self.db or not self.analysis_id:
-            return []
-
-        # First, find the source symbol ID
-        source_symbol = (
-            self.db.query(FactSymbol.id)
-            .filter(
-                FactSymbol.analysis_id == self.analysis_id,
-                FactSymbol.name.ilike(f"%{symbol_name}%"),
-            )
-            .first()
-        )
-
-        if not source_symbol:
-            return []
-
-        source_id = source_symbol.id
-
-        rel_rows = (
-            self.db.query(FactRelationship, FactSymbol.name, FactSymbol.symbol_type)
-            .join(FactSymbol, FactRelationship.to_symbol_id == FactSymbol.id)
-            .filter(
-                FactRelationship.analysis_id == self.analysis_id,
-                FactRelationship.rel_type == "CALLS",
-                FactRelationship.from_symbol_id == source_id,
-            )
-            .limit(20)
-            .all()
-        )
-
-        results = []
-        for rel, name, sym_type in rel_rows:
-            item = {
-                "callee_symbol": name,
-                "symbol_type": sym_type,
-                "relationship": rel.rel_type,
-            }
-            if rel.evidence_line is not None:
-                item["evidence_line"] = rel.evidence_line
-            if rel.evidence_snippet is not None:
-                item["snippet"] = rel.evidence_snippet
-            results.append(item)
-        return results
+        from .symbol_ops import get_callees_ops
+        return get_callees_ops(self.db, self.analysis_id, symbol_name)
 
     def get_related_files(self, path: str) -> List[Dict[str, Any]]:
-        """Finds files related via imports or function calls."""
-        if not self.db or not self.analysis_id:
-            return []
-
-        # Find symbol IDs in this file
-        file_syms = (
-            self.db.query(FactSymbol.id)
-            .join(FactFile, FactSymbol.file_id == FactFile.id)
-            .filter(FactSymbol.analysis_id == self.analysis_id, FactFile.path == path)
-            .all()
-        )
-        sym_ids = [s[0] for s in file_syms]
-        if not sym_ids:
-            return []
-
-        related_rows = (
-            self.db.query(FactRelationship, FactFile.path)
-            .join(FactSymbol, FactRelationship.to_symbol_id == FactSymbol.id)
-            .join(FactFile, FactSymbol.file_id == FactFile.id)
-            .filter(
-                FactRelationship.analysis_id == self.analysis_id,
-                FactRelationship.from_symbol_id.in_(sym_ids),
-                FactFile.path != path,
-            )
-            .limit(15)
-            .all()
-        )
-
-        return [
-            {
-                "related_file": r_path,
-                "rel_type": rel.rel_type,
-                "evidence": rel.evidence_snippet,
-            }
-            for rel, r_path in related_rows
-        ]
+        from .symbol_ops import get_related_files_ops
+        return get_related_files_ops(self.db, self.analysis_id, path)
 
     # ──────────────────────────────────────────────────────────────────────────
     # 6. Hybrid search_repository
@@ -685,144 +840,9 @@ class RepositoryToolLayer:
         return self._retriever
 
     def search_repository(self, query: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
-        """
-        Hybrid search using HybridRetriever with comma-separated multi-query batching.
-        Supports: "mysql,db,connection,database" → splits into 3 queries, dedupes results.
-        Pagination: use offset to fetch next batch (e.g., offset=30 to get results 31-60).
-        Returns: [{"type", "file", "symbol"/"line", "lines"/"snippet", "query", "match_source", "score"}]
-        """
-        # Convert string parameters to integers if needed (from LLM tool calls)
-        try:
-            limit = int(limit) if limit else 10
-            offset = int(offset) if offset else 0
-        except (ValueError, TypeError):
-            limit = 10
-            offset = 0
-
-        retriever = self._get_retriever()
-        if retriever is None:
-            # Fallback to original multi-method approach if retriever unavailable
-            return self._search_repository_fallback(query, limit, offset)
-
-        # Split query on commas (supports comma-separated multi-query batching)
-        sub_queries = [q.strip() for q in query.split(",") if q.strip()]
-        if not sub_queries:
-            return []
-
-        combined: List[Dict[str, Any]] = []
-        seen_keys = set()
-        max_total = min(limit * len(sub_queries), 30)  # hard cap at 30 results
-
-        for sub_query in sub_queries:
-            try:
-                # Use HybridRetriever for better ranking
-                top_k = max(limit, 10)
-                results = retriever.retrieve(sub_query, top_k=top_k)
-
-                for result in results:
-                    # Map RetrieverResult to output dict shape
-                    if result.symbol:
-                        key = f"sym:{result.file_path}:{result.symbol}"
-                        if key not in seen_keys:
-                            seen_keys.add(key)
-                            combined.append({
-                                "type": "symbol",
-                                "file": result.file_path,
-                                "symbol": result.symbol,
-                                "lines": f"{result.line_start}-{result.line_end}" if result.line_start else "",
-                                "query": sub_query,
-                                "match_source": result.score_type or "symbol_index",
-                                "score": result.score,
-                            })
-                    else:
-                        key = f"code:{result.file_path}:{result.line_number}"
-                        if key not in seen_keys:
-                            seen_keys.add(key)
-                            combined.append({
-                                "type": "code",
-                                "file": result.file_path,
-                                "line": result.line_number,
-                                "snippet": result.snippet or "",
-                                "query": sub_query,
-                                "match_source": result.score_type or "hybrid",
-                                "score": result.score,
-                            })
-            except Exception as e:
-                logger.debug(f"Error retrieving for query '{sub_query}': {e}")
-                continue
-
-        # If HybridRetriever returned no results, fall back to basic search methods
-        if not combined:
-            logger.debug(f"HybridRetriever returned 0 results, falling back to basic search for queries: {sub_queries}")
-            return self._search_repository_fallback(query, limit, offset)
-
-        # Apply offset-based pagination
-        start = offset
-        end = offset + max_total
-        return combined[start:end]
+        from .search_ops import search_repository_ops
+        return search_repository_ops(self, query, limit, offset)
 
     def _search_repository_fallback(self, query: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
-        """Fallback to original multi-method search when HybridRetriever is unavailable."""
-        combined: List[Dict[str, Any]] = []
-        seen_keys = set()
-
-        # Split query on commas to support multi-query batching in fallback
-        sub_queries = [q.strip() for q in query.split(",") if q.strip()]
-        if not sub_queries:
-            return []
-
-        max_total = min(limit * len(sub_queries), 30)
-
-        for sub_query in sub_queries:
-            # 1. Symbol search
-            sym_matches = self.get_symbol(sub_query)
-            for sym in sym_matches[:5]:
-                key = f"sym:{sym['file']}:{sym['name']}"
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    combined.append({
-                        "type": "symbol",
-                        "file": sym["file"],
-                        "symbol": sym["name"],
-                        "symbol_type": sym["symbol_type"],
-                        "lines": f"{sym['line_start']}-{sym['line_end']}",
-                        "query": sub_query,
-                        "match_source": "symbol_index",
-                        "score": 0,
-                    })
-
-            # 2. File path match
-            file_matches = self.find_files(f"*{sub_query}*")
-            for f in file_matches[:5]:
-                key = f"file:{f['path']}"
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    combined.append({
-                        "type": "file",
-                        "file": f["path"],
-                        "size": f.get("size", 0),
-                        "query": sub_query,
-                        "match_source": "filename_manifest",
-                        "score": 0,
-                    })
-
-            # 3. Lexical search in source files
-            lex_matches = self.search_code(sub_query, max_matches=5)
-            for lex in lex_matches:
-                key = f"lex:{lex['file']}:{lex['line']}"
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    combined.append({
-                        "type": "code",
-                        "file": lex["file"],
-                        "line": lex["line"],
-                        "snippet": lex["snippet"],
-                        "query": sub_query,
-                        "match_source": "lexical",
-                        "score": 0,
-                    })
-
-        # Apply offset-based pagination
-        start = offset
-        end = offset + max_total
-        return combined[start:end]
+        from .search_ops import search_repository_fallback_ops
+        return search_repository_fallback_ops(self, query, limit, offset)

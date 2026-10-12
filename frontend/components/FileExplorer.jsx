@@ -7,7 +7,8 @@ import { ChevronRight, ChevronDown, Folder, FolderOpen } from 'lucide-react';
 const getFileMeta = (filename) => {
   const ext = filename.split('.').pop().toLowerCase();
   switch (ext) {
-    case 'py': return { isSupported: true, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/60', activeBg: 'bg-blue-100 dark:bg-blue-900/80', activeText: 'text-blue-800 dark:text-blue-200', Icon: PythonIcon };
+    case 'py':
+    case 'ipynb': return { isSupported: true, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/60', activeBg: 'bg-blue-100 dark:bg-blue-900/80', activeText: 'text-blue-800 dark:text-blue-200', Icon: PythonIcon };
     case 'js': return { isSupported: true, color: 'text-yellow-500 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-950/60', activeBg: 'bg-yellow-100 dark:bg-yellow-900/80', activeText: 'text-yellow-800 dark:text-yellow-200', Icon: JavascriptIcon };
     case 'ts': return { isSupported: true, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/60', activeBg: 'bg-blue-100 dark:bg-blue-900/80', activeText: 'text-blue-800 dark:text-blue-200', Icon: TypescriptIcon };
     case 'jsx': 

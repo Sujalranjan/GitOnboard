@@ -1,0 +1,965 @@
+[
+  {
+    "id": "DGB01",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "Trace how user authentication, JWT access tokens, refresh tokens, and device sessions are created, stored, and rotated in the backend. Where are refresh tokens persisted in Supabase, how is the device fingerprint calculated, and how does the server prevent token reuse or replay attacks?",
+    "category": "architecture",
+    "answer_type": "execution_trace",
+    "difficulty": "L4",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/controllers/authcontroller.js",
+      "app/Deep-Guard-Backend/utils/authHelpers.js",
+      "app/Deep-Guard-Backend/middleware/authenticateToken.js"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-Backend/config/supabase.js",
+      "app/Deep-Guard-Backend/routes/auth.js"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/controllers/trial.js",
+      "app/Deep-Guard-Backend/routes/userRoutes.js"
+    ],
+    "expected_symbols": [
+      "createSession",
+      "signup",
+      "login",
+      "refresh",
+      "authenticateToken",
+      "generateTokens"
+    ],
+    "expected_concepts": [
+      "JWT dual-token architecture",
+      "Supabase user_sessions table",
+      "device fingerprinting hash",
+      "HttpOnly cookie storage",
+      "refresh token rotation"
+    ],
+    "expected_answer_points": [
+      "Login/signup validates credentials in authcontroller.js and generates a short-lived access token and long-lived refresh token via authHelpers.js.",
+      "A session record is created in Supabase 'user_sessions' storing the hashed refresh token, user ID, IP address, user-agent, and device fingerprint.",
+      "Tokens are delivered to the client via secure, HttpOnly cookies (accessToken and refreshToken).",
+      "On /refresh, the backend queries Supabase for the active session, validates the refresh token signature, invalidates the old token, and issues a new token pair (rotation).",
+      "authenticateToken.js middleware extracts the token from cookies or Authorization header and verifies it with jwt.verify(token, JWT_SECRET)."
+    ],
+    "expected_answer_structure": [
+      "credential verification and token generation",
+      "Supabase user_sessions storage and schema",
+      "cookie delivery and security flags",
+      "refresh token rotation mechanism",
+      "middleware verification and replay protection"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "symbol_lookup",
+      "file_read",
+      "graph_traversal"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": true,
+    "requires_verification": true,
+    "difficulty_factors": {
+      "files": 5,
+      "hops": 4,
+      "concepts": 5
+    },
+    "known_traps": [
+      "Assuming refresh tokens are stored only in memory or Redis instead of Supabase user_sessions table",
+      "Confusing middleware/auth.js with middleware/authenticateToken.js"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB02",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "How does DeepGuard permit users to test deepfake analysis without creating an account ('Try Without Account') while preventing abuse? Trace how device fingerprints and IP records are generated, validated in Supabase, and how expired trials are cleaned up.",
+    "category": "security",
+    "answer_type": "execution_trace",
+    "difficulty": "L3",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/controllers/trial.js",
+      "app/Deep-Guard-Backend/middleware/trial.js",
+      "app/Deep-Guard-Backend/routes/trial.analyze.js"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-Backend/routes/trial.js",
+      "app/Deep-Guard-Backend/routes/trail.status.js"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/controllers/analysisController.js"
+    ],
+    "expected_symbols": [
+      "joinTrial",
+      "cleanupExpiredTrials",
+      "getDeviceFingerprint",
+      "checkTrialEligibility"
+    ],
+    "expected_concepts": [
+      "anonymous trial token",
+      "device fingerprinting",
+      "trial rate-limiting in Supabase",
+      "scheduled trial cleanup"
+    ],
+    "expected_answer_points": [
+      "Anonymous trial entry generates a device fingerprint from IP, User-Agent, and headers.",
+      "The controller queries Supabase 'trials' table to verify whether this fingerprint or IP has already exhausted its trial allowance.",
+      "If eligible, a short-lived trial token is issued permitting a limited analysis (e.g. 1 video/image with capped frames).",
+      "trial.analyze.js routes the analysis request through trial validation middleware before delegating to the ML service.",
+      "cleanupExpiredTrials function periodically runs to purge or flag expired trial entries in Supabase."
+    ],
+    "expected_answer_structure": [
+      "device fingerprint creation",
+      "Supabase eligibility verification",
+      "trial token generation and rate limit bounds",
+      "delegation to trial analysis route",
+      "expired session purge logic"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "cross_file_trace"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": true,
+    "difficulty_factors": {
+      "files": 4,
+      "hops": 3,
+      "concepts": 4
+    },
+    "known_traps": [
+      "Assuming trial status uses Redis TTL instead of Supabase database rows and cleanupExpiredTrials",
+      "Overlooking trial.analyze.js route which separates trial analysis from standard user analysis"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB03",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "When a user uploads a video file for deepfake inspection, trace the complete request from Express upload middleware through file storage, delegation to the Python FastAPI ML Engine, and the receipt of prediction results. Where is the file temporarily buffered, and what happens if the ML engine fails?",
+    "category": "execution_flow",
+    "answer_type": "execution_trace",
+    "difficulty": "L5",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/routes/analysis.js",
+      "app/Deep-Guard-Backend/controllers/analysisController.js",
+      "app/Deep-Guard-Backend/routes/ml-service.js",
+      "app/Deep-Guard-ML-Engine/app/routes/video_detection.py"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-Backend/middleware/fileupload.js",
+      "app/Deep-Guard-Backend/services/analysisService.js"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/routes/analysis-image-upload.js",
+      "app/Deep-Guard-ML-Engine/app/routes/image_detection.py"
+    ],
+    "expected_symbols": [
+      "uploadFile",
+      "analyzeVideo",
+      "predict_video",
+      "forwardToMLService"
+    ],
+    "expected_concepts": [
+      "multipart/form-data upload",
+      "temporary disk/memory buffer",
+      "HTTP form-data proxy to FastAPI",
+      "Supabase analysis record status transitions",
+      "error boundary and cleanup"
+    ],
+    "expected_answer_points": [
+      "Client posts multipart video to Express /analysis route where fileupload.js middleware validates file size and mime type.",
+      "analysisController.js creates an initial record in Supabase 'analyses' table with status 'processing'.",
+      "The file stream is forwarded via axios/form-data in ml-service.js to the FastAPI ML Engine at POST /detect/deepfake/video.",
+      "The ML engine accepts UploadFile, extracts frames, performs TFLite inference, and returns prediction metrics and zipped annotated frames.",
+      "analysisController.js updates Supabase with confidence scores and status 'completed'; on ML failure, status is set to 'failed' with error_message."
+    ],
+    "expected_answer_structure": [
+      "Express upload ingestion and middleware validation",
+      "Supabase initial record creation",
+      "IPC forwarding to FastAPI ML Engine",
+      "FastAPI response consumption",
+      "database status update and error recovery"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "cross_file_trace",
+      "graph_traversal"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": true,
+    "requires_verification": true,
+    "difficulty_factors": {
+      "files": 6,
+      "hops": 5,
+      "concepts": 5
+    },
+    "known_traps": [
+      "Confusing video analysis routing with image analysis routing (ml-service.js vs ml-service-images.js)",
+      "Assuming files are directly stored in S3/Azure Blob before inference rather than forwarded via multipart IPC"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB04",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "Contrast the image analysis pipeline with the video pipeline. Trace how analysis-image-upload.js and ml-service-images.js route image data to the FastAPI ML Engine's /detect/deepfake/images endpoint, and where image analysis records are committed to Supabase.",
+    "category": "api_contract",
+    "answer_type": "comparison",
+    "difficulty": "L3",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/routes/analysis-image-upload.js",
+      "app/Deep-Guard-Backend/routes/ml-service-images.js",
+      "app/Deep-Guard-ML-Engine/app/routes/image_detection.py"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-Backend/controllers/analysisController.js",
+      "app/Deep-Guard-Backend/config/supabase.js"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/routes/ml-service.js",
+      "app/Deep-Guard-ML-Engine/app/routes/video_detection.py"
+    ],
+    "expected_symbols": [
+      "predict_image",
+      "uploadImage",
+      "forwardImageToML"
+    ],
+    "expected_concepts": [
+      "single-frame static inference",
+      "dedicated image router",
+      "FastAPI FileResponse vs JSON response",
+      "Supabase image analysis persistence"
+    ],
+    "expected_answer_points": [
+      "Image analysis uses dedicated routes (analysis-image-upload.js and ml-service-images.js) separate from video analysis.",
+      "The request is forwarded to FastAPI endpoint POST /detect/deepfake/images instead of /detect/deepfake/video.",
+      "Image processing extracts single facial crops without multi-frame temporal tracking or video decoder overhead.",
+      "The ML response returns confidence and annotated image directly.",
+      "Results are persisted in Supabase with image-specific attributes (single confidence score, no frame array)."
+    ],
+    "expected_answer_structure": [
+      "image route separation and entry points",
+      "FastAPI endpoint contrast (/detect/deepfake/images)",
+      "processing pipeline differences (single crop vs temporal frames)",
+      "Supabase record structure contrast"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 4,
+      "hops": 3,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Assuming both video and image go through the same ml-service.js file",
+      "Missing that FastAPI has two separate route files: image_detection.py and video_detection.py"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB05",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "Inside the Python ML Engine, how is the TensorFlow Lite deepfake model loaded and invoked? Trace how faces are extracted and tracked across video frames before being passed to the classifier.",
+    "category": "architecture",
+    "answer_type": "execution_trace",
+    "difficulty": "L4",
+    "required_evidence": [
+      "app/Deep-Guard-ML-Engine/app/services/model.py",
+      "app/Deep-Guard-ML-Engine/app/utils/face_extractor.py",
+      "app/Deep-Guard-ML-Engine/app/utils/face_tracker.py",
+      "app/Deep-Guard-ML-Engine/app/services/video_preprocessor.py"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-ML-Engine/app/routes/video_detection.py",
+      "app/Deep-Guard-ML-Engine/app/config/config.py"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-ML-Engine/Model Builder Code/Model_Builder.py"
+    ],
+    "expected_symbols": [
+      "FaceExtractor",
+      "FaceTracker3D",
+      "VideoPreprocessor",
+      "predict",
+      "_track_yunet",
+      "_track_mediapipe"
+    ],
+    "expected_concepts": [
+      "tflite.Interpreter",
+      "input/output tensor allocation",
+      "face crop normalization (224x224/256x256)",
+      "YuNet/MediaPipe fallback tracking",
+      "frame sampling rate"
+    ],
+    "expected_answer_points": [
+      "model.py initializes tflite.Interpreter pointing to deepfake_detector.tflite and allocates tensors.",
+      "VideoPreprocessor samples frames from the input video based on requested frame count (e.g. 30\u201350 frames).",
+      "FaceTracker3D / FaceExtractor detects faces using primary YuNet tracker with MediaPipe and Haar cascade fallbacks.",
+      "Cropped face regions are resized, normalized to [0, 1] float tensors, and reshaped to model input dimensions.",
+      "interpreter.set_tensor and interpreter.invoke execute inference, returning deepfake probability per frame."
+    ],
+    "expected_answer_structure": [
+      "TFLite interpreter initialization and tensor details",
+      "video frame sampling via VideoPreprocessor",
+      "face detection and 3D tracker fallbacks",
+      "crop preprocessing and normalization",
+      "model invocation and probability calculation"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "symbol_lookup",
+      "file_read",
+      "graph_traversal"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": true,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 5,
+      "hops": 4,
+      "concepts": 5
+    },
+    "known_traps": [
+      "Citing training scripts in 'Model Builder Code/' instead of active inference code in 'app/services/model.py'",
+      "Assuming standard heavy PyTorch or TensorFlow model instead of lightweight TFLite runtime"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB06",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "How does the ML Engine package prediction results and annotated frames back to the caller? Trace how bounding boxes and confidence metrics are overlaid onto video frames and how the output zip/response is constructed and returned.",
+    "category": "data_flow",
+    "answer_type": "execution_trace",
+    "difficulty": "L3",
+    "required_evidence": [
+      "app/Deep-Guard-ML-Engine/app/utils/annotate_images.py",
+      "app/Deep-Guard-ML-Engine/app/services/video_saver.py",
+      "app/Deep-Guard-ML-Engine/app/routes/video_detection.py"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-ML-Engine/app/utils/video_processor.py"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-ML-Engine/app/services/image_saver.py"
+    ],
+    "expected_symbols": [
+      "annotate_frame",
+      "save_annotated_video",
+      "predict_video",
+      "create_zip_archive"
+    ],
+    "expected_concepts": [
+      "OpenCV bounding box annotation",
+      "color-coded confidence labels",
+      "zip archive creation",
+      "FastAPI FileResponse with custom headers"
+    ],
+    "expected_answer_points": [
+      "annotate_images.py draws colored bounding boxes and probability labels (green for real, red for deepfake) using OpenCV.",
+      "video_saver.py writes annotated frames to a temporary directory.",
+      "A zip archive containing the annotated frames and summary metadata is created on disk.",
+      "video_detection.py streams the zip archive back using FastAPI FileResponse with media_type application/zip.",
+      "Custom HTTP headers pass overall confidence score and frame counts back to the Express gateway."
+    ],
+    "expected_answer_structure": [
+      "frame annotation with OpenCV",
+      "saving frames to temporary structure",
+      "zip packaging mechanism",
+      "FastAPI FileResponse transmission and headers"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 4,
+      "hops": 3,
+      "concepts": 4
+    },
+    "known_traps": [
+      "Assuming output is returned purely as JSON without binary frame zip archive",
+      "Confusing video_saver.py with image_saver.py"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB07",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "How does the ML Engine prevent disk exhaustion from uploaded and processed video files? Trace the execution of background cleanup tasks, where files are stored temporarily on disk, and how cleanup errors are handled.",
+    "category": "debugging",
+    "answer_type": "execution_trace",
+    "difficulty": "L2",
+    "required_evidence": [
+      "app/Deep-Guard-ML-Engine/app/utils/delayed_cleanup.py",
+      "app/Deep-Guard-ML-Engine/app/routes/video_detection.py"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-ML-Engine/app/config/config.py"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/controllers/trial.js"
+    ],
+    "expected_symbols": [
+      "delayed_cleanup",
+      "BackgroundTasks",
+      "predict_video"
+    ],
+    "expected_concepts": [
+      "FastAPI BackgroundTasks",
+      "delayed file deletion",
+      "shutil.rmtree / os.remove",
+      "temporary directory lifecycle"
+    ],
+    "expected_answer_points": [
+      "Uploaded videos and extracted frames are stored in temporary directory paths specified in config.py.",
+      "FastAPI BackgroundTasks parameter is injected into predict_video route.",
+      "background_tasks.add_task(delayed_cleanup, [paths], delay_seconds) schedules asynchronous deletion after the response finishes streaming.",
+      "delayed_cleanup sleeps for a short buffer time to ensure streaming completion, then recursively removes temporary folders with shutil.rmtree.",
+      "Exceptions during cleanup are logged without interrupting the client connection."
+    ],
+    "expected_answer_structure": [
+      "temporary storage locations",
+      "FastAPI BackgroundTasks injection",
+      "delayed_cleanup implementation and sleep delay",
+      "safe filesystem deletion and exception handling"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": true,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Assuming a Celery/Redis queue handles cleanup when it is actually native FastAPI BackgroundTasks",
+      "Assuming files are deleted immediately inside the request body before FileResponse finishes"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB08",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "Trace how the Supabase client is initialized in the Node.js backend. Which tables are read and written during an analysis lifecycle, and what credentials/service keys are required?",
+    "category": "architecture",
+    "answer_type": "explanation",
+    "difficulty": "L2",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/config/supabase.js",
+      "app/Deep-Guard-Backend/controllers/analysisController.js"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-Backend/services/analysisService.js",
+      "app/Deep-Guard-Backend/controllers/authcontroller.js"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-ML-Engine/app/config/config.py"
+    ],
+    "expected_symbols": [
+      "createClient",
+      "supabase",
+      "uploadFile"
+    ],
+    "expected_concepts": [
+      "@supabase/supabase-js createClient",
+      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY",
+      "analyses table schema",
+      "user_sessions table"
+    ],
+    "expected_answer_points": [
+      "config/supabase.js imports createClient from @supabase/supabase-js.",
+      "Initializes client using process.env.SUPABASE_URL and process.env.SUPABASE_SERVICE_ROLE_KEY (or anon key).",
+      "Exported supabase singleton is imported across controllers.",
+      "During analysis lifecycle, it inserts a new row into 'analyses' with user_id, filename, status='processing'.",
+      "Upon completion, updates 'analyses' with confidence_score, is_deepfake, frames_analyzed, and frame_wise_confidences."
+    ],
+    "expected_answer_structure": [
+      "client initialization and required environment variables",
+      "singleton export pattern",
+      "tables touched during analysis ('analyses', 'user_sessions')",
+      "record lifecycle from creation to completion"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Claiming Prisma, TypeORM, or Mongoose is used instead of the official Supabase JavaScript SDK",
+      "Assuming ML engine connects directly to Supabase (only the Express backend touches Supabase)"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB09",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "Trace the end-to-end password reset flow. How is the OTP generated, what email transport service dispatches it, where is the verification token stored, and how does the backend prevent brute-force OTP attempts?",
+    "category": "security",
+    "answer_type": "execution_trace",
+    "difficulty": "L3",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/controllers/authcontroller.js",
+      "app/Deep-Guard-Backend/utils/authHelpers.js",
+      "app/Deep-Guard-Backend/routes/auth.js"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-Backend/utils/helpers.js"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/controllers/support.js"
+    ],
+    "expected_symbols": [
+      "sendResetOtp",
+      "resetPassword",
+      "generateOTP",
+      "sendEmail"
+    ],
+    "expected_concepts": [
+      "6-digit numeric OTP generation",
+      "Nodemailer/SMTP transport",
+      "Supabase password_resets table with expiry",
+      "bcrypt password hashing"
+    ],
+    "expected_answer_points": [
+      "sendResetOtp in authcontroller.js verifies user exists in Supabase by email.",
+      "Generates a 6-digit random OTP and stores it in Supabase with a 10-15 minute expiration timestamp.",
+      "Dispatches OTP to user email using nodemailer configured with SMTP environment variables.",
+      "resetPassword verifies the submitted OTP against the stored entry and checks expiration.",
+      "Hashes the new password with bcrypt and updates the user table, invalidating existing sessions."
+    ],
+    "expected_answer_structure": [
+      "email validation and user lookup",
+      "OTP generation and expiration persistence in Supabase",
+      "SMTP dispatch via nodemailer",
+      "OTP verification and bcrypt password update"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": true,
+    "difficulty_factors": {
+      "files": 4,
+      "hops": 3,
+      "concepts": 4
+    },
+    "known_traps": [
+      "Assuming SendGrid/Resend API is used if Nodemailer SMTP is configured",
+      "Assuming OTP is stored in JWT rather than database table with timestamp"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB10",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "How does DeepGuard fetch repository statistics and contributor information for display? Trace the GitHub API integration in github.js, including rate-limit header handling and payload transformation.",
+    "category": "cross_file_reasoning",
+    "answer_type": "explanation",
+    "difficulty": "L2",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/controllers/github.js",
+      "app/Deep-Guard-Backend/routes/github.js"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-Backend/server.js"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/controllers/support.js"
+    ],
+    "expected_symbols": [
+      "getRepoStats",
+      "getContributors",
+      "getPulls",
+      "getGithubHeaders"
+    ],
+    "expected_concepts": [
+      "GitHub REST API v3",
+      "authorization headers with GITHUB_TOKEN",
+      "contributor commit aggregations",
+      "pull request filtering"
+    ],
+    "expected_answer_points": [
+      "github.js controller defines endpoints for repository stats, contributors, and pull requests.",
+      "getGithubHeaders sets Accept: application/vnd.github.v3+json and Authorization Bearer using process.env.GITHUB_TOKEN if present.",
+      "Calls api.github.com/repos/{owner}/{repo}/contributors to get contributor avatars, commit counts, and profile links.",
+      "Aggregates stars, forks, and open issues into a unified statistics payload.",
+      "Returns clean JSON payload formatted for the frontend GithubRepoCard and ContributorList components."
+    ],
+    "expected_answer_structure": [
+      "route and controller structure",
+      "GitHub API authentication headers",
+      "external endpoints called",
+      "data aggregation and payload formatting"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Assuming GitHub GraphQL API is used rather than REST API endpoints",
+      "Assuming contributor data is stored permanently in Supabase rather than queried dynamically"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB11",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "What is the purpose of the Supabase keep-alive edge function in the repository? Trace how it is implemented, what endpoints or services it pings, and how cold-start delays are mitigated.",
+    "category": "architecture",
+    "answer_type": "explanation",
+    "difficulty": "L1",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/supabase/functions/keep-alive/index.ts"
+    ],
+    "supporting_evidence": [
+      "render.yaml",
+      "app/Deep-Guard-Backend/server.js"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/controllers/support.js"
+    ],
+    "expected_symbols": [
+      "serve",
+      "Deno.serve"
+    ],
+    "expected_concepts": [
+      "Supabase Deno Edge Function",
+      "free-tier hosting cold-start prevention",
+      "scheduled health ping",
+      "HTTP fetch invocation"
+    ],
+    "expected_answer_points": [
+      "Located at supabase/functions/keep-alive/index.ts written in TypeScript for Deno runtime.",
+      "Designed to prevent free-tier Render or Supabase instances from spinning down due to inactivity.",
+      "Performs periodic HTTP GET requests to the backend /health or base URL.",
+      "Returns 200 OK status with timestamp and execution metrics."
+    ],
+    "expected_answer_structure": [
+      "edge function location and Deno runtime",
+      "cold-start mitigation objective",
+      "ping target and response handling"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 2,
+      "hops": 1,
+      "concepts": 2
+    },
+    "known_traps": [
+      "Confusing Supabase Edge Function (Deno) with Node.js Express server routes"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB12",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "How are runtime exceptions captured across the Express application? Trace errorHandler.js and logger.js to explain how unhandled rejections, file validation errors, and database errors are standardized in API responses.",
+    "category": "debugging",
+    "answer_type": "architecture",
+    "difficulty": "L2",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/middleware/errorHandler.js",
+      "app/Deep-Guard-Backend/middleware/logger.js"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-Backend/utils/logger.js",
+      "app/Deep-Guard-Backend/server.js"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/middleware/auth.js"
+    ],
+    "expected_symbols": [
+      "errorHandler",
+      "loggerMiddleware"
+    ],
+    "expected_concepts": [
+      "Express 4-argument error middleware (err, req, res, next)",
+      "custom AppError / status mapping",
+      "sanitized client error responses",
+      "structured console logging"
+    ],
+    "expected_answer_points": [
+      "errorHandler.js is mounted as the final middleware in server.js with 4 parameters: (err, req, res, next).",
+      "Checks err.statusCode or defaults to 500 Internal Server Error.",
+      "Logs error details, stack traces, and request context via logger.js.",
+      "Formats response as JSON: { success: false, message: err.message, ...(isDev && { stack: err.stack }) }.",
+      "Catches multer file upload errors (e.g. LIMIT_FILE_SIZE) and formats them cleanly with 400 status."
+    ],
+    "expected_answer_structure": [
+      "middleware registration and signature",
+      "status code resolution",
+      "logging behavior",
+      "client JSON response format and environment-conditional stack trace"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Assuming Winston or Morgan is used if custom logger.js is implemented",
+      "Overlooking that errorHandler must be registered after all route handlers"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB13",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "Trace how bug reports and support requests submitted by users are processed. Which controller handles the request, what validation is performed on attachments, and where are reports dispatched?",
+    "category": "data_flow",
+    "answer_type": "execution_trace",
+    "difficulty": "L1",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/controllers/support.js",
+      "app/Deep-Guard-Backend/routes/support.js"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-Backend/utils/helpers.js",
+      "app/Deep-Guard-Backend/server.js"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/controllers/github.js"
+    ],
+    "expected_symbols": [
+      "sendBugReport"
+    ],
+    "expected_concepts": [
+      "support route handling",
+      "Nodemailer email notification",
+      "attachment validation",
+      "ticket payload structure"
+    ],
+    "expected_answer_points": [
+      "support.js controller handles POST /support/bug-report (or similar route).",
+      "Validates user email, issue description, severity, and optional screenshot/log attachments.",
+      "Dispatches an email notification to the administrative support inbox using the configured email transporter.",
+      "Optionally logs or persists the ticket reference and returns a confirmation JSON response to the user."
+    ],
+    "expected_answer_structure": [
+      "route and controller entry point",
+      "request validation",
+      "email dispatch mechanism",
+      "client response format"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 2,
+      "hops": 1,
+      "concepts": 2
+    },
+    "known_traps": [
+      "Confusing customer support tickets with GitHub issues integration in github.js"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB14",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "How are the Node.js Express API and the Python FastAPI ML Engine configured to communicate in Docker? Trace service networking, port bindings, shared volumes (if any), and startup scripts.",
+    "category": "configuration",
+    "answer_type": "architecture",
+    "difficulty": "L4",
+    "required_evidence": [
+      "docker-compose.yml",
+      "app/Deep-Guard-Backend/Dockerfile",
+      "app/Deep-Guard-ML-Engine/Dockerfile"
+    ],
+    "supporting_evidence": [
+      "start.sh",
+      "render.yaml"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/package.json"
+    ],
+    "expected_symbols": [],
+    "expected_concepts": [
+      "multi-container Docker network",
+      "Express service (port 5000/8080)",
+      "FastAPI ML Engine (port 8000)",
+      "ML_SERVICE_URL environment variable",
+      "container health dependencies"
+    ],
+    "expected_answer_points": [
+      "docker-compose.yml orchestrates two primary services: the Node.js Express backend and the Python ML Engine.",
+      "The Express service exposes port 5000 (or mapped host port) while the ML Engine runs on internal port 8000.",
+      "The Express service is configured with ML_SERVICE_URL=http://ml-engine:8000 pointing to the Docker service name.",
+      "start.sh or Dockerfile entrypoints ensure the ML service starts and compiles TFLite requirements before traffic routes.",
+      "render.yaml provides deployment specifications for unified deployment on Render platform."
+    ],
+    "expected_answer_structure": [
+      "Docker compose service definitions",
+      "port mapping and internal container networking",
+      "environment variable configuration (ML_SERVICE_URL)",
+      "container build stages and startup order"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": true,
+    "difficulty_factors": {
+      "files": 4,
+      "hops": 3,
+      "concepts": 4
+    },
+    "known_traps": [
+      "Assuming both run inside a single monolith process rather than separate polyglot containers",
+      "Missing the service hostname resolution in Docker network (ml-engine:8000 vs localhost:8000)"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGB15",
+    "repository": "deepguard_backend",
+    "repository_commit": "81367569881a73ffbc93a1d7ad0716e39125bfde",
+    "question": "Trace a single video analysis request from the moment an authenticated client posts multipart video data to the Express gateway, through token validation, ML delegation, frame sampling (50 frames), face bounding box extraction, TFLite inference, Supabase database record insertion, and final response transmission. Identify every point where latency or failure could occur.",
+    "category": "cross_file_reasoning",
+    "answer_type": "execution_trace",
+    "difficulty": "L5",
+    "required_evidence": [
+      "app/Deep-Guard-Backend/server.js",
+      "app/Deep-Guard-Backend/middleware/authenticateToken.js",
+      "app/Deep-Guard-Backend/controllers/analysisController.js",
+      "app/Deep-Guard-Backend/routes/ml-service.js",
+      "app/Deep-Guard-ML-Engine/app/routes/video_detection.py",
+      "app/Deep-Guard-ML-Engine/app/services/model.py",
+      "app/Deep-Guard-Backend/config/supabase.js"
+    ],
+    "supporting_evidence": [
+      "app/Deep-Guard-Backend/middleware/fileupload.js",
+      "app/Deep-Guard-ML-Engine/app/utils/face_extractor.py",
+      "app/Deep-Guard-ML-Engine/app/utils/delayed_cleanup.py"
+    ],
+    "decoy_files": [
+      "app/Deep-Guard-Backend/routes/analysis-image-upload.js",
+      "app/Deep-Guard-ML-Engine/Model Builder Code/Model_Builder.py"
+    ],
+    "expected_symbols": [
+      "authenticateToken",
+      "uploadFile",
+      "forwardToMLService",
+      "predict_video",
+      "predict"
+    ],
+    "expected_concepts": [
+      "full-stack architectural hop",
+      "JWT cookie extraction",
+      "multipart streaming latency",
+      "video decoding bottlenecks",
+      "TFLite tensor execution",
+      "database consistency",
+      "failure modes at each boundary"
+    ],
+    "expected_answer_points": [
+      "Hop 1: Express server.js receives multipart POST request; authenticateToken.js extracts JWT from cookie/header and validates signature (failure point: token expired 401).",
+      "Hop 2: fileupload.js buffers video; analysisController.js writes initial row to Supabase 'analyses' table with status 'processing' (failure point: DB connection error).",
+      "Hop 3: ml-service.js forwards stream to FastAPI /detect/deepfake/video (failure point: network timeout / IPC disconnection 502).",
+      "Hop 4: FastAPI VideoPreprocessor decodes video and samples 50 frames; FaceTracker3D/YuNet isolates face crops (failure point: corrupted video codec or 0 faces detected).",
+      "Hop 5: model.py invokes TFLite interpreter across normalized face tensors; annotates frames and compresses into zip (failure point: out of memory OOM).",
+      "Hop 6: FastAPI returns FileResponse with zip + header metrics; background_tasks triggers delayed_cleanup.",
+      "Hop 7: Express updates Supabase with confidence scores, sets status 'completed', and sends final JSON response to client."
+    ],
+    "expected_answer_structure": [
+      "entry point and auth validation",
+      "Supabase initial record creation",
+      "IPC network stream forwarding",
+      "computer vision extraction & TFLite inference",
+      "artifact packaging & response streaming",
+      "database finalization",
+      "systemic latency & failure mode enumeration"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "symbol_lookup",
+      "file_read",
+      "graph_traversal",
+      "cross_file_trace"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": true,
+    "requires_verification": true,
+    "difficulty_factors": {
+      "files": 8,
+      "hops": 7,
+      "concepts": 7
+    },
+    "known_traps": [
+      "Missing the IPC boundary between Node.js and Python processes",
+      "Forgetting that background cleanup happens after the response is returned",
+      "Omitting the initial Supabase 'processing' status write before the ML call"
+    ],
+    "ground_truth_status": "verified"
+  }
+]

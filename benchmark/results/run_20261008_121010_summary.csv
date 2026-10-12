@@ -1,0 +1,3 @@
+run_id,question_id,repository,arm,iteration,correctness,completeness,groundedness,hallucination_rate,evidence_recall,relevant_precision,recall_at_1,recall_at_3,recall_at_5,recall_at_10,decoy_hit,cross_repo_leakage_rate,trajectory_validity,primary_failure,tool_calls,unique_files_read,tool_success_rate,time_to_first_useful_evidence_ms,duration_ms,total_tokens,error
+GB01_conventional_rag_iter1_1791461126,GB01,gitonboard_backend,conventional_rag,1,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0,0.0,INSUFFICIENT_EVIDENCE,HALLUCINATION,1,0,1.0,,56752.24,302,
+GB01_gitonboard_rag_iter1_1791461268,GB01,gitonboard_backend,gitonboard_rag,1,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0,0.0,INSUFFICIENT_EVIDENCE,HALLUCINATION,1,0,1.0,,61903.17,296,

@@ -11,7 +11,7 @@ class Repository(Base):
     __tablename__ = "repositories"
 
     id = Column(Integer, primary_key=True, index=True)
-    repository_hash = Column(String(36), index=True, nullable=False, unique=True)  # UUID v4
+    repository_hash = Column(String(36), nullable=False)  # UUID v4
     github_repo_id = Column(String, index=True, nullable=True)
     url = Column(String, index=True, nullable=False)
     default_branch = Column(String, nullable=True)
@@ -92,3 +92,5 @@ class TaskStatus(Base):
     task_name = Column(String, nullable=False)
     status = Column(String, nullable=False, default="pending")  # pending, processing, completed, failed
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+# Alias for backward compatibility – tests expect RepositoryAnalysis to be importable from this module
+RepositoryAnalysis = Analysis

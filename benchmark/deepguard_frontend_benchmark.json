@@ -1,0 +1,969 @@
+[
+  {
+    "id": "DGF01",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "How does the DeepGuard frontend track real-time upload progress, frame-by-frame analysis progress, and final detection confidences across components? Trace analysisStore.ts, its actions, and which components subscribe to its state.",
+    "category": "architecture",
+    "answer_type": "execution_trace",
+    "difficulty": "L3",
+    "required_evidence": [
+      "lib/store/analysisStore.ts",
+      "src/components/UploadArea.tsx",
+      "src/components/NewAnalysisContent.tsx"
+    ],
+    "supporting_evidence": [
+      "src/components/AnalysisPage.tsx",
+      "src/app/dashboard/analysis/[id]/page.tsx"
+    ],
+    "decoy_files": [
+      "src/hooks-logic/useAccountSettingsLogic.ts",
+      "src/components/StatCard.tsx"
+    ],
+    "expected_symbols": [
+      "useAnalysisStore",
+      "setCurrentAnalysis",
+      "updateAnalysisProgress",
+      "resetAnalysis"
+    ],
+    "expected_concepts": [
+      "Zustand state store",
+      "global reactive subscription",
+      "upload vs analysis phase transitions",
+      "frame-wise confidence arrays",
+      "persisted vs ephemeral state"
+    ],
+    "expected_answer_points": [
+      "lib/store/analysisStore.ts creates a Zustand store (useAnalysisStore) holding currentAnalysis, analysisHistory, and active progress counters.",
+      "UploadArea.tsx reads uploadProgress, currentFrame, and totalFrames to display progress bars and frame counter badges.",
+      "NewAnalysisContent.tsx manages high-level state ('IDLE' | 'UPLOADING' | 'ANALYZING') and dispatches store actions upon upload initiation and completion.",
+      "AnalysisPage.tsx and the [id] page subscribe to currentAnalysis to render confidence scores, frame lists, and annotated media.",
+      "Actions include setting analysis results, updating frame progress, and clearing state when a new analysis starts."
+    ],
+    "expected_answer_structure": [
+      "Zustand store architecture and interface definition",
+      "state properties (progress, frames, confidence report)",
+      "producer components (NewAnalysisContent, UploadArea)",
+      "consumer components (AnalysisPage, dashboard pages)"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "symbol_lookup",
+      "file_read",
+      "graph_traversal"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": true,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 4,
+      "hops": 3,
+      "concepts": 4
+    },
+    "known_traps": [
+      "Assuming Redux Toolkit or React Context is used when it is pure Zustand",
+      "Confusing analysisStore.ts with account settings logic hooks"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF02",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "How does the frontend communicate with the backend while preventing token exposure to client-side scripts? Trace the apiFetch wrapper in api.ts, how it handles 401 token expiration, token refresh loops without infinite retries, and how Next.js rewrites/proxies requests.",
+    "category": "security",
+    "answer_type": "execution_trace",
+    "difficulty": "L4",
+    "required_evidence": [
+      "src/lib/api.ts",
+      "next.config.ts",
+      "middleware.ts"
+    ],
+    "supporting_evidence": [
+      "lib/auth.ts",
+      "src/services/authService.ts"
+    ],
+    "decoy_files": [
+      "src/lib/logger.ts"
+    ],
+    "expected_symbols": [
+      "apiFetch",
+      "credentials: 'include'",
+      "refresh"
+    ],
+    "expected_concepts": [
+      "HttpOnly cookie isolation",
+      "Next.js rewrite proxy (API_URL = '')",
+      "401 interception",
+      "refresh loop recursion guard (url.includes('/refresh'))",
+      "replay of original request"
+    ],
+    "expected_answer_points": [
+      "apiFetch in src/lib/api.ts sets credentials: 'include' so that HttpOnly session cookies are transmitted automatically without JavaScript accessing raw tokens.",
+      "Next.js next.config.ts configures rewrites to proxy client API calls to the backend server, avoiding CORS and cookie domain mismatches.",
+      "When a request returns HTTP 401 Unauthorized, apiFetch intercepts the response.",
+      "It includes a guard: if the failed request itself was '/refresh', it aborts immediately to prevent infinite recursive refresh loops.",
+      "Otherwise, it issues a POST /auth/refresh with credentials: 'include'; if successful, it retries the original request."
+    ],
+    "expected_answer_structure": [
+      "HttpOnly cookie transport and credentials flag",
+      "Next.js rewrite proxy configuration",
+      "401 interception and token refresh flow",
+      "infinite recursion guard logic",
+      "automatic request replay"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "cross_file_trace"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": true,
+    "requires_verification": true,
+    "difficulty_factors": {
+      "files": 4,
+      "hops": 4,
+      "concepts": 5
+    },
+    "known_traps": [
+      "Assuming access tokens are stored in localStorage or sessionStorage (they are in HttpOnly cookies)",
+      "Missing the url.includes('/refresh') safety guard that prevents browser lockup"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF03",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "Trace the user upload interaction in UploadArea.tsx and NewAnalysisContent.tsx. How are file types (mp4, avi, mov vs. jpg, png) and max file sizes (10MB) validated before network dispatch, and how is the frame sampling count configured via FrameInputModal?",
+    "category": "user_interaction",
+    "answer_type": "execution_trace",
+    "difficulty": "L3",
+    "required_evidence": [
+      "src/components/UploadArea.tsx",
+      "src/components/NewAnalysisContent.tsx",
+      "src/components/FrameInputModal.tsx"
+    ],
+    "supporting_evidence": [
+      "src/styles/NewAnalysis.module.css"
+    ],
+    "decoy_files": [
+      "src/components/FeatureList.tsx"
+    ],
+    "expected_symbols": [
+      "handleFileChange",
+      "handleDrop",
+      "FrameInputModal",
+      "MAX_FILE_SIZE_MB",
+      "SUPPORTED_FORMATS"
+    ],
+    "expected_concepts": [
+      "drag-and-drop event handling",
+      "client-side file size guard (10MB)",
+      "MIME type and extension validation",
+      "frame count customization modal (10\u2013100 frames)",
+      "error state dispatch"
+    ],
+    "expected_answer_points": [
+      "UploadArea.tsx handles drag events (dragOver, dragLeave, drop) and standard file input changes.",
+      "NewAnalysisContent.tsx validates that file.size <= MAX_FILE_SIZE_MB * 1024 * 1024; if exceeded, displays an error alert without network dispatch.",
+      "Validates file extensions against SUPPORTED_FORMATS depending on selected analysis type (VIDEO vs IMAGE).",
+      "For video files, FrameInputModal allows the user to configure how many frames to extract (defaulting to 30 or 50 frames).",
+      "Once confirmed, the component transitions to 'UPLOADING' state and initiates the multipart request."
+    ],
+    "expected_answer_structure": [
+      "drag-and-drop and file input listener",
+      "client-side size and MIME validation logic",
+      "FrameInputModal configuration and frame limits",
+      "state transitions from IDLE to UPLOADING"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 3,
+      "concepts": 4
+    },
+    "known_traps": [
+      "Assuming file validation happens purely on the backend (the frontend enforces strict pre-flight checks)",
+      "Overlooking FrameInputModal which lets users select frame count before upload"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF04",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "After a video is analyzed, how does the frontend render the confidence progression over time and individual frame details? Trace ConfidenceOverTimeChart.tsx and FrameAnalysisSection.tsx, including data formatting and animation hooks.",
+    "category": "data_visualization",
+    "answer_type": "explanation",
+    "difficulty": "L3",
+    "required_evidence": [
+      "src/components/ConfidenceOverTimeChart.tsx",
+      "src/components/FrameAnalysisSection.tsx",
+      "src/hooks/useChartAnimation.ts"
+    ],
+    "supporting_evidence": [
+      "src/components/AnalysisPage.tsx",
+      "src/styles/FrameAnalysis.module.css"
+    ],
+    "decoy_files": [
+      "src/components/DashboardStatCard.tsx"
+    ],
+    "expected_symbols": [
+      "ConfidenceOverTimeChart",
+      "FrameAnalysisSection",
+      "useChartAnimation"
+    ],
+    "expected_concepts": [
+      "frame-wise confidence time-series",
+      "chart rendering (Chart.js / Recharts or custom SVG/canvas)",
+      "threshold color coding (real vs fake thresholds)",
+      "frame thumbnail selection",
+      "animation timing hook"
+    ],
+    "expected_answer_points": [
+      "ConfidenceOverTimeChart receives frame_wise_confidences array from the analysis result.",
+      "Maps indices to frame numbers / timestamps along the X-axis and probability (0.0 to 1.0 or 0-100%) along the Y-axis.",
+      "Applies color gradient or threshold line indicating high risk (> 50-70% fake probability).",
+      "useChartAnimation animates line rendering and data point entrance on component mount.",
+      "FrameAnalysisSection renders interactive frame tiles allowing users to click and inspect specific annotated frames."
+    ],
+    "expected_answer_structure": [
+      "data ingestion from analysis model",
+      "chart layout and axis mappings",
+      "threshold indicator styling",
+      "useChartAnimation hook behavior",
+      "frame thumbnail navigation"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 4,
+      "hops": 3,
+      "concepts": 4
+    },
+    "known_traps": [
+      "Assuming chart uses generic hardcoded sample data rather than analysis.frame_wise_confidences",
+      "Missing that useChartAnimation controls the visual transition"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF05",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "How does the frontend prevent unauthenticated users from visiting /dashboard, /dashboard/analysis, or /dashboard/account? Trace middleware.ts, how session tokens are checked on edge requests, and the redirection flow for expired sessions.",
+    "category": "security",
+    "answer_type": "execution_trace",
+    "difficulty": "L2",
+    "required_evidence": [
+      "middleware.ts",
+      "lib/auth.ts"
+    ],
+    "supporting_evidence": [
+      "src/app/dashboard/layout.tsx",
+      "src/app/login/page.tsx"
+    ],
+    "decoy_files": [
+      "src/app/theme-provider.tsx"
+    ],
+    "expected_symbols": [
+      "middleware",
+      "matcher",
+      "NextResponse.redirect"
+    ],
+    "expected_concepts": [
+      "Next.js edge middleware",
+      "route matcher pattern (/dashboard/:path*)",
+      "cookie presence validation (refreshToken/accessToken)",
+      "redirect to /login?redirect=...",
+      "public route exemptions (/login, /signup, /try-without-account)"
+    ],
+    "expected_answer_points": [
+      "middleware.ts runs at the Next.js edge runtime before any page renders.",
+      "Defines a matcher config covering '/dashboard/:path*'.",
+      "Inspects request.cookies for the presence of session tokens (e.g. 'accessToken' or 'refreshToken').",
+      "If tokens are missing or invalid, it redirects the client to '/login' with a return URL parameter.",
+      "Public routes like '/', '/login', '/signup', and '/try-without-account' are bypassed."
+    ],
+    "expected_answer_structure": [
+      "middleware location and execution environment",
+      "route matching rules",
+      "cookie inspection logic",
+      "redirection mechanism and query preservation"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": true,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Assuming route protection is done solely inside useEffect in client components (it is enforced in Next.js middleware)",
+      "Confusing Next.js edge middleware.ts with Express backend middleware"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF06",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "How does the guest flow work when a user selects 'Try Without Account'? Trace the page component at /try-without-account, how it interfaces with the backend trial endpoints, and what UI restrictions are placed on guest analyses.",
+    "category": "user_interaction",
+    "answer_type": "execution_trace",
+    "difficulty": "L3",
+    "required_evidence": [
+      "src/app/try-without-account/page.tsx",
+      "src/components/NewAnalysisContent.tsx",
+      "src/lib/api.ts"
+    ],
+    "supporting_evidence": [
+      "lib/store/analysisStore.ts"
+    ],
+    "decoy_files": [
+      "src/app/login/page.tsx"
+    ],
+    "expected_symbols": [
+      "TryWithoutAccountPage",
+      "NewAnalysisContent"
+    ],
+    "expected_concepts": [
+      "anonymous trial workflow",
+      "trial mode flag in upload component",
+      "limited upload quota / frame caps",
+      "conversion CTA prompting account creation"
+    ],
+    "expected_answer_points": [
+      "src/app/try-without-account/page.tsx mounts NewAnalysisContent configured in guest/trial mode.",
+      "Communicates with backend trial endpoints (/trial and /trial/analyze) using generated fingerprint headers.",
+      "Restricts features: disables history persistence and locks advanced batch options.",
+      "Upon completion, displays analysis results alongside prominent conversion CTAs to register for full history and export features."
+    ],
+    "expected_answer_structure": [
+      "page route and component configuration",
+      "API communication and trial headers",
+      "guest UI limitations compared to authenticated dashboard",
+      "post-analysis registration prompt"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "cross_file_trace"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Assuming guest users receive a mock simulated result (they call real trial backend endpoints)",
+      "Missing that trial mode uses the same core NewAnalysisContent component with specialized flags"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF07",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "How does AnalysisHistory.tsx render past analysis records? Trace how historical items are fetched, how processing/completed/failed badges are displayed, and how users navigate to historical analysis details.",
+    "category": "data_flow",
+    "answer_type": "explanation",
+    "difficulty": "L2",
+    "required_evidence": [
+      "src/components/AnalysisHistory.tsx",
+      "src/app/dashboard/history/page.tsx"
+    ],
+    "supporting_evidence": [
+      "src/hooks/useHistoryAnimation.ts",
+      "src/lib/api.ts",
+      "src/styles/AnalysisHistory.module.css"
+    ],
+    "decoy_files": [
+      "src/components/RecentAnalyses.tsx"
+    ],
+    "expected_symbols": [
+      "AnalysisHistory",
+      "fetchHistory",
+      "useHistoryAnimation"
+    ],
+    "expected_concepts": [
+      "historical record query (GET /analysis/history)",
+      "status badge rendering with variant colors",
+      "confidence badge calculation",
+      "link to dynamic route /dashboard/analysis/[id]"
+    ],
+    "expected_answer_points": [
+      "AnalysisHistory fetches records on mount via apiFetch('/analysis/history') or reads from analysisStore.",
+      "Renders tabular or card-based records with filename, timestamp, frames analyzed, and status badges.",
+      "Status badges apply green for 'completed', yellow/blue for 'processing', and red for 'failed'.",
+      "Confidence scores are styled with warning colors if detected as deepfake.",
+      "Clicking a row navigates to /dashboard/analysis/${analysis.id} for the full analytical report."
+    ],
+    "expected_answer_structure": [
+      "data fetching trigger and endpoint",
+      "table layout and status badge mappings",
+      "risk level visual indicators",
+      "dynamic routing navigation"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Confusing AnalysisHistory.tsx (full history view) with RecentAnalyses.tsx (dashboard widget)",
+      "Assuming data is mock-generated rather than fetched from backend Supabase records"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF08",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "Trace how user account settings, profile information, and active device sessions are displayed and updated in /dashboard/account. Which components handle password changes, and how does logging out of all devices trigger client-side session cleanup?",
+    "category": "architecture",
+    "answer_type": "execution_trace",
+    "difficulty": "L3",
+    "required_evidence": [
+      "src/app/dashboard/account/page.tsx",
+      "src/components/AccountProfile.tsx",
+      "src/components/AccountSettings.tsx",
+      "src/components/AccountDataManagement.tsx",
+      "src/hooks-logic/useAccountSettingsLogic.ts"
+    ],
+    "supporting_evidence": [
+      "src/styles/Account.module.css",
+      "src/lib/api.ts"
+    ],
+    "decoy_files": [
+      "src/components/UserProfileCard.tsx"
+    ],
+    "expected_symbols": [
+      "useAccountSettingsLogic",
+      "handleUpdateProfile",
+      "handleLogoutAllDevices",
+      "handleChangePassword"
+    ],
+    "expected_concepts": [
+      "modular account dashboard tabs",
+      "custom hook for business logic (useAccountSettingsLogic)",
+      "device session revocation API call",
+      "client store purge and redirect to /login"
+    ],
+    "expected_answer_points": [
+      "src/app/dashboard/account/page.tsx composes AccountProfile, AccountSettings, and AccountDataManagement.",
+      "useAccountSettingsLogic.ts encapsulates form state, validation, and API mutation handlers.",
+      "AccountSettings handles name, avatar, and password modification via PATCH/POST endpoints.",
+      "AccountDataManagement triggers 'Logout from all devices' calling apiFetch('/auth/logout-all', { method: 'POST' }).",
+      "On success, client clears Zustand store, wipes cached profile state, and redirects to /login."
+    ],
+    "expected_answer_structure": [
+      "page composition and component hierarchy",
+      "logic separation in useAccountSettingsLogic.ts",
+      "password and profile update flows",
+      "logout-all-devices invocation and client-side cleanup"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 5,
+      "hops": 3,
+      "concepts": 4
+    },
+    "known_traps": [
+      "Looking for form handlers directly inside page.tsx instead of useAccountSettingsLogic.ts",
+      "Confusing single-device logout with global device revocation"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF09",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "Trace the forget password user journey in ForgetPasswordModal.tsx. How are the request OTP and verify OTP steps partitioned, what error handling is surfaced to the user, and how does the modal return the user to login?",
+    "category": "user_interaction",
+    "answer_type": "execution_trace",
+    "difficulty": "L2",
+    "required_evidence": [
+      "src/components/ForgetPasswordModal.tsx",
+      "src/components/Login.tsx",
+      "src/services/authService.ts"
+    ],
+    "supporting_evidence": [
+      "src/styles/ForgetPassword.module.css"
+    ],
+    "decoy_files": [
+      "src/components/Signup.tsx"
+    ],
+    "expected_symbols": [
+      "ForgetPasswordModal",
+      "step",
+      "handleSendOtp",
+      "handleResetPassword"
+    ],
+    "expected_concepts": [
+      "multi-step modal state machine (STEP_EMAIL -> STEP_OTP -> STEP_SUCCESS)",
+      "countdown timer for resend OTP",
+      "inline error alerts",
+      "modal visibility callback to parent Login component"
+    ],
+    "expected_answer_points": [
+      "ForgetPasswordModal manages an internal step state (e.g. 1: Enter Email, 2: Enter OTP & New Password).",
+      "Step 1 calls authService.sendResetOtp(email); upon success, advances to Step 2 and starts a resend cooldown timer.",
+      "Step 2 collects 6-digit OTP and new password, calling authService.resetPassword(email, otp, newPassword).",
+      "Displays validation errors (invalid email, wrong OTP, weak password) via styled error boxes.",
+      "On successful reset, shows confirmation message and closes modal, focusing user back on the login form."
+    ],
+    "expected_answer_structure": [
+      "modal mounting and step state representation",
+      "Step 1: OTP request and timer initialization",
+      "Step 2: verification and password update API dispatch",
+      "error handling and return to login transition"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Assuming password reset is a separate route rather than an overlay modal on /login",
+      "Overlooking the two-stage step transition inside the modal"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF10",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "How is dark/light theme switching implemented across DeepGuard? Trace theme-provider.tsx, ThemeToggleButton.tsx, and how theme classes are applied to Tailwind CSS and CSS Modules.",
+    "category": "configuration",
+    "answer_type": "explanation",
+    "difficulty": "L1",
+    "required_evidence": [
+      "src/app/theme-provider.tsx",
+      "src/components/ThemeToggleButton.tsx",
+      "tailwind.config.js"
+    ],
+    "supporting_evidence": [
+      "src/lib/theme.tsx",
+      "src/styles/Global.module.css"
+    ],
+    "decoy_files": [
+      "src/components/Sidebar.tsx"
+    ],
+    "expected_symbols": [
+      "ThemeProvider",
+      "ThemeToggleButton",
+      "useTheme",
+      "darkMode: 'class'"
+    ],
+    "expected_concepts": [
+      "next-themes or custom React Context",
+      "class-based dark mode in Tailwind",
+      "localStorage persistence",
+      "hydration mismatch avoidance (suppressHydrationWarning)",
+      "Sun/Moon icon toggle"
+    ],
+    "expected_answer_points": [
+      "src/app/theme-provider.tsx wraps the root application layout providing theme context.",
+      "tailwind.config.js specifies darkMode: 'class', toggling dark styles when 'dark' class is present on <html> or <body>.",
+      "ThemeToggleButton.tsx renders Sun/Moon icons and calls toggleTheme on click.",
+      "Stores preference in localStorage to persist user selection across reloads.",
+      "Includes hydration protection to prevent flicker during server-side rendering."
+    ],
+    "expected_answer_structure": [
+      "provider configuration in root layout",
+      "Tailwind class strategy",
+      "toggle component interaction",
+      "localStorage persistence and SSR hydration guards"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 1,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Assuming pure system media query without manual user override toggle",
+      "Confusing global Tailwind styles with localized CSS module theme tokens"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF11",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "How does the frontend render repository contributor statistics and project info? Trace ContributorList.tsx and GithubRepoCard.tsx from data retrieval to grid display.",
+    "category": "cross_file_reasoning",
+    "answer_type": "explanation",
+    "difficulty": "L2",
+    "required_evidence": [
+      "src/components/ContributorList.tsx",
+      "src/components/GithubRepoCard.tsx",
+      "src/app/dashboard/contributions/page.tsx"
+    ],
+    "supporting_evidence": [
+      "src/lib/api.ts"
+    ],
+    "decoy_files": [
+      "src/components/FeatureList.tsx"
+    ],
+    "expected_symbols": [
+      "ContributorList",
+      "GithubRepoCard",
+      "ContributionsPage"
+    ],
+    "expected_concepts": [
+      "API data fetching (/github/contributors, /github/stats)",
+      "contributor card grid layout",
+      "avatar image loading with fallback",
+      "star and fork badge rendering"
+    ],
+    "expected_answer_points": [
+      "src/app/dashboard/contributions/page.tsx queries backend GitHub endpoints on mount via apiFetch.",
+      "GithubRepoCard renders repository name, description, star count, and fork count with external GitHub link.",
+      "ContributorList iterates over contributor objects, displaying avatar, username, commit contributions, and profile URL.",
+      "Uses responsive CSS grid for layout and includes loading skeletons while data is in flight."
+    ],
+    "expected_answer_structure": [
+      "page mounting and API invocation",
+      "GithubRepoCard presentation",
+      "ContributorList iteration and avatar handling",
+      "responsive grid layout"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Assuming contributors are hardcoded in the frontend rather than retrieved from backend GitHub API proxy"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF12",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "DeepGuard features custom page and dashboard transitions. Trace the custom animation hooks (e.g. useDashboardAnimations.ts, useAnalysisResultsAnimation.ts) and explain how entry and exit animations are structured without degrading rendering performance.",
+    "category": "architecture",
+    "answer_type": "explanation",
+    "difficulty": "L3",
+    "required_evidence": [
+      "src/hooks/useDashboardAnimations.ts",
+      "src/hooks/useAnalysisResultsAnimation.ts",
+      "src/hooks/useChartAnimation.ts"
+    ],
+    "supporting_evidence": [
+      "src/styles/Dashboard.module.css"
+    ],
+    "decoy_files": [
+      "src/styles/Global.module.css"
+    ],
+    "expected_symbols": [
+      "useDashboardAnimations",
+      "useAnalysisResultsAnimation",
+      "useChartAnimation"
+    ],
+    "expected_concepts": [
+      "ref-based DOM animation binding",
+      "staggered card entrance timing",
+      "hardware-accelerated CSS transforms (translateY, opacity)",
+      "cleanup and unmount safety"
+    ],
+    "expected_answer_points": [
+      "Custom hooks in src/hooks/ isolate animation side-effects from component business logic.",
+      "useDashboardAnimations attaches refs to dashboard stat cards and welcome banners, triggering staggered opacity/transform keyframes on mount.",
+      "useAnalysisResultsAnimation sequences score counter increments and chart reveal after analysis completes.",
+      "Leverages CSS transitions / transforms rather than heavy JavaScript loops to ensure 60fps rendering.",
+      "Ensures animation refs are cleaned up on unmount to prevent memory leaks."
+    ],
+    "expected_answer_structure": [
+      "hook separation architecture",
+      "staggered transition sequencing",
+      "CSS transform optimization",
+      "component lifecycle attachment and cleanup"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 4
+    },
+    "known_traps": [
+      "Assuming heavy Framer Motion library is mandatory when custom ref-driven CSS module hooks are used",
+      "Overlooking that hooks are organized under src/hooks/ with clean naming"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF13",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "Trace BugReportForm.tsx. How are form data, browser environment details, and optional attachments structured before being sent to the backend /support route?",
+    "category": "data_flow",
+    "answer_type": "execution_trace",
+    "difficulty": "L1",
+    "required_evidence": [
+      "src/components/BugReportForm.tsx",
+      "src/lib/api.ts"
+    ],
+    "supporting_evidence": [
+      "src/lib/logger.ts"
+    ],
+    "decoy_files": [
+      "src/components/ForgetPasswordModal.tsx"
+    ],
+    "expected_symbols": [
+      "BugReportForm",
+      "handleSubmit",
+      "apiFetch"
+    ],
+    "expected_concepts": [
+      "support form input state",
+      "automatic user-agent / navigator diagnostic collection",
+      "multipart/JSON payload serialization",
+      "submission toast feedback"
+    ],
+    "expected_answer_points": [
+      "BugReportForm manages form state for title, description, category, and severity.",
+      "Optionally attaches browser metadata (navigator.userAgent, window resolution) to assist backend reproduction.",
+      "Dispatches payload to apiFetch('/support/bug-report', { method: 'POST', body: ... }).",
+      "Displays success notification or error message, clearing form inputs on completion."
+    ],
+    "expected_answer_structure": [
+      "form state and input bindings",
+      "diagnostic environment extraction",
+      "API request construction",
+      "UI feedback and reset logic"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read"
+    ],
+    "requires_multi_hop": false,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 2,
+      "hops": 1,
+      "concepts": 2
+    },
+    "known_traps": [
+      "Assuming bug reports are pushed directly to GitHub API from client (they route through backend support handler)"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF14",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "How does the image inspection view differ from video analysis? Trace ImageAnalysisSection.tsx and DeepfakeAlertCard.tsx to explain how single-frame confidence results and heatmaps/bounding boxes are displayed.",
+    "category": "data_visualization",
+    "answer_type": "comparison",
+    "difficulty": "L3",
+    "required_evidence": [
+      "src/components/ImageAnalysisSection.tsx",
+      "src/components/DeepfakeAlertCard.tsx",
+      "src/components/AnalysisPage.tsx"
+    ],
+    "supporting_evidence": [
+      "src/styles/ImageAnalysis.module.css"
+    ],
+    "decoy_files": [
+      "src/components/FrameAnalysisSection.tsx",
+      "src/components/ConfidenceOverTimeChart.tsx"
+    ],
+    "expected_symbols": [
+      "ImageAnalysisSection",
+      "DeepfakeAlertCard",
+      "AnalysisPage"
+    ],
+    "expected_concepts": [
+      "single image presentation layout",
+      "DeepfakeAlertCard threat level badge",
+      "absence of temporal time-series slider",
+      "annotated image zoom and inspection"
+    ],
+    "expected_answer_points": [
+      "AnalysisPage branches between video and image analysis based on media type.",
+      "ImageAnalysisSection renders a static annotated viewport displaying the image with face bounding boxes.",
+      "Omits the ConfidenceOverTimeChart and FrameAnalysisSection which are video-exclusive.",
+      "DeepfakeAlertCard presents a prominent risk assessment (Likely Deepfake vs Likely Authentic) with confidence percentage and forensic summary."
+    ],
+    "expected_answer_structure": [
+      "media type branching in AnalysisPage",
+      "ImageAnalysisSection layout specifics",
+      "DeepfakeAlertCard visual structure",
+      "differences from video analysis views"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "file_read",
+      "symbol_lookup"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": false,
+    "requires_verification": false,
+    "difficulty_factors": {
+      "files": 3,
+      "hops": 2,
+      "concepts": 3
+    },
+    "known_traps": [
+      "Assuming image analysis renders an empty video chart instead of switching to ImageAnalysisSection",
+      "Confusing DeepfakeAlertCard with generic DashboardStatCard"
+    ],
+    "ground_truth_status": "verified"
+  },
+  {
+    "id": "DGF15",
+    "repository": "deepguard_frontend",
+    "repository_commit": "86d8dcc066683c1b3219630ec2234a62c1ce6c24",
+    "question": "Trace a complete user analysis journey: User logs in via Login.tsx, navigates to /dashboard/new-analysis, drops a video file in UploadArea.tsx, selects 30 frames in FrameInputModal.tsx, clicks analyze, observes the upload progress and loading spinner, is redirected to /dashboard/analysis/[id], and views the final confidence score in AnalysisHeader.tsx and chart in ConfidenceOverTimeChart.tsx. Detail every state transition, API call, and Zustand action along the way.",
+    "category": "cross_file_reasoning",
+    "answer_type": "execution_trace",
+    "difficulty": "L5",
+    "required_evidence": [
+      "src/components/Login.tsx",
+      "src/components/NewAnalysisContent.tsx",
+      "src/components/UploadArea.tsx",
+      "src/components/FrameInputModal.tsx",
+      "lib/store/analysisStore.ts",
+      "src/lib/api.ts",
+      "src/app/dashboard/analysis/[id]/page.tsx",
+      "src/components/AnalysisHeader.tsx",
+      "src/components/ConfidenceOverTimeChart.tsx"
+    ],
+    "supporting_evidence": [
+      "src/components/AnalysisPage.tsx",
+      "middleware.ts"
+    ],
+    "decoy_files": [
+      "src/components/Sidebar.tsx",
+      "src/components/UserProfileCard.tsx"
+    ],
+    "expected_symbols": [
+      "Login",
+      "NewAnalysisContent",
+      "UploadArea",
+      "useAnalysisStore",
+      "apiFetch",
+      "AnalysisHeader",
+      "ConfidenceOverTimeChart"
+    ],
+    "expected_concepts": [
+      "end-to-end user journey",
+      "auth cookie acquisition",
+      "router.push navigation",
+      "Zustand store updates",
+      "multipart streaming progress",
+      "dynamic route rendering",
+      "data visualization assembly"
+    ],
+    "expected_answer_points": [
+      "Step 1: User submits credentials in Login.tsx; apiFetch calls POST /auth/login setting HttpOnly session cookies; router.push('/dashboard') executes.",
+      "Step 2: User opens /dashboard/new-analysis; NewAnalysisContent mounts UploadArea in IDLE state.",
+      "Step 3: User drops video; file size and extension validated; FrameInputModal prompts for frame count (user selects 30).",
+      "Step 4: Analyze triggered; NewAnalysisContent transitions state to 'UPLOADING'; updates Zustand progress; posts multipart FormData to /analysis.",
+      "Step 5: Backend responds with created analysis ID; NewAnalysisContent transitions to 'ANALYZING' with loading spinner.",
+      "Step 6: Frontend polls /analysis/${id} or awaits response; on completion, sets analysis in Zustand store and router.push('/dashboard/analysis/${id}').",
+      "Step 7: Dynamic [id] page reads analysis from store/API; mounts AnalysisPage, AnalysisHeader (showing risk score and badge), and ConfidenceOverTimeChart (drawing the 30-frame curve)."
+    ],
+    "expected_answer_structure": [
+      "Step 1: Authentication and cookie acquisition",
+      "Step 2: Navigation to new analysis workspace",
+      "Step 3: File drag-and-drop and frame modal selection",
+      "Step 4: Upload dispatch and Zustand progress tracking",
+      "Step 5: Analysis processing state and spinner",
+      "Step 6: Dynamic route redirection",
+      "Step 7: Final report rendering and visual assembly"
+    ],
+    "expected_tool_capabilities": [
+      "repository_search",
+      "symbol_lookup",
+      "file_read",
+      "cross_file_trace",
+      "graph_traversal"
+    ],
+    "requires_multi_hop": true,
+    "requires_graph_reasoning": true,
+    "requires_verification": true,
+    "difficulty_factors": {
+      "files": 9,
+      "hops": 7,
+      "concepts": 7
+    },
+    "known_traps": [
+      "Omitting the FrameInputModal interaction before upload starts",
+      "Missing the role of Zustand analysisStore in passing the result to the [id] dynamic page",
+      "Assuming raw tokens are parsed in client JavaScript during login"
+    ],
+    "ground_truth_status": "verified"
+  }
+]

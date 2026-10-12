@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 from .enums import EntityType
 from .location import SourceLocation
+EntityLocation = SourceLocation  # Alias for backward compatibility
 
 class Entity(BaseModel):
     id: str = Field(..., description="The unique, deterministic stable ID for this entity.")

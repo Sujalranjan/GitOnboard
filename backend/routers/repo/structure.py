@@ -185,7 +185,10 @@ async def parse_repo_file(repo_name: str, file_path: str, db: Session = Depends(
     if fact_file and fact_file.blob_name:
         try:
             storage = get_storage()
-            source_code = storage.get_object_text(fact_file.blob_name)
+            raw_source = storage.get_object_text(fact_file.blob_name)
+            from backend.intelligence.notebook import resolve_source_document
+            doc = resolve_source_document(clean_path, raw_source)
+            source_code = doc.source if not doc.conversion_error else raw_source
         except Exception as err:
             logger.warning(f"Failed to fetch blob {fact_file.blob_name}: {err}")
 
@@ -456,7 +459,10 @@ async def get_raw_file(
 
         storage = get_storage()
         logger.info(f"[FILE_API] Fetching from Azure: {blob_name}")
-        content = storage.get_object_text(blob_name)
+        raw_content = storage.get_object_text(blob_name)
+        from backend.intelligence.notebook import resolve_source_document
+        doc = resolve_source_document(clean_path, raw_content)
+        content = doc.source if not doc.conversion_error else raw_content
         logger.info(f"[FILE_API] Successfully fetched file, size: {len(content)}")
     except FileNotFoundError:
         logger.warning(f"[FILE_API] File not found in Azure: {blob_name}")

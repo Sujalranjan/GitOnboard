@@ -1,0 +1,123 @@
+[
+  {
+    "run_id": "GB01_conventional_rag_iter1_1791467178",
+    "question_id": "GB01",
+    "repository": "gitonboard_backend",
+    "repository_commit": "9d4de5e77ef9d4c651acfac9a58a8a81d46d6a6d",
+    "arm": "conventional_rag",
+    "model": "qwen3:4b-instruct",
+    "temperature": 0.0,
+    "iteration": 1,
+    "timestamp": "2026-10-08T13:46:18.701491",
+    "final_answer": "The provided code snippets do not contain sufficient information to trace how a repository/analysis identifier is propagated from the agent request into retrieval and context assembly. \n\nSpecifically:\n- There is no mention of an agent request or how it initiates a workflow involving repository or analysis identifiers.\n- The function `_get_tool_layer(context: AgentToolContext)` is defined in `repository.py`, but its implementation or how it uses or propagates identifiers is not provided.\n- The `RepositorySourceReader` is instantiated in `repository_investigator.py`, but there is no indication of how it receives or propagates a repository or analysis identifier from an agent request or how it interacts with context or analysis boundaries.\n- The test file `test_repository_context.py` only references unit tests for data models and does not cover propagation or isolation logic.\n\nAdditionally, there is no evidence in the snippets about:\n- Data flows between agent tools and retrieval components.\n- How repository or analysis identifiers are passed through the system.\n- Any mechanism or code that enforces isolation between analyses or prevents data leakage across analyses.\n\nTherefore, based on the retrieved context, it is not possible to trace the propagation of a repository/analysis identifier or identify where data could leak across analyses, nor can we determine what code or tests enforce isolation.\n\n**Missing information**: The flow of identifiers from agent requests to retrieval and context assembly, and any isolation mechanisms (e.g., per-analysis context boundaries, database scope, or access controls) are not present in the provided snippets.",
+    "trajectory": [
+      {
+        "turn_index": 0,
+        "tool_name": "single_turn_retrieval",
+        "arguments": {
+          "query": "Trace how a repository/analysis identifier is propagated from the agent request into retrieval and context assembly. Where could repository data leak across analyses, and what code/tests enforce isolation?",
+          "top_k": 5
+        },
+        "observation_preview": "Retrieved 5 files: backend/agent/tools/repository.py, backend/agent/tools/repository.py, backend/intelligence/retrieval/repository_investigator.py",
+        "is_success": true,
+        "prompt_tokens": 296,
+        "completion_tokens": 303,
+        "duration_ms": 98016.57
+      }
+    ],
+    "retrieval_metrics": {
+      "retrieved_files": [
+        "backend/agent/tools/repository.py",
+        "backend/agent/tools/repository.py",
+        "backend/intelligence/retrieval/repository_investigator.py",
+        "backend/intelligence/retrieval/repository_investigator.py",
+        "backend/tests/unit/test_repository_context.py"
+      ],
+      "required_evidence_found": [],
+      "required_evidence_missed": [
+        "backend/agent/context/assembler.py",
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/repository_tools/tools.py"
+      ],
+      "supporting_evidence_found": [],
+      "decoy_evidence_used": [],
+      "evidence_recall": 0.0,
+      "relevant_evidence_precision": 0.0,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "decoy_hit": 0,
+      "decoy_file_rate": 0.0,
+      "cross_repo_files": [],
+      "cross_repo_leakage_rate": 0.0
+    },
+    "tool_efficiency": {
+      "tool_calls": 1,
+      "successful_tool_calls": 1,
+      "failed_tool_calls": 0,
+      "redundant_tool_calls": 0,
+      "unique_files_read": 0,
+      "search_iterations": 0,
+      "tool_success_rate": 1.0,
+      "useful_evidence_returned": 1,
+      "retrieval_success_rate": 1.0,
+      "tool_redundancy_rate": 0.0,
+      "time_to_first_useful_evidence_ms": null,
+      "unnecessary_tool_calls": 1,
+      "invalid_tool_calls": 1,
+      "failed_tool_selections": 0
+    },
+    "citation_metrics": {
+      "citation_presence": true,
+      "cited_files": [
+        "repository_investigator.py",
+        "test_repository_context.py",
+        "repository.py"
+      ],
+      "valid_citations": [],
+      "invalid_citations": [
+        "repository_investigator.py",
+        "test_repository_context.py",
+        "repository.py"
+      ],
+      "citation_correctness": 0.0,
+      "citation_completeness": 0.0
+    },
+    "answer_metrics": {
+      "answer_points_hit": [],
+      "answer_points_missed": [
+        "Agent requests supply repository_id and user_id, which resolve_target_repository_and_analysis maps to the latest completed analysis_id in PostgreSQL.",
+        "ContextAssembler.assemble_context strictly filters all FactStore queries using FactFile.analysis_id == request.analysis_id and FactSymbol.analysis_id == request.analysis_id.",
+        "RepositoryToolLayer scopes all filesystem search, read_file, and retrieval operations to the resolved analysis_id and repository snapshot hash.",
+        "Data could leak if fallback queries search globally across all repositories or if domain concepts hardcode application component names.",
+        "backend/tests/unit/test_repository_context_isolation.py enforces strict isolation by populating dual repositories in an isolated SQLite fixture and verifying that planning for a Python repo never leaks TypeScript files or foreign symbols."
+      ],
+      "correctness": 0.0,
+      "completeness": 0.0,
+      "claims_evaluated": [
+        {
+          "claim_text": "Answer generated without evidence",
+          "referenced_file": null,
+          "is_entailed": false,
+          "entailment_reason": "No code evidence was retrieved in this run."
+        }
+      ],
+      "groundedness": 0.0,
+      "hallucination_rate": 1.0,
+      "judge_score": 0.0,
+      "judge_confidence": 0.5,
+      "judge_reason": "Fallback heuristic: Expecting value: line 10 column 22 (char 546)",
+      "judge_model": "fallback",
+      "judge_prompt_version": "v1"
+    },
+    "execution_status": "SUCCESS",
+    "trajectory_validity": "INSUFFICIENT_EVIDENCE",
+    "primary_failure": "HALLUCINATION",
+    "total_duration_ms": 98016.57,
+    "total_prompt_tokens": 296,
+    "total_completion_tokens": 303,
+    "total_tokens": 599,
+    "error": null
+  }
+]

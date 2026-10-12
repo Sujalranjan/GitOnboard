@@ -170,6 +170,7 @@ def ensure_db_schema_up_to_date(bind_engine):
                 ALTER TABLE agent_state_transitions ALTER COLUMN from_state TYPE VARCHAR USING from_state::VARCHAR;
                 ALTER TABLE agent_state_transitions ALTER COLUMN to_state TYPE VARCHAR USING to_state::VARCHAR;
                 ALTER TABLE implementations ALTER COLUMN repository_id DROP NOT NULL;
+                DROP INDEX IF EXISTS ix_repositories_repository_hash;
             """))
             conn.commit()
     except Exception as e:

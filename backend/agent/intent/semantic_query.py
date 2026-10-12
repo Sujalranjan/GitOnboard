@@ -28,6 +28,7 @@ class SemanticQueryClass(str, Enum):
 class TraversalDirection(str, Enum):
     FORWARD = "FORWARD"
     REVERSE = "REVERSE"
+    BOTH = "BOTH"
 
 
 @dataclass
@@ -113,15 +114,17 @@ def classify_semantic_query(user_requirement: str) -> SemanticQueryIntent:
             confidence=0.95,
         )
 
-    # Reverse Imports: "What files import X?", "Who imports X?", "What files depend on X?", "Which files use X?", "Who depends on X?"
-    if any(re.search(p, req_lower) for p in [
+    # Reverse Imports: "What files import X?", "Who imports X?", "What files depend on X?", "Which files use X?", "Who depends on X?", "Dependency chain of X"
+    if (any(re.search(p, req_lower) for p in [
         r'\b(?:what|which)\s+(?:files|modules|code)\s+(?:import|depend\s+on|use)\s+',
-        r'\b(?:who|what)\s+(?:imports|depends\s+on|uses)\s+',
+        r'\b(?:who|what)\s+(?:(?:directly|indirectly|transitively)\s+(?:and|or)\s+)*(?:directly\s+|indirectly\s+|transitively\s+)*(?:imports|depends\s+on|uses)\s+',
         r'\bimported\s+by\b',
         r'\bdependents?\s+of\b',
         r'\bdependencies\s+(?:on|for)\b',
-    ]) and not any(d in req_lower for d in ["table", "database model", "db model", "database table", "schema"]):
+        r'\bdependency\s+chains?\b',
+    ]) and not any(d in req_lower for d in ["table", "database model", "db model", "database table", "schema"])):
         target = target_file or _extract_subject_target(req_clean, [
+            "dependency chain of", "dependency chain for", "dependency chains of", "dependency chains for", "dependency chain", "dependency chains",
             "import", "imports", "depend on", "depends on", "use", "uses", "imported by", "dependents of", "dependencies on", "dependencies for"
         ])
         return SemanticQueryIntent(
@@ -133,15 +136,19 @@ def classify_semantic_query(user_requirement: str) -> SemanticQueryIntent:
         )
 
     # 4. Check for Calls Forward & Reverse
-    # Reverse Calls (Callers): "What functions call X?", "Who calls X?", "Which functions invoke X?", "Who invokes X?"
+    # Reverse Calls (Callers): "What functions call X?", "Who calls X?", "Which functions invoke X?", "Who invokes X?", "Call paths of X"
     if any(re.search(p, req_lower) for p in [
         r'\b(?:what|which)\s+(?:functions|methods|code|callers)\s+(?:call|invoke|use)\s+',
-        r'\b(?:who|what)\s+(?:calls|invokes)\s+',
+        r'\b(?:who|what)\s+(?:(?:directly|indirectly|transitively)\s+(?:and|or)\s+)*(?:directly\s+|indirectly\s+|transitively\s+)*(?:calls|invokes)\s+',
         r'\bcalled\s+by\b',
         r'\binvoked\s+by\b',
         r'\bcallers\s+of\b',
+        r'\bcall\s+paths?\b',
     ]):
-        target = _extract_subject_target(req_clean, ["call", "calls", "invoke", "invokes", "called by", "invoked by", "callers of"])
+        target = _extract_subject_target(req_clean, [
+            "call path of", "call path for", "call path to", "call paths of", "call paths for", "call paths to", "call path", "call paths",
+            "calls", "call", "invokes", "invoke", "called by", "invoked by", "callers of"
+        ])
         return SemanticQueryIntent(
             query_class=SemanticQueryClass.CALLS_REVERSE,
             target_raw_name=target,
@@ -171,15 +178,17 @@ def classify_semantic_query(user_requirement: str) -> SemanticQueryIntent:
         )
 
     # 5. Check for Inheritance Forward & Reverse
-    # Reverse Inheritance (Subclasses): "What classes inherit from X?", "Which classes extend X?", "Subclasses of X"
+    # Reverse Inheritance (Subclasses): "What classes inherit from X?", "Which classes extend X?", "Subclasses of X", "Who/what inherits X"
     if any(re.search(p, req_lower) for p in [
         r'\b(?:what|which)\s+classes\s+(?:inherit\s+from|extend)\s+',
-        r'\b(?:who|what)\s+(?:inherits\s+from|extends)\s+',
+        r'\b(?:who|what)\s+(?:inherits(?:\s+from)?|extends)\s+',
         r'\bsubclasses\s+of\b',
         r'\bclasses\s+extending\b',
         r'\bclasses\s+inheriting\s+from\b',
     ]):
-        target = _extract_subject_target(req_clean, ["inherit from", "inherits from", "extend", "extends", "subclasses of", "extending"])
+        target = _extract_subject_target(req_clean, [
+            "inherit from", "inherits from", "inherits", "inherit", "extend", "extends", "subclasses of", "extending"
+        ])
         return SemanticQueryIntent(
             query_class=SemanticQueryClass.INHERITS_REVERSE,
             target_raw_name=target,
@@ -257,19 +266,30 @@ def _extract_subject_target(text: str, trigger_phrases: List[str]) -> str:
     clean = text.rstrip("?.! ")
     clean_lower = clean.lower()
 
+    # Pass 1: Try to match phrases where the target symbol follows the phrase (parts[1])
     for phrase in trigger_phrases:
-        if phrase in clean_lower:
-            parts = re.split(re.escape(phrase), clean, flags=re.IGNORECASE)
+        pattern = rf'\b{re.escape(phrase)}\b'
+        if re.search(pattern, clean_lower):
+            parts = re.split(pattern, clean, flags=re.IGNORECASE)
             if len(parts) > 1 and parts[1].strip():
                 candidate = parts[1].strip()
                 # Remove trailing question words / punctuation / relationship verbs
-                candidate = re.split(r'\b(?:have|call|import|invoke|use|from|in|do|does|have\s+been|inherit|inherits|extend|extends)\b', candidate, flags=re.IGNORECASE)[0].strip()
+                candidate = re.split(r'[,;]|\b(?:and\s+what|and\s+which|and\s+how|have|call|calls|import|imports|invoke|invokes|use|uses|from|in|do|does|have\s+been|inherit|inherits|extend|extends)\b', candidate, flags=re.IGNORECASE)[0].strip()
                 candidate = re.sub(r'^(?:the|a|an|this|that|my)\s+', '', candidate, flags=re.IGNORECASE).strip()
                 candidate = candidate.rstrip("?.! ")
                 if candidate:
                     return candidate
-            elif len(parts) > 0 and parts[0].strip():
+
+    # Pass 2: Try to match phrases where the target symbol precedes the phrase (parts[0])
+    for phrase in trigger_phrases:
+        pattern = rf'\b{re.escape(phrase)}\b'
+        if re.search(pattern, clean_lower):
+            parts = re.split(pattern, clean, flags=re.IGNORECASE)
+            if len(parts) > 0 and parts[0].strip():
                 candidate = parts[0].strip()
+                # Ignore if parts[0] still contains relational action verbs
+                if re.search(r'\b(?:calls|invokes|imports|depends\s+on|inherits|extends)\b', candidate, flags=re.IGNORECASE):
+                    continue
                 candidate = re.sub(r'^(?:what|which|who|show|list|tell\s+me)\s+(?:functions|methods|classes|files|modules)?\s*(?:does|do|is|are)?\s*', '', candidate, flags=re.IGNORECASE).strip()
                 candidate = re.sub(r'^(?:the|a|an|this|that|my)\s+', '', candidate, flags=re.IGNORECASE).strip()
                 candidate = candidate.rstrip("?.! ")
@@ -298,7 +318,11 @@ def _extract_fallback_target(text: str) -> str:
         "to", "of", "by", "me", "my", "a", "an", "is", "it", "its", "as", "or", "so",
         "if", "up", "out", "no", "not", "be", "we", "he", "she", "us", "you", "they",
         "them", "would", "could", "should", "shall", "will", "can", "may", "might",
-        "must", "trace", "detail", "describe", "see", "get", "look", "inspect"
+        "must", "trace", "detail", "describe", "see", "get", "look", "inspect",
+        "directly", "indirectly", "transitively", "paths", "path", "chain", "chains",
+        "call", "calls", "called", "calling", "invoke", "invokes", "invoked", "invoking",
+        "import", "imports", "imported", "importing", "depend", "depends", "depended", "depending",
+        "inherit", "inherits", "inherited", "inheriting", "extend", "extends", "extended", "extending"
     }
     tokens = re.findall(r'[a-zA-Z0-9_]+', text)
     significant = [t for t in tokens if len(t) >= 2 and t.lower() not in stop_words]

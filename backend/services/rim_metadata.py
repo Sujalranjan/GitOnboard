@@ -372,7 +372,7 @@ def build_rim_metadata_block(
     if len(current_text) > max_block_chars:
         current_text = current_text[:max_block_chars]
         current_text = current_text.rsplit("\n", 1)[0]  # Remove partial line
-        current_text += f"\n  ... (more relationships available, use query_rim to explore further)"
+        current_text += f"\n  ... (more relationships available, use get_code_relationships to explore further)"
 
     # 5. Build final text with header
     if facts_lines:
@@ -640,7 +640,7 @@ def _build_rim_metadata_block_impl(
     if len(current_text) > max_block_chars:
         current_text = current_text[:max_block_chars]
         current_text = current_text.rsplit("\n", 1)[0]
-        current_text += f"\n  ... (more relationships available, use query_rim to explore further)"
+        current_text += f"\n  ... (more relationships available, use get_code_relationships to explore further)"
 
     # 5. Build final text with header
     if facts_lines:

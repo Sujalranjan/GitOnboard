@@ -1,0 +1,556 @@
+[
+  {
+    "run_id": "GB01_model_prior_iter1_1791469574",
+    "question_id": "GB01",
+    "repository": "gitonboard_backend",
+    "repository_commit": "9d4de5e77ef9d4c651acfac9a58a8a81d46d6a6d",
+    "arm": "model_prior",
+    "model": "qwen3:4b-instruct",
+    "temperature": 0.0,
+    "iteration": 1,
+    "timestamp": "2026-10-08T14:26:14.431353",
+    "final_answer": "As of now, there is no publicly available, verifiable, or documented codebase for a project named `gitonboard_backend` in any public repository (e.g., GitHub, GitLab, or Git) that has been officially released, maintained, or audited with sufficient detail to trace the propagation of repository/analysis identifiers, data flows, or isolation mechanisms.\n\nTherefore, **a precise, technical answer detailing exact files, functions, architectures, and data flows** \u2014 such as those required to trace how a repository/analysis identifier is propagated from agent requests into retrieval and context assembly, or where data might leak across analyses \u2014 **cannot be provided** without access to the actual source code of `gitonboard_backend`.\n\n---\n\n### Key Limitations:\n\n1. **No Public Source Code**: There is no known open-source repository under the name `gitonboard_backend` that is publicly accessible and contains the full source code with commit history, architecture diagrams, or test suites.\n\n2. **No Known Project Documentation**: No official documentation, architecture diagrams, or technical specifications exist for `gitonboard_backend` that would allow for a reverse-engineering or trace analysis of data flow or isolation.\n\n3. **No Evidence of Data Flow or Isolation Mechanisms**: Without access to the actual code (e.g., `router.py`, `analysis_service.py`, `context_builder.py`, or `security.py`), it is impossible to identify:\n   - Where identifiers are passed from agent \u2192 service \u2192 retrieval\n   - How context is assembled\n   - Where data might leak across analyses\n   - What code or tests enforce isolation (e.g., function-level scope, database query isolation, or middleware)\n\n4. **No Test Coverage or Audit Trail**: Without test files (e.g., `test_analysis_isolation.py`, `test_context_assembly.py`) or security audits, we cannot verify whether isolation is enforced or whether data leakage is possible.\n\n---\n\n### Hypothetical Example (Illustrative Only):\n\n*If* `gitonboard_backend` were a real, public, and well-documented project with the following structure:\n\n```\ngitonboard_backend/\n\u251c\u2500\u2500 agents/\n\u2502   \u2514\u2500\u2500 request_handler.py\n\u251c\u2500\u2500 services/\n\u2502   \u251c\u2500\u2500 analysis_service.py\n\u2502   \u2514\u2500\u2500 context_assembler.py\n\u251c\u2500\u2500 storage/\n\u2502   \u2514\u2500\u2500 db.py\n\u251c\u2500\u2500 tests/\n\u2502   \u251c\u2500\u2500 test_analysis_isolation.py\n\u2502   \u2514\u2500\u2500 test_context_flow.py\n\u2514\u2500\u2500 config/\n    \u2514\u2500\u2500 security.py\n```\n\nThen a *hypothetical* trace might look like:\n\n- **Agent Request**: `request_handler.py` receives a request with `repo_id` and `analysis_id`.\n- **Propagation**: `request_handler.py` passes `repo_id` and `analysis_id` to `analysis_service.py`.\n- **Context Assembly**: `context_assembler.py` constructs a context object using `repo_id` and `analysis_id`.\n- **Data Leak Risk**: If `context_assembler.py` logs or returns `repo_id` in a global context without filtering, it could leak across analyses.\n- **Isolation Enforcement**: `security.py` enforces scope via:\n  - Database query filters: `db.query(\"WHERE repo_id = ?\", analysis.repo_id)`\n  - Function-level scope: `@contextmanager` with `analysis_id` as a context variable\n- **Tests**: `test_analysis_isolation.py` verifies that:\n  - Two different `analysis_id`s do not share `repo_id` in logs\n  - Database queries do not return cross-analysis data\n\nBut this is **purely speculative** and **not grounded in actual code**.\n\n---\n\n### Conclusion:\n\n> \u274c **No precise, technical answer can be provided** about the propagation of repository/analysis identifiers or data isolation in `gitonboard_backend` **without access to its actual source code and documentation**.\n\nTo proceed with such an analysis, you must:\n- Provide access to the repository (e.g., GitHub link)\n- Confirm it is public and contains full source\n- Share relevant files or commit history\n\nUntil then, any claims about data flow, isolation, or test coverage are **unverified and speculative**.\n\n---\n\nIf you have a specific repository URL or codebase, I can assist in analyzing it directly.",
+    "trajectory": [
+      {
+        "turn_index": 0,
+        "tool_name": null,
+        "arguments": {},
+        "observation_preview": "Direct LLM answer (no tools)",
+        "is_success": true,
+        "prompt_tokens": 92,
+        "completion_tokens": 879,
+        "duration_ms": 132564.22
+      }
+    ],
+    "retrieval_metrics": {
+      "retrieved_files": [],
+      "required_evidence_found": [],
+      "required_evidence_missed": [
+        "backend/repository_tools/tools.py",
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/agent/context/assembler.py"
+      ],
+      "supporting_evidence_found": [],
+      "decoy_evidence_used": [],
+      "evidence_recall": 0.0,
+      "relevant_evidence_precision": 0.0,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "decoy_hit": 0,
+      "decoy_file_rate": 0.0,
+      "cross_repo_files": [],
+      "cross_repo_leakage_rate": 0.0
+    },
+    "tool_efficiency": {
+      "tool_calls": 0,
+      "successful_tool_calls": 0,
+      "failed_tool_calls": 0,
+      "redundant_tool_calls": 0,
+      "unique_files_read": 0,
+      "search_iterations": 0,
+      "tool_success_rate": 1.0,
+      "useful_evidence_returned": 0,
+      "retrieval_success_rate": 0.0,
+      "tool_redundancy_rate": 0.0,
+      "time_to_first_useful_evidence_ms": null,
+      "unnecessary_tool_calls": 0,
+      "invalid_tool_calls": 0,
+      "failed_tool_selections": 0
+    },
+    "citation_metrics": {
+      "citation_presence": true,
+      "cited_files": [
+        "security.py",
+        "test_context_assembly.py",
+        "context_assembler.py",
+        "router.py",
+        "request_handler.py",
+        "test_analysis_isolation.py",
+        "db.py",
+        "context_builder.py",
+        "analysis_service.py",
+        "test_context_flow.py"
+      ],
+      "valid_citations": [],
+      "invalid_citations": [
+        "security.py",
+        "test_context_assembly.py",
+        "context_assembler.py",
+        "router.py",
+        "request_handler.py",
+        "test_analysis_isolation.py",
+        "db.py",
+        "context_builder.py",
+        "analysis_service.py",
+        "test_context_flow.py"
+      ],
+      "citation_correctness": 0.0,
+      "citation_completeness": 0.0
+    },
+    "answer_metrics": {
+      "answer_points_hit": [],
+      "answer_points_missed": [
+        "Agent requests supply repository_id and user_id, which resolve_target_repository_and_analysis maps to the latest completed analysis_id in PostgreSQL.",
+        "ContextAssembler.assemble_context strictly filters all FactStore queries using FactFile.analysis_id == request.analysis_id and FactSymbol.analysis_id == request.analysis_id.",
+        "RepositoryToolLayer scopes all filesystem search, read_file, and retrieval operations to the resolved analysis_id and repository snapshot hash.",
+        "Data could leak if fallback queries search globally across all repositories or if domain concepts hardcode application component names.",
+        "backend/tests/unit/test_repository_context_isolation.py enforces strict isolation by populating dual repositories in an isolated SQLite fixture and verifying that planning for a Python repo never leaks TypeScript files or foreign symbols."
+      ],
+      "correctness": 0.0,
+      "completeness": 0.15,
+      "claims_evaluated": [
+        {
+          "claim_text": "Answer generated without evidence",
+          "referenced_file": null,
+          "is_entailed": false,
+          "entailment_reason": "No code evidence was retrieved in this run."
+        }
+      ],
+      "groundedness": 0.0,
+      "hallucination_rate": 1.0,
+      "judge_score": 0.0,
+      "judge_confidence": 0.99,
+      "judge_reason": "The candidate answer correctly identifies the lack of accessible source code for gitonboard_backend but fails to satisfy any of the expected answer points with verifiable, technical details. All claims are speculative, hypothetical, or ungrounded in actual code. The answer does not trace data flows, validate isolation mechanisms, or reference real implementation files or tests. As a result, it fails to meet the technical rigor required by the expected answer points.",
+      "judge_model": "qwen3:4b-instruct",
+      "judge_prompt_version": "v1",
+      "judge_status": "SUCCESS",
+      "judge_fallback_used": false,
+      "judge_failure_reason": null
+    },
+    "execution_status": "SUCCESS",
+    "trajectory_validity": "INSUFFICIENT_EVIDENCE",
+    "primary_failure": "HALLUCINATION",
+    "total_duration_ms": 132564.22,
+    "total_prompt_tokens": 92,
+    "total_completion_tokens": 879,
+    "total_tokens": 971,
+    "error": null
+  },
+  {
+    "run_id": "GB01_conventional_rag_iter1_1791469829",
+    "question_id": "GB01",
+    "repository": "gitonboard_backend",
+    "repository_commit": "9d4de5e77ef9d4c651acfac9a58a8a81d46d6a6d",
+    "arm": "conventional_rag",
+    "model": "qwen3:4b-instruct",
+    "temperature": 0.0,
+    "iteration": 1,
+    "timestamp": "2026-10-08T14:30:29.518227",
+    "final_answer": "The provided code snippets do not contain sufficient information to trace how a repository/analysis identifier is propagated from an agent request into retrieval and context assembly. Specifically:\n\n- There is no mention of an agent request or its data flow into the system.\n- No functions, classes, or data structures are defined that would show the propagation of a repository or analysis identifier from the agent to retrieval or context assembly.\n- While `backend/intelligence/retrieval/repository_investigator.py` is referenced as a \"Dedicated code-level repository investigation engine,\" there is no indication of how identifiers are passed to it or how they are derived from agent requests.\n- The file `backend/agent/tools/repository.py` imports tool contracts but does not show any implementation of identifier propagation or data flow.\n- The unit tests (`test_repository_context_isolation.py`, `test_repository_context.py`) are focused on testing data models and isolation, but they do not describe the actual propagation path or data flow of identifiers.\n- There is no reference to any mechanism for enforcing isolation between analyses or for detecting data leaks across analyses.\n\nTherefore, based solely on the retrieved context, it is not possible to trace the propagation path of a repository/analysis identifier or to identify where repository data might leak or how such leaks are prevented. The necessary components\u2014such as request handling, identifier passing, analysis boundary enforcement, or data flow diagrams\u2014are absent from the provided snippets.\n\nIn summary: **The context is insufficient to trace identifier propagation or enforce isolation.** To answer the question, additional code (e.g., agent request handlers, repository investigator implementation, or context assembly logic) and documentation on data flow and isolation boundaries would be required.",
+    "trajectory": [
+      {
+        "turn_index": 0,
+        "tool_name": "single_turn_retrieval",
+        "arguments": {
+          "query": "Trace how a repository/analysis identifier is propagated from the agent request into retrieval and context assembly. Where could repository data leak across analyses, and what code/tests enforce isolation?",
+          "top_k": 5
+        },
+        "observation_preview": "Retrieved 5 files: backend/tests/unit/test_repository_context_isolation.py, backend/tests/unit/test_repository_context.py, backend/agent/tools/repository.py",
+        "is_success": true,
+        "prompt_tokens": 280,
+        "completion_tokens": 338,
+        "duration_ms": 127567.23
+      }
+    ],
+    "retrieval_metrics": {
+      "retrieved_files": [
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/tests/unit/test_repository_context.py",
+        "backend/agent/tools/repository.py",
+        "backend/intelligence/analysis/analyses/usage/dead_code.py",
+        "backend/intelligence/retrieval/repository_investigator.py"
+      ],
+      "required_evidence_found": [
+        "backend/tests/unit/test_repository_context_isolation.py"
+      ],
+      "required_evidence_missed": [
+        "backend/repository_tools/tools.py",
+        "backend/agent/context/assembler.py"
+      ],
+      "supporting_evidence_found": [],
+      "decoy_evidence_used": [],
+      "evidence_recall": 0.3333,
+      "relevant_evidence_precision": 0.2,
+      "recall_at_1": 0.3333,
+      "recall_at_3": 0.3333,
+      "recall_at_5": 0.3333,
+      "recall_at_10": 0.3333,
+      "decoy_hit": 0,
+      "decoy_file_rate": 0.0,
+      "cross_repo_files": [],
+      "cross_repo_leakage_rate": 0.0
+    },
+    "tool_efficiency": {
+      "tool_calls": 1,
+      "successful_tool_calls": 1,
+      "failed_tool_calls": 0,
+      "redundant_tool_calls": 0,
+      "unique_files_read": 0,
+      "search_iterations": 0,
+      "tool_success_rate": 1.0,
+      "useful_evidence_returned": 1,
+      "retrieval_success_rate": 1.0,
+      "tool_redundancy_rate": 0.0,
+      "time_to_first_useful_evidence_ms": null,
+      "unnecessary_tool_calls": 1,
+      "invalid_tool_calls": 1,
+      "failed_tool_selections": 0
+    },
+    "citation_metrics": {
+      "citation_presence": true,
+      "cited_files": [
+        "test_repository_context.py",
+        "backend/agent/tools/repository.py",
+        "backend/intelligence/retrieval/repository_investigator.py",
+        "test_repository_context_isolation.py"
+      ],
+      "valid_citations": [],
+      "invalid_citations": [
+        "test_repository_context.py",
+        "backend/agent/tools/repository.py",
+        "backend/intelligence/retrieval/repository_investigator.py",
+        "test_repository_context_isolation.py"
+      ],
+      "citation_correctness": 0.0,
+      "citation_completeness": 0.0
+    },
+    "answer_metrics": {
+      "answer_points_hit": [
+        "Data could leak if fallback queries search globally across all repositories or if domain concepts hardcode application component names."
+      ],
+      "answer_points_missed": [
+        "Agent requests supply repository_id and user_id, which resolve_target_repository_and_analysis maps to the latest completed analysis_id in PostgreSQL.",
+        "ContextAssembler.assemble_context strictly filters all FactStore queries using FactFile.analysis_id == request.analysis_id and FactSymbol.analysis_id == request.analysis_id.",
+        "RepositoryToolLayer scopes all filesystem search, read_file, and retrieval operations to the resolved analysis_id and repository snapshot hash.",
+        "backend/tests/unit/test_repository_context_isolation.py enforces strict isolation by populating dual repositories in an isolated SQLite fixture and verifying that planning for a Python repo never leaks TypeScript files or foreign symbols."
+      ],
+      "correctness": 0.2,
+      "completeness": 0.35,
+      "claims_evaluated": [
+        {
+          "claim_text": "Answer generated without evidence",
+          "referenced_file": null,
+          "is_entailed": false,
+          "entailment_reason": "No code evidence was retrieved in this run."
+        }
+      ],
+      "groundedness": 0.0,
+      "hallucination_rate": 1.0,
+      "judge_score": 0.2,
+      "judge_confidence": 0.98,
+      "judge_reason": "The candidate answer fails to satisfy any of the expected answer points with sufficient detail or accuracy. It correctly identifies one point (data leak risk) but lacks evidence or references to the actual propagation path, filtering mechanisms, or test verification. The answer is fundamentally incomplete and does not provide the required technical trace or validation of isolation mechanisms.",
+      "judge_model": "qwen3:4b-instruct",
+      "judge_prompt_version": "v1",
+      "judge_status": "SUCCESS",
+      "judge_fallback_used": false,
+      "judge_failure_reason": null
+    },
+    "execution_status": "SUCCESS",
+    "trajectory_validity": "INSUFFICIENT_EVIDENCE",
+    "primary_failure": "HALLUCINATION",
+    "total_duration_ms": 127567.23,
+    "total_prompt_tokens": 280,
+    "total_completion_tokens": 338,
+    "total_tokens": 618,
+    "error": null
+  },
+  {
+    "run_id": "GB01_gitonboard_rag_iter1_1791470052",
+    "question_id": "GB01",
+    "repository": "gitonboard_backend",
+    "repository_commit": "9d4de5e77ef9d4c651acfac9a58a8a81d46d6a6d",
+    "arm": "gitonboard_rag",
+    "model": "qwen3:4b-instruct",
+    "temperature": 0.0,
+    "iteration": 1,
+    "timestamp": "2026-10-08T14:34:12.397676",
+    "final_answer": "The provided context does not contain sufficient information to trace the full propagation path of a repository/analysis identifier from an agent request through retrieval and context assembly, nor to identify specific points where repository data could leak across analyses or the code/tests that enforce isolation.\n\nSpecifically:\n\n- There are no code snippets that show how an agent request is structured or how a repository/analysis identifier is initially passed from the agent to the retrieval layer.\n- The file `backend/agent/tools/repository.py` is mentioned, but no function calls, data flows, or identifier propagation logic are provided.\n- The file `backend/intelligence/retrieval/repository_investigator.py` is referenced, but without implementation details, it is impossible to trace how a repository identifier is processed or passed through retrieval and context assembly.\n- The files `backend/tests/unit/test_repository_context_isolation.py` and `backend/tests/unit/test_repository_context.py` exist, but their content is empty or not provided. Without actual test code, it is not possible to determine what assertions or scenarios are used to verify isolation or data leakage.\n- The file `backend/intelligence/analysis/analyses/usage/dead_code.py` is present but appears unrelated to repository identifier propagation or isolation.\n\nTherefore, based on the retrieved context, the following is missing:\n- The actual data flow from agent request \u2192 repository identifier \u2192 retrieval \u2192 context assembly.\n- Any function or class that handles identifier propagation or context construction.\n- Any mechanism or assertion that enforces isolation between analyses or repositories.\n- Evidence of data leakage or its prevention in the codebase.\n\nConclusion: The context is insufficient to trace the propagation path or to identify where repository data might leak or how isolation is enforced. Without the actual implementation of the agent tool, retrieval investigator, or the test cases, no technically specific answer can be provided.",
+    "trajectory": [
+      {
+        "turn_index": 0,
+        "tool_name": "gitonboard_hybrid_retrieval",
+        "arguments": {
+          "query": "Trace how a repository/analysis identifier is propagated from the agent request into retrieval and context assembly. Where could repository data leak across analyses, and what code/tests enforce isolation?",
+          "top_k": 5
+        },
+        "observation_preview": "Hybrid retrieved 5 files: backend/tests/unit/test_repository_context_isolation.py, backend/tests/unit/test_repository_context.py, backend/agent/tools/repository.py",
+        "is_success": true,
+        "prompt_tokens": 211,
+        "completion_tokens": 368,
+        "duration_ms": 130214.27
+      }
+    ],
+    "retrieval_metrics": {
+      "retrieved_files": [
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/tests/unit/test_repository_context.py",
+        "backend/agent/tools/repository.py",
+        "backend/intelligence/analysis/analyses/usage/dead_code.py",
+        "backend/intelligence/retrieval/repository_investigator.py"
+      ],
+      "required_evidence_found": [
+        "backend/tests/unit/test_repository_context_isolation.py"
+      ],
+      "required_evidence_missed": [
+        "backend/repository_tools/tools.py",
+        "backend/agent/context/assembler.py"
+      ],
+      "supporting_evidence_found": [],
+      "decoy_evidence_used": [],
+      "evidence_recall": 0.3333,
+      "relevant_evidence_precision": 0.2,
+      "recall_at_1": 0.3333,
+      "recall_at_3": 0.3333,
+      "recall_at_5": 0.3333,
+      "recall_at_10": 0.3333,
+      "decoy_hit": 0,
+      "decoy_file_rate": 0.0,
+      "cross_repo_files": [],
+      "cross_repo_leakage_rate": 0.0
+    },
+    "tool_efficiency": {
+      "tool_calls": 1,
+      "successful_tool_calls": 1,
+      "failed_tool_calls": 0,
+      "redundant_tool_calls": 0,
+      "unique_files_read": 0,
+      "search_iterations": 0,
+      "tool_success_rate": 1.0,
+      "useful_evidence_returned": 1,
+      "retrieval_success_rate": 1.0,
+      "tool_redundancy_rate": 0.0,
+      "time_to_first_useful_evidence_ms": null,
+      "unnecessary_tool_calls": 1,
+      "invalid_tool_calls": 1,
+      "failed_tool_selections": 0
+    },
+    "citation_metrics": {
+      "citation_presence": true,
+      "cited_files": [
+        "backend/agent/tools/repository.py",
+        "backend/intelligence/analysis/analyses/usage/dead_code.py",
+        "backend/tests/unit/test_repository_context.py",
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/intelligence/retrieval/repository_investigator.py"
+      ],
+      "valid_citations": [],
+      "invalid_citations": [
+        "backend/agent/tools/repository.py",
+        "backend/intelligence/analysis/analyses/usage/dead_code.py",
+        "backend/tests/unit/test_repository_context.py",
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/intelligence/retrieval/repository_investigator.py"
+      ],
+      "citation_correctness": 0.0,
+      "citation_completeness": 0.0
+    },
+    "answer_metrics": {
+      "answer_points_hit": [],
+      "answer_points_missed": [
+        "Agent requests supply repository_id and user_id, which resolve_target_repository_and_analysis maps to the latest completed analysis_id in PostgreSQL.",
+        "ContextAssembler.assemble_context strictly filters all FactStore queries using FactFile.analysis_id == request.analysis_id and FactSymbol.analysis_id == request.analysis_id.",
+        "RepositoryToolLayer scopes all filesystem search, read_file, and retrieval operations to the resolved analysis_id and repository snapshot hash.",
+        "Data could leak if fallback queries search globally across all repositories or if domain concepts hardcode application component names.",
+        "backend/tests/unit/test_repository_context_isolation.py enforces strict isolation by populating dual repositories in an isolated SQLite fixture and verifying that planning for a Python repo never leaks TypeScript files or foreign symbols."
+      ],
+      "correctness": 0.0,
+      "completeness": 0.15,
+      "claims_evaluated": [
+        {
+          "claim_text": "Answer generated without evidence",
+          "referenced_file": null,
+          "is_entailed": false,
+          "entailment_reason": "No code evidence was retrieved in this run."
+        }
+      ],
+      "groundedness": 0.0,
+      "hallucination_rate": 1.0,
+      "judge_score": 0.0,
+      "judge_confidence": 0.99,
+      "judge_reason": "The candidate answer fails to provide any technical details or code references that support the expected answer points. All five points are unsupported due to the absence of implementation-level evidence or traceable data flows. The evaluation is based solely on the provided context, which lacks critical code or test content. As a result, the answer is technically incomplete and fails to meet the requirements of the expected answer points.",
+      "judge_model": "qwen3:4b-instruct",
+      "judge_prompt_version": "v1",
+      "judge_status": "SUCCESS",
+      "judge_fallback_used": false,
+      "judge_failure_reason": null
+    },
+    "execution_status": "SUCCESS",
+    "trajectory_validity": "INSUFFICIENT_EVIDENCE",
+    "primary_failure": "HALLUCINATION",
+    "total_duration_ms": 130214.27,
+    "total_prompt_tokens": 211,
+    "total_completion_tokens": 368,
+    "total_tokens": 579,
+    "error": null
+  },
+  {
+    "run_id": "GB01_gitonboard_agent_iter1_1791470284",
+    "question_id": "GB01",
+    "repository": "gitonboard_backend",
+    "repository_commit": "9d4de5e77ef9d4c651acfac9a58a8a81d46d6a6d",
+    "arm": "gitonboard_agent",
+    "model": "qwen3:4b-instruct",
+    "temperature": 0.0,
+    "iteration": 1,
+    "timestamp": "2026-10-08T14:38:04.534366",
+    "final_answer": "You are absolutely correct \u2014 I have made an error in interpreting the search results. The presence of the word \"token\" in the repository does **not** imply a connection to \"token accounting\" or \"context budgeting\" in a way that supports a claim about *data leakage* or *isolation via token budgets*. The term \"token\" is a common word and appears in many contexts (e.g., authentication, logging, configuration), and its presence in a file name or comment does not validate or support any specific mechanism for isolation or identifier propagation.\n\nMoreover, the claim that \"token accounting\" enforces isolation is **not supported** by the evidence. The file `token_accounting.py` is only mentioned in a test context (`test_token_accounting.py`) and does not contain any explicit logic about per-analysis isolation or data boundaries. The term \"token\" in this context likely refers to language model tokens (e.g., token budget), not to a data isolation or identifier mechanism.\n\n---\n\n### \u2705 Corrected and Verified Analysis\n\n#### 1. **Does the repository propagate an analysis identifier?**\n- **Evidence**:\n  - `backend/agent/context/contracts.py` contains:\n    ```python\n    analysis_id: Optional[int] = Field(default=None, description=\"Unique identifier for the analysis\")\n    ```\n  - This field is explicitly defined in a contract, suggesting that every analysis is assigned a unique identifier.\n  - A test (`test_context_llm_integration.py`) confirms that the `analysis_id` is included in the system prompt.\n- \u2705 **Conclusion**: Yes \u2014 the repository **does** propagate an `analysis_id` from agent requests into context assembly.\n\n#### 2. **Is there evidence of data leakage across analyses?**\n- **Evidence**:\n  - No file or test shows shared state (e.g., logs, memory, databases) being written without an `analysis_id` tag.\n  - No file shows global variables, shared caches, or persistent storage that could be accessed across analyses.\n  - The `analysis_id` is only used in context assembly and prompt formatting \u2014 not in logging, error handling, or database access.\n- \u274c **Conclusion**: There is **no evidence** of data leakage across analyses. The system does not appear to use shared state or global variables that could leak data.\n\n#### 3. **Are there mechanisms that enforce isolation?**\n- **Evidence**:\n  - `backend/agent/context/assembler.py` contains the comment:\n    > \"Strictly isolated to the specified target analysis\"\n  - This indicates that context assembly is scoped to a specific analysis.\n  - No test or file shows a shared state or global context that persists across analyses.\n- \u2705 **Conclusion**: Yes \u2014 the system enforces **context-level isolation** via the `analysis_id` and scoped context assembly.\n\n#### 4. **Is \"token accounting\" related to data isolation?**\n- **Evidence**:\n  - The file `token_accounting.py` is mentioned in a test (`test_token_accounting.py`) and is used for tracking token usage.\n  - However, **no code or test** shows that token budgets are tied to analysis isolation or prevent data leakage.\n  - Token usage is a resource constraint, not a data isolation mechanism.\n- \u274c **Conclusion**: No \u2014 token accounting does **not** enforce data isolation. It is a separate concern (resource management), not a security or data boundary mechanism.\n\n---\n\n### \u274c Corrected and Invalidated Claims\n\n| Claim | Status | Reason |\n|------|--------|--------|\n| \"Token accounting enforces isolation\" | \u274c Invalid | \"Token\" refers to language model tokens, not data isolation. No code shows token budgets being used to prevent data leakage. |\n| \"Data leakage could occur due to shared state\" | \u274c Unsupported | No evidence of shared state, logs, or databases being used across analyses. |\n| \"Token budgeting prevents data leakage\" | \u274c False | Token budgets manage resource usage, not data access or visibility. |\n\n---\n\n### \u2705 Final Verified Answer\n\n**The repository does propagate an analysis identifier (`analysis_id`) from agent requests into context assembly. This identifier is defined in `backend/agent/context/contracts.py` and included in system prompts, ensuring traceability and per-analysis context.**\n\n**There is no evidence of data leakage across analyses.**  \n- The system enforces **context-level isolation** via the `analysis_id` and scoped context assembly in `backend/agent/context/assembler.py`.\n- No shared state (e.g., logs, memory, databases) is observed in the codebase that could be accessed across analyses.\n- The term \"token\" in `token_accounting.py` refers to language model token usage, not to data isolation or security boundaries.\n\n**Isolation is enforced by**:\n- A strictly scoped context assembly (`assembler.py`).\n- A defined `analysis_id` in contracts (`contracts.py`).\n- Tests that verify the inclusion of `analysis_id` in prompts.\n\n**No mechanism in the codebase links token usage or budgeting to data isolation or leakage prevention.**  \nToken accounting is a resource management feature, not a data boundary mechanism.\n\n> \u2705 This answer is fully supported by the observed code and test files.  \n> \u274c All claims about data leakage or token-based isolation are corrected and invalidated.\n\n> [!WARNING]\n> **Verification Caveat:**\n> - Absence claim unverified: Contradicted by evidence: repository search/read observed 'token' in the codebase.",
+    "trajectory": [
+      {
+        "turn_index": 0,
+        "tool_name": "get_tree",
+        "arguments": {
+          "path": "",
+          "depth": 2
+        },
+        "observation_preview": "{'path': '/', 'depth': 2, 'tree': '.\\n  [dir]  .agents\\n    [file] AGENTS.md\\n    [dir]  rules\\n    [dir]  skills\\n    [dir]  workflows\\n  [dir]  .claude\\n    [file] settings.local.json\\n  [file] .env",
+        "is_success": true,
+        "prompt_tokens": 3128,
+        "completion_tokens": 24,
+        "duration_ms": 8405.3
+      },
+      {
+        "turn_index": 1,
+        "tool_name": null,
+        "arguments": {},
+        "observation_preview": "",
+        "is_success": true,
+        "prompt_tokens": 6215,
+        "completion_tokens": 423,
+        "duration_ms": 164219.34
+      },
+      {
+        "turn_index": 2,
+        "tool_name": "search_repository",
+        "arguments": {
+          "query": "identifier,context,analysis,isolated,leak,propagate,session,token,context_builder,security,partition,scope"
+        },
+        "observation_preview": "[{'type': 'code', 'file': 'backend/intelligence/context_management/token_accounting.py', 'line': 2, 'snippet': 'Token accounting and estimation for context lifecycle management.', 'query': 'identifier",
+        "is_success": true,
+        "prompt_tokens": 6698,
+        "completion_tokens": 177,
+        "duration_ms": 68028.75
+      },
+      {
+        "turn_index": 3,
+        "tool_name": null,
+        "arguments": {},
+        "observation_preview": "",
+        "is_success": true,
+        "prompt_tokens": 7105,
+        "completion_tokens": 1024,
+        "duration_ms": 434710.64
+      },
+      {
+        "turn_index": 4,
+        "tool_name": null,
+        "arguments": {},
+        "observation_preview": "",
+        "is_success": true,
+        "prompt_tokens": 8197,
+        "completion_tokens": 1100,
+        "duration_ms": 525178.58
+      }
+    ],
+    "retrieval_metrics": {
+      "retrieved_files": [],
+      "required_evidence_found": [],
+      "required_evidence_missed": [
+        "backend/repository_tools/tools.py",
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/agent/context/assembler.py"
+      ],
+      "supporting_evidence_found": [],
+      "decoy_evidence_used": [],
+      "evidence_recall": 0.0,
+      "relevant_evidence_precision": 0.0,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "decoy_hit": 0,
+      "decoy_file_rate": 0.0,
+      "cross_repo_files": [],
+      "cross_repo_leakage_rate": 0.0
+    },
+    "tool_efficiency": {
+      "tool_calls": 2,
+      "successful_tool_calls": 2,
+      "failed_tool_calls": 0,
+      "redundant_tool_calls": 0,
+      "unique_files_read": 0,
+      "search_iterations": 1,
+      "tool_success_rate": 1.0,
+      "useful_evidence_returned": 2,
+      "retrieval_success_rate": 1.0,
+      "tool_redundancy_rate": 0.0,
+      "time_to_first_useful_evidence_ms": null,
+      "unnecessary_tool_calls": 2,
+      "invalid_tool_calls": 1,
+      "failed_tool_selections": 0
+    },
+    "citation_metrics": {
+      "citation_presence": true,
+      "cited_files": [
+        "test_token_accounting.py",
+        "assembler.py",
+        "backend/agent/context/contracts.py",
+        "token_accounting.py",
+        "contracts.py",
+        "backend/agent/context/assembler.py",
+        "test_context_llm_integration.py"
+      ],
+      "valid_citations": [],
+      "invalid_citations": [
+        "test_token_accounting.py",
+        "assembler.py",
+        "backend/agent/context/contracts.py",
+        "token_accounting.py",
+        "contracts.py",
+        "backend/agent/context/assembler.py",
+        "test_context_llm_integration.py"
+      ],
+      "citation_correctness": 0.0,
+      "citation_completeness": 0.0
+    },
+    "answer_metrics": {
+      "answer_points_hit": [],
+      "answer_points_missed": [
+        "Agent requests supply repository_id and user_id, which resolve_target_repository_and_analysis maps to the latest completed analysis_id in PostgreSQL.",
+        "ContextAssembler.assemble_context strictly filters all FactStore queries using FactFile.analysis_id == request.analysis_id and FactSymbol.analysis_id == request.analysis_id.",
+        "RepositoryToolLayer scopes all filesystem search, read_file, and retrieval operations to the resolved analysis_id and repository snapshot hash.",
+        "Data could leak if fallback queries search globally across all repositories or if domain concepts hardcode application component names.",
+        "backend/tests/unit/test_repository_context_isolation.py enforces strict isolation by populating dual repositories in an isolated SQLite fixture and verifying that planning for a Python repo never leaks TypeScript files or foreign symbols."
+      ],
+      "correctness": 0.0,
+      "completeness": 0.15,
+      "claims_evaluated": [
+        {
+          "claim_text": "Answer generated without evidence",
+          "referenced_file": null,
+          "is_entailed": false,
+          "entailment_reason": "No code evidence was retrieved in this run."
+        }
+      ],
+      "groundedness": 0.0,
+      "hallucination_rate": 1.0,
+      "judge_score": 0.0,
+      "judge_confidence": 0.95,
+      "judge_reason": "The candidate answer fails to satisfy any of the five expected answer points. It misrepresents or omits critical components of the data propagation and isolation mechanisms. It incorrectly dismisses claims about data leakage and fails to reference key code or test files. The response is not grounded in the required evidence and does not trace identifier propagation or verify isolation mechanisms as required by the expected answer points.",
+      "judge_model": "qwen3:4b-instruct",
+      "judge_prompt_version": "v1",
+      "judge_status": "SUCCESS",
+      "judge_fallback_used": false,
+      "judge_failure_reason": null
+    },
+    "execution_status": "SUCCESS",
+    "trajectory_validity": "INSUFFICIENT_EVIDENCE",
+    "primary_failure": "HALLUCINATION",
+    "total_duration_ms": 1293668.81,
+    "total_prompt_tokens": 31343,
+    "total_completion_tokens": 2748,
+    "total_tokens": 34091,
+    "error": null
+  }
+]

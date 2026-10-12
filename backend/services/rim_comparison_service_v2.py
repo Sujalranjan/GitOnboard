@@ -34,112 +34,32 @@ from backend.agent.context.formatter import RepositoryContextFormatter
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class RetrievalMetrics:
-    """Retrieval-phase metrics."""
-    tool_call_count: int = 0
-    files_retrieved: int = 0
-    symbols_retrieved: int = 0
-    rim_entities_accessed_count: int = 0
-    rim_relationship_types_used: List[str] = field(default_factory=list)
-    retrieval_latency_ms: float = 0.0
-    semantic_degradation: Optional[str] = None  # Reason semantic search unavailable, if any
+from backend.services.rim_comparison_models import (
+    RetrievalMetrics,
+    LLMEfficiencyMetrics,
+    AnswerMetrics,
+    ComparisonSide,
+    RIMTrace,
+    ContextDiff,
+    RIMComparisonResult,
+)
+from backend.services.rim_comparison_metrics import (
+    combine_context_blocks,
+    assemble_comparison_side,
+)
 
-
-@dataclass
-class LLMEfficiencyMetrics:
-    """LLM execution and token metrics (actual + estimated breakdown)."""
-    provider: str = ""
-    model: str = ""
-    actual_prompt_tokens: int = 0
-    actual_completion_tokens: int = 0
-    actual_total_tokens: int = 0
-    estimated_system_tokens: int = 0
-    estimated_rim_tokens: int = 0
-    estimated_source_tokens: int = 0
-    estimated_other_tokens: int = 0
-    token_estimation_method: str = "heuristic"
-    token_estimation_is_approximate: bool = True
-    token_reconciliation_diff: int = 0
-    llm_latency_ms: float = 0.0
-    retrieval_latency_ms: float = 0.0
-    token_counting_latency_ms: float = 0.0
-    total_latency_ms: float = 0.0
-
-
-@dataclass
-class AnswerMetrics:
-    """Holder for manual quality evaluation (auto-filled with None for UI scaffolding)."""
-    correctness: Optional[str] = None
-    grounding: Optional[str] = None
-    notes: str = ""
-
-
-@dataclass
-class ComparisonSide:
-    """Result of one pipeline (with or without RIM)."""
-    answer: str
-    retrieval_metrics: RetrievalMetrics
-    llm_efficiency_metrics: LLMEfficiencyMetrics
-    answer_metrics: AnswerMetrics
-    rim_metadata_block: Optional[str] = None  # None for baseline, facts text for RIM
-    source_context_block: str = ""
-    tool_call_transcript: List[Dict[str, Any]] = field(default_factory=list)
-    stop_reason: str = ""
-
-
-@dataclass
-class RIMTrace:
-    """Comprehensive RIM execution trace showing navigation flow."""
-    enabled: bool = False
-    query: str = ""
-
-    # Initial retrieval anchors
-    anchors: List[Dict[str, Any]] = field(default_factory=list)
-    anchor_count: int = 0
-
-    # Graph expansion
-    expanded_entities: List[Dict[str, Any]] = field(default_factory=list)
-    expansion_count: int = 0
-    graph_depth: int = 0
-    total_nodes_expanded: int = 0
-
-    # Relationships discovered during expansion
-    relationships: List[Dict[str, Any]] = field(default_factory=list)
-    relationship_types: List[str] = field(default_factory=list)
-
-    # Selected context
-    selected_files: List[str] = field(default_factory=list)
-    selected_symbols: List[Dict[str, Any]] = field(default_factory=list)
-
-    # Source locations resolved
-    source_locations: List[Dict[str, Any]] = field(default_factory=list)
-
-    # Legacy fields (preserved for backward compatibility)
-    rim_metadata_seed_entities: List[Dict[str, Any]] = field(default_factory=list)
-    rim_metadata_relationships: List[Dict[str, Any]] = field(default_factory=list)
-    query_rim_call_log: List[Dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass
-class ContextDiff:
-    """Files retrieved, grouped by side."""
-    files_only_without_rim: List[str] = field(default_factory=list)
-    shared_files: List[str] = field(default_factory=list)
-    files_only_with_rim: List[str] = field(default_factory=list)
-
-
-@dataclass
-class RIMComparisonResult:
-    """Complete comparison result for frontend consumption."""
-    without_rim: ComparisonSide
-    with_rim: ComparisonSide
-    repository: str
-    branch: Optional[str] = None
-    commit: Optional[str] = None
-    analysis_id: Optional[int] = None
-    context_diff: ContextDiff = field(default_factory=ContextDiff)
-    trace: RIMTrace = field(default_factory=RIMTrace)
+__all__ = [
+    "RetrievalMetrics",
+    "LLMEfficiencyMetrics",
+    "AnswerMetrics",
+    "ComparisonSide",
+    "RIMTrace",
+    "ContextDiff",
+    "RIMComparisonResult",
+    "RIMComparisonService",
+    "combine_context_blocks",
+    "assemble_comparison_side",
+]
 
 
 class RIMComparisonService:
@@ -237,11 +157,12 @@ class RIMComparisonService:
         """Run baseline analysis only and return comparison side."""
         logger.info(f"[RIM Comparison] Running baseline (no RIM) for: {question}")
 
-        # Select model based on deployment mode
+        # Select model and provider based on deployment mode
         baseline_model = (
             settings.openrouter_model if settings.deployment_type == "PROD"
             else settings.model_local_default  # Use default Qwen model for LOCAL (qwen3:4b-instruct)
         )
+        baseline_provider = "openrouter" if settings.deployment_type == "PROD" else "ollama"
 
         baseline_analysis_service = build_analysis_service(
             llm_service=self.llm_service,
@@ -250,6 +171,7 @@ class RIMComparisonService:
             analysis_id=setup['analysis_id'],
             user_id=self.current_user.id,
             model=baseline_model,
+            provider=baseline_provider,
             tool_layer=setup['tool_layer'],
             rim_metadata_block=setup['repository_context_block'],
             structured_logger=setup['structured_log'],
@@ -287,11 +209,12 @@ class RIMComparisonService:
         combined_rim_block = self._combine_context_blocks(repository_context_block, rim_metadata.text)
         logger.info(f"[RIM Comparison] Running RIM analysis for: {question}")
 
-        # Select model based on deployment mode
+        # Select model and provider based on deployment mode
         rim_model = (
             settings.gemini_model if settings.deployment_type == "PROD"
             else settings.model_local_default  # Use same default Qwen model for LOCAL
         )
+        rim_provider = "gemini" if settings.deployment_type == "PROD" else "ollama"
 
         rim_analysis_service = build_analysis_service(
             llm_service=self.llm_service,
@@ -300,6 +223,7 @@ class RIMComparisonService:
             analysis_id=setup['analysis_id'],
             user_id=self.current_user.id,
             model=rim_model,
+            provider=rim_provider,
             tool_layer=setup['tool_layer'],
             rim_metadata_block=combined_rim_block,
             structured_logger=setup['structured_log'],
@@ -430,11 +354,12 @@ class RIMComparisonService:
         # 3. RUN BASELINE — with repository context (no RIM relationships)
         logger.info(f"[RIM Comparison] Running baseline (no RIM) for: {question}")
 
-        # Select model based on deployment mode
+        # Select model and provider based on deployment mode
         baseline_model = (
             settings.openrouter_model if settings.deployment_type == "PROD"
             else settings.model_local_default  # Use default Qwen model for LOCAL (qwen3:4b-instruct)
         )
+        baseline_provider = "openrouter" if settings.deployment_type == "PROD" else "ollama"
 
         baseline_analysis_service = build_analysis_service(
             llm_service=self.llm_service,
@@ -443,6 +368,7 @@ class RIMComparisonService:
             analysis_id=analysis_id,
             user_id=self.current_user.id,
             model=baseline_model,
+            provider=baseline_provider,
             tool_layer=tool_layer,
             rim_metadata_block=repository_context_block,
             structured_logger=structured_log,
@@ -476,11 +402,12 @@ class RIMComparisonService:
 
         logger.info(f"[RIM Comparison] Running RIM comparison for: {question}")
 
-        # Select model based on deployment mode
+        # Select model and provider based on deployment mode
         rim_model = (
             settings.gemini_model if settings.deployment_type == "PROD"
             else settings.model_local_default  # Use same default Qwen model for LOCAL
         )
+        rim_provider = "gemini" if settings.deployment_type == "PROD" else "ollama"
 
         rim_analysis_service = build_analysis_service(
             llm_service=self.llm_service,
@@ -489,6 +416,7 @@ class RIMComparisonService:
             analysis_id=analysis_id,
             user_id=self.current_user.id,
             model=rim_model,
+            provider=rim_provider,
             tool_layer=tool_layer,
             rim_metadata_block=combined_rim_block,
             structured_logger=structured_log,
@@ -611,139 +539,16 @@ class RIMComparisonService:
         retriever: Optional[HybridRetriever] = None,
     ) -> ComparisonSide:
         """Assemble ComparisonSide from loop result with token accounting."""
-
-        # Compute token accounting
-        actual_prompt_tokens = sum(turn.prompt_tokens for turn in loop_result.turns)
-        actual_completion_tokens = sum(turn.completion_tokens for turn in loop_result.turns)
-        actual_total_tokens = actual_prompt_tokens + actual_completion_tokens
-
-        # In PROD mode, skip token estimation and use API-returned tokens only
-        if settings.deployment_type == "PROD":
-            estimated_system = None
-            estimated_other = None
-            estimated_rim = None
-            estimated_source = None
-            token_counting_ms = 0.0
-            reconciliation_diff = 0
-        else:
-            # Estimate token breakdown (LOCAL mode only)
-            t0_counting = time.perf_counter()
-
-            estimated_system = await count_tokens(prompt_parts.grounding_and_protocol_text, "ollama", "qwen")
-            estimated_other = await count_tokens(prompt_parts.tool_catalog_text + question, "ollama", "qwen")
-            estimated_rim = await count_tokens(rim_metadata_block or "", "ollama", "qwen") if rim_metadata_block else None
-
-            # Source tokens are estimated by accumulating tool observations
-            source_texts = []
-            for turn in loop_result.turns:
-                if turn.tool_observation:
-                    # Use formatted message (actual text sent to LLM) for source token estimation
-                    obs = turn.tool_observation
-                    if obs.get("error"):
-                        source_texts.append(str(obs.get("error")))
-                    else:
-                        # Use the formatted message that was actually sent to the LLM
-                        formatted_msg = obs.get("formatted_message", "")
-                        if formatted_msg:
-                            source_texts.append(formatted_msg)
-
-            estimated_source = await count_tokens("\n".join(source_texts), "ollama", "qwen") if source_texts else None
-
-            token_counting_ms = (time.perf_counter() - t0_counting) * 1000
-
-            # Reconciliation
-            est_total = (estimated_system.count if estimated_system else 0) + \
-                       (estimated_other.count if estimated_other else 0) + \
-                       (estimated_rim.count if estimated_rim else 0) + \
-                       (estimated_source.count if estimated_source else 0)
-            reconciliation_diff = actual_prompt_tokens - est_total
-
-        # Build source context block (concatenation of actual tool observations sent to LLM)
-        source_context_lines = []
-        for turn in loop_result.turns:
-            if turn.tool_call and turn.tool_observation:
-                tool_name = turn.tool_call.get("tool_name", "")
-                # Use formatted message that was actually sent to the LLM
-                obs = turn.tool_observation.get("formatted_message", "")
-                if obs:
-                    source_context_lines.append(f"{obs[:500]}")
-
-        source_context_block = "\n".join(source_context_lines[:100])  # Cap at 100 lines
-
-        # Build tool call transcript
-        tool_call_transcript = [
-            {
-                "turn": turn.turn_index,
-                "tool_name": turn.tool_call.get("tool_name", "") if turn.tool_call else None,
-                "arguments": turn.tool_call.get("arguments", {}) if turn.tool_call else {},
-                "observation_summary": turn.tool_observation.get("formatted_message", "") if turn.tool_observation else ""
-            }
-            for turn in loop_result.turns
-            if turn.tool_call
-        ]
-
-        return ComparisonSide(
-            answer=loop_result.answer,
-            retrieval_metrics=RetrievalMetrics(
-                tool_call_count=loop_result.tool_call_count,
-                files_retrieved=len(loop_result.files_read),
-                symbols_retrieved=len(loop_result.symbols_read),
-                rim_entities_accessed_count=len(loop_result.rim_entities_accessed),
-                rim_relationship_types_used=loop_result.rim_relationship_types_used,
-                retrieval_latency_ms=loop_result.latency_ms.get("tool_total", 0),  # Actual tool execution time only
-                semantic_degradation=retriever.semantic_degradation if retriever and hasattr(retriever, 'semantic_degradation') else None
-            ),
-            llm_efficiency_metrics=LLMEfficiencyMetrics(
-                provider=loop_result.turns[0].provider if loop_result.turns else "",
-                model=loop_result.turns[0].model if loop_result.turns else "",
-                actual_prompt_tokens=actual_prompt_tokens,
-                actual_completion_tokens=actual_completion_tokens,
-                actual_total_tokens=actual_total_tokens,
-                estimated_system_tokens=estimated_system.count if estimated_system else 0,
-                estimated_rim_tokens=estimated_rim.count if estimated_rim else 0,
-                estimated_source_tokens=estimated_source.count if estimated_source else 0,
-                estimated_other_tokens=estimated_other.count if estimated_other else 0,
-                token_estimation_method="api_response" if settings.deployment_type == "PROD" else "heuristic",
-                token_estimation_is_approximate=False if settings.deployment_type == "PROD" else True,
-                token_reconciliation_diff=reconciliation_diff,
-                llm_latency_ms=loop_result.latency_ms.get("llm_total", 0),
-                retrieval_latency_ms=loop_result.latency_ms.get("tool_total", 0),
-                token_counting_latency_ms=token_counting_ms,
-                total_latency_ms=elapsed_ms
-            ),
-            answer_metrics=AnswerMetrics(),
+        return await assemble_comparison_side(
+            question=question,
+            loop_result=loop_result,
+            prompt_parts=prompt_parts,
+            elapsed_ms=elapsed_ms,
             rim_metadata_block=rim_metadata_block,
-            source_context_block=source_context_block,
-            tool_call_transcript=tool_call_transcript,
-            stop_reason=loop_result.stop_reason.value if loop_result.stop_reason else "unknown"
+            retriever=retriever,
         )
 
     @staticmethod
     def _combine_context_blocks(repository_context_block: str, rim_metadata_block: str) -> str:
-        """
-        Combine repository context and RIM metadata blocks for RIM side.
-
-        Args:
-            repository_context_block: Formatted repository context from ContextAssembler
-            rim_metadata_block: RIM relationship facts from graph traversal
-
-        Returns:
-            Combined block with both context types
-        """
-        if not repository_context_block and not rim_metadata_block:
-            return ""
-
-        combined = []
-
-        # Add repository context first
-        if repository_context_block:
-            combined.append(repository_context_block)
-
-        # Add RIM metadata second
-        if rim_metadata_block:
-            combined.append("")
-            combined.append("### RIM_RELATIONSHIPS")
-            combined.append("")
-            combined.append(rim_metadata_block)
-
-        return "\n".join(combined)
+        """Combine repository context and RIM metadata blocks for RIM side."""
+        return combine_context_blocks(repository_context_block, rim_metadata_block)

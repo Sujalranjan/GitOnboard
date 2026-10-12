@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 const BACKEND_URL = process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:8000";
 
 // Create HTTP agents with extended timeouts to override Node.js Undici default 5-minute body timeout
-const httpAgent = new Agent({ keepAliveTimeout: 1800000, requestTimeout: 1800000 });
-const httpsAgent = new HttpsAgent({ keepAliveTimeout: 1800000, requestTimeout: 1800000 });
+const httpAgent = new Agent({ keepAliveTimeout: 1800000, requestTimeout: 1800000 } as any);
+const httpsAgent = new HttpsAgent({ keepAliveTimeout: 1800000, requestTimeout: 1800000 } as any);
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return handleProxy(request, await params);

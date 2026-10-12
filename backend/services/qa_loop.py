@@ -11,14 +11,34 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 from backend.agent.loop.contracts import AgentLoopConfig, StopReason, ToolObservation
 from backend.agent.loop.guardrails import LoopGuardrails
 from backend.ai.service import LLMService
 from backend.ai.schemas import LLMRequest, Message, MessageRole, Tool
+from backend.ai.tokencount.registry import count_full_request
 from backend.config import settings
+from backend.agent.intent.semantic_query import (
+    classify_semantic_query,
+    SemanticQueryClass,
+    TraversalDirection,
+)
+from backend.services.qa_budgeting import (
+    compact_messages_deterministically,
+    derive_provider_budget_profile,
+    extract_read_file_metadata,
+)
+from backend.services.qa_formatters import format_tool_observation
 from backend.services.qa_protocol import QAProtocolAdapter
+from backend.services.qa_validation import (
+    check_evidence_sufficiency,
+    has_retrieval_been_performed,
+    identify_missing_evidence,
+    is_absence_claim,
+    retrieval_evidence_supports_absence,
+    validate_final_answer_against_evidence,
+)
 
 if TYPE_CHECKING:
     from backend.logging.structured_logger import StructuredLogger
@@ -91,8 +111,8 @@ class QALoopResult:
     symbols_read: List[str] = field(default_factory=list)
     files_searched: List[str] = field(default_factory=list)  # from search_code/search_repository
     symbols_searched: List[str] = field(default_factory=list)  # from search_repository
-    rim_entities_accessed: List[Dict[str, Any]] = field(default_factory=list)  # from query_rim only
-    rim_relationship_types_used: List[str] = field(default_factory=list)  # from query_rim only
+    rim_entities_accessed: List[Dict[str, Any]] = field(default_factory=list)  # from get_code_relationships
+    rim_relationship_types_used: List[str] = field(default_factory=list)  # from get_code_relationships
     latency_ms: Dict[str, float] = field(default_factory=dict)  # {"loop_total", "llm_total", "tool_total"}
 
 
@@ -118,6 +138,7 @@ class QALoop:
         config: AgentLoopConfig,
         system_prompt_parts: SystemPromptParts,
         model: Optional[str] = None,
+        provider: Optional[str] = None,
         structured_logger: Optional["StructuredLogger"] = None,
         request_id: Optional[str] = None,
         repository: Optional[str] = None,
@@ -129,6 +150,7 @@ class QALoop:
         self.config = config
         self.system_prompt_parts = system_prompt_parts
         self.model = model
+        self.provider = provider
         self.guardrails = LoopGuardrails(config)
         self.structured_logger = structured_logger
         self.request_id = request_id
@@ -138,6 +160,20 @@ class QALoop:
         # Create protocol adapter with model_id for format-specific parsing (Hermes XML for Qwen, JSON for others)
         self.protocol_adapter = QAProtocolAdapter(model_id=model)
         self.consecutive_malformed_count = 0  # Track malformed responses to terminate early
+        self.verification_retries = 0  # Track validation rejection count to prevent infinite retry loops
+        self.max_verification_retries = 2
+
+    def _parse_response(self, response_text: str) -> Dict[str, Any]:
+        """Backward compatibility helper delegating to protocol_adapter."""
+        return self.protocol_adapter.parse_response(response_text)
+
+    def _get_provider_budget_profile(self) -> Dict[str, Any]:
+        """Derive provider budget profile using modular qa_budgeting helper."""
+        return derive_provider_budget_profile(self.model, self.provider, self.llm_service)
+
+    def _compact_messages_deterministically(self, messages: List[Dict[str, Any]], target_tokens: int) -> List[Dict[str, Any]]:
+        """Deterministic context compaction using modular qa_budgeting helper."""
+        return compact_messages_deterministically(messages, target_tokens)
 
     async def run(self, question: str) -> QALoopResult:
         """
@@ -195,7 +231,12 @@ class QALoop:
                 result.turns.append(turn)
                 if self.on_turn:
                     await self.on_turn(turn)
-                result.answer = turn.raw_model_output
+                answer = self.protocol_adapter.parse_final_synthesis(turn.raw_model_output)
+                if not answer:
+                    answer = turn.raw_model_output
+                # Run fact validation on pre-turn limit final answer and append caveats if needed
+                _, _, caveated = self._validate_final_answer_against_evidence(answer, result)
+                result.answer = caveated
                 break
 
             # 2. Call LLM with current conversation
@@ -203,35 +244,32 @@ class QALoop:
             turn_start = time.perf_counter()
 
             try:
-                # CONTEXT WINDOWING: Keep only recent turns to prevent token explosion
-                # Keep last N turns (each turn = 1-2 messages) to maintain context while avoiding token limit
-                window_size = 6  # Keep last 6 messages (~3 turns of tool-call + tool-response pairs)
-                windowed_messages = messages[-window_size:] if len(messages) > window_size else messages
-                if len(messages) > window_size:
-                    logger.debug(f"[QALoop] Context windowing: keeping last {len(windowed_messages)} of {len(messages)} messages")
+                # PROVIDER-AWARE TOKEN BUDGET & CONTEXT MANAGEMENT
+                profile = self._get_provider_budget_profile()
+                safe_budget = profile["safe_budget"]
+                is_rim = self.mode == "rim"
+                tool_specs = self.tool_dispatch.specs(include_rim=is_rim)
+                schema_tools = _tool_specs_to_schema_tools(tool_specs) if tool_specs else None
 
-                # Build LLMRequest with system prompt as first message
+                # Build draft request with compact state summary
+                sys_text = self.system_prompt_parts.full_text
+                if turn_index > 0:
+                    state_summary = self.guardrails.state.get_compact_summary()
+                    sys_text = f"{sys_text}\n\n{state_summary}"
+
                 llm_messages = [
-                    Message(role=MessageRole.SYSTEM, content=self.system_prompt_parts.full_text),
+                    Message(role=MessageRole.SYSTEM, content=sys_text),
                 ]
-                for msg in windowed_messages:
+                for msg in messages:
                     try:
                         role_str = msg.get("role", "user").lower() if isinstance(msg, dict) else "user"
                         role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
                         content = msg.get("content", "") if isinstance(msg, dict) else str(msg)
-                        # Preserve native tool_calls from providers (e.g., OpenRouter, Gemini)
                         tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else None
                         llm_messages.append(Message(role=role, content=content, tool_calls=tool_calls))
                     except Exception as msg_err:
-                        logger.error(f"[QALoop] Error processing message: {msg_err}, msg type: {type(msg)}")
+                        logger.error(f"[QALoop] Error processing message: {msg_err}")
                         raise
-
-                logger.debug(f"[QALoop] Turn {turn_index}: Built {len(llm_messages)} messages (system + {len(messages)} conversation)")
-
-                # Compute tool specs for this request (needed for native tool-calling providers like Gemini)
-                is_rim = self.mode == "rim"
-                tool_specs = self.tool_dispatch.specs(include_rim=is_rim)
-                schema_tools = _tool_specs_to_schema_tools(tool_specs) if tool_specs else None
 
                 request = LLMRequest(
                     messages=llm_messages,
@@ -240,9 +278,86 @@ class QALoop:
                     max_tokens=settings.llm_max_tokens,
                     tools=schema_tools,
                 )
+
+                # Preflight check: count complete request tokens
+                counted = await count_full_request(request, profile["provider"], profile["model"])
+                # Provider-specific character estimate (e.g. Groq chars / 3.5 heuristic)
+                request_chars = sum(len(m.content or "") for m in request.messages)
+                if request.tools:
+                    request_chars += sum(len(t.name) + len(t.description) + len(str(t.parameters)) for t in request.tools)
+                provider_est_tokens = max(int(request_chars / 3.5), 1)
+
+                effective_preflight_tokens = max(counted.total_tokens, provider_est_tokens)
+                logger.debug(
+                    f"[QALoop] Turn {turn_index}: Preflight count={counted.total_tokens} (provider_est={provider_est_tokens}, "
+                    f"effective={effective_preflight_tokens}) vs safe_budget={safe_budget}"
+                )
+
+                # If request exceeds safe budget under either metric, apply deterministic multi-pass compaction
+                if effective_preflight_tokens > safe_budget and len(messages) > 1:
+                    logger.warning(
+                        f"[QALoop] Turn {turn_index}: Request size (effective={effective_preflight_tokens} tokens) "
+                        f"exceeds safe budget ({safe_budget} tokens). Running deterministic compaction..."
+                    )
+                    compacted_messages = self._compact_messages_deterministically(messages, safe_budget)
+                    # Rebuild messages
+                    llm_messages = [
+                        Message(role=MessageRole.SYSTEM, content=self.system_prompt_parts.full_text),
+                    ]
+                    for msg in compacted_messages:
+                        role_str = msg.get("role", "user").lower() if isinstance(msg, dict) else "user"
+                        role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
+                        content = msg.get("content", "") if isinstance(msg, dict) else str(msg)
+                        tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else None
+                        llm_messages.append(Message(role=role, content=content, tool_calls=tool_calls))
+
+                    request = LLMRequest(
+                        messages=llm_messages,
+                        model=self.model,
+                        temperature=0.2,
+                        max_tokens=settings.llm_max_tokens,
+                        tools=schema_tools,
+                    )
+                    counted_after = await count_full_request(request, profile["provider"], profile["model"])
+                    chars_after = sum(len(m.content or "") for m in request.messages)
+                    if request.tools:
+                        chars_after += sum(len(t.name) + len(t.description) + len(str(t.parameters)) for t in request.tools)
+                    provider_est_after = max(int(chars_after / 3.5), 1)
+                    effective_after = max(counted_after.total_tokens, provider_est_after)
+                    logger.info(
+                        f"[QALoop] Post-compaction request tokens: {effective_preflight_tokens} -> "
+                        f"{effective_after} (counted={counted_after.total_tokens}, est={provider_est_after})"
+                    )
+
                 llm_response = await self.llm_service.generate(request)
                 logger.debug(f"[QALoop] Turn {turn_index}: LLM response ({len(llm_response.content)} chars)")
+                self._context_overflow_retries = 0  # Reset retry counter on success
             except Exception as e:
+                err_str = str(e).lower()
+                is_recoverable_limit = (
+                    "exceeds the available context size" in err_str
+                    or "exceed_context_size_error" in err_str
+                    or "maximum context length" in err_str
+                    or "context length exceeded" in err_str
+                    or "rate_limit_exceeded" in err_str
+                    or "tokens per minute" in err_str
+                    or "tpm" in err_str
+                    or "request too large" in err_str
+                    or "413" in err_str
+                    or "resource_exhausted" in err_str
+                    or getattr(e, "status_code", None) == 413
+                )
+                retries = getattr(self, "_context_overflow_retries", 0)
+                if is_recoverable_limit and retries < 2:
+                    self._context_overflow_retries = retries + 1
+                    logger.warning(
+                        f"[QALoop] Recoverable provider limit/413 detected at turn {turn_index}. "
+                        f"Compacting observations and retrying ({self._context_overflow_retries}/2)..."
+                    )
+                    # Emergency compaction of conversation history
+                    messages = self._compact_messages_deterministically(messages, safe_budget // 2)
+                    continue
+
                 logger.error(f"[QALoop] LLM call failed: {e}", exc_info=True)
                 result.stop_reason = StopReason.MODEL_ERROR
                 result.answer = f"[ERROR] LLM call failed: {str(e)}"
@@ -311,10 +426,10 @@ class QALoop:
             # Log all details to debug for troubleshooting
             elapsed = (time.perf_counter() - loop_start) * 1000
             if parsed["action"] == "tool_call":
-                print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} → tool_call: {parsed.get('tool_name')}")
+                print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} -> tool_call: {parsed.get('tool_name')}")
                 logger.debug(f"[QALoop] Turn {turn_index}: tool={parsed.get('tool_name')}")
             elif parsed["action"] == "final_answer":
-                print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} → FINAL_ANSWER")
+                print(f"[QALoop:DECISION] T+{elapsed:.0f}ms turn={turn_index} -> FINAL_ANSWER")
                 logger.debug(f"[QALoop] Turn {turn_index}: FINAL_ANSWER")
             else:
                 pass
@@ -334,34 +449,55 @@ class QALoop:
                 self.consecutive_malformed_count = 0  # Reset on success
                 answer_candidate = parsed.get("answer", llm_response.content)
 
-                # PHASE 8A VERIFICATION GATE: Enforce retrieval for absence claims
-                if not self._verify_absence_claim(answer_candidate, result):
-                    # Gate violation: absence claim without retrieval
-                    # Force a retrieval attempt
-                    logger.info(f"[VerificationGate] Absence claim rejected; forcing retrieval")
-                    messages.append({
-                        "role": "assistant",
-                        "content": llm_response.content,
-                    })
-                    messages.append({
-                        "role": "user",
-                        "content": "[VERIFICATION REQUIRED] You have claimed repository-wide absence without performing a search. You must search the repository or inspect relevant files before making absence claims. Please perform a search or file inspection to verify your claim.",
-                    })
-                    result.turns.append(turn)
-                    if self.on_turn:
-                        await self.on_turn(turn)
-                    # Continue loop to force retrieval
-                    continue
+                # Parse and clean candidate first using dedicated synthesis parser
+                parsed_candidate = self.protocol_adapter.parse_final_synthesis(answer_candidate)
+                if not parsed_candidate:
+                    parsed_candidate = strip_xml_tags(answer_candidate)
+                    parsed_candidate = extract_json_answer(parsed_candidate)
 
-                # Strip both XML tags and JSON wrappers
-                answer = strip_xml_tags(answer_candidate)
-                answer = extract_json_answer(answer)
-                result.answer = answer
+                # Stage 4 Fact Validation against tool results in the session
+                is_valid, validation_feedback, caveated_answer = self._validate_final_answer_against_evidence(
+                    parsed_candidate, result
+                )
+
+                if not is_valid:
+                    # If verification attempts have not exceeded max retries and turns remain
+                    if self.verification_retries < self.max_verification_retries and turn_index < self.config.max_agent_turns:
+                        self.verification_retries += 1
+                        logger.warning(
+                            f"[ValidationGate] Final answer fact validation failed (attempt {self.verification_retries}/{self.max_verification_retries}); prompting correction"
+                        )
+                        messages.append({
+                            "role": "assistant",
+                            "content": llm_response.content,
+                        })
+                        messages.append({
+                            "role": "user",
+                            "content": validation_feedback or "[VERIFICATION REQUIRED] Your factual claims conflict with repository observations. Please verify or correct them.",
+                        })
+                        result.turns.append(turn)
+                        if self.on_turn:
+                            await self.on_turn(turn)
+                        continue
+                    else:
+                        # Max retries reached: attach caveats and complete gracefully
+                        logger.warning(
+                            f"[ValidationGate] Max verification retries reached ({self.verification_retries}); appending caveats"
+                        )
+                        result.answer = caveated_answer
+                        result.stop_reason = StopReason.COMPLETED_FOR_VERIFICATION
+                        result.turns.append(turn)
+                        if self.on_turn:
+                            await self.on_turn(turn)
+                        break
+
+                # Answer passed validation
+                result.answer = caveated_answer
                 result.stop_reason = StopReason.COMPLETED_FOR_VERIFICATION
                 result.turns.append(turn)
                 if self.on_turn:
                     await self.on_turn(turn)
-                logger.info(f"[QALoop] LLM provided final answer at turn {turn_index}")
+                logger.info(f"[QALoop] LLM provided validated final answer at turn {turn_index}")
                 break
 
             elif parsed["action"] == "tool_call":
@@ -375,7 +511,225 @@ class QALoop:
                 tool_name = tool_call.get("tool_name", "")
                 arguments = tool_call.get("arguments", {})
 
-                # 5. Check guardrails on tool call
+                # 4b. Deterministic Relational Routing:
+                # If question has strong relational intent (e.g. who calls, what calls, who imports, what depends on,
+                # what inherits, call path, dependency chain) and LLM chooses lexical search (search_repository/search_code)
+                # in RIM mode, check if target symbol can be resolved and route to get_code_relationships first.
+                if (
+                    self.mode == "rim"
+                    and tool_name in ("search_repository", "search_code")
+                    and getattr(self.tool_dispatch, "target_resolver", None)
+                    and getattr(self.tool_dispatch, "graph_traverser", None)
+                ):
+                    rel_intent = classify_semantic_query(question)
+                    strong_rel_classes = (
+                        SemanticQueryClass.CALLS_REVERSE,
+                        SemanticQueryClass.CALLS_FORWARD,
+                        SemanticQueryClass.IMPORTS_REVERSE,
+                        SemanticQueryClass.IMPORTS_FORWARD,
+                        SemanticQueryClass.INHERITS_REVERSE,
+                        SemanticQueryClass.INHERITS_FORWARD,
+                        SemanticQueryClass.DATABASE_ACCESS,
+                    )
+                    if rel_intent.query_class in strong_rel_classes and rel_intent.target_raw_name:
+                        resolved_target = self.tool_dispatch.target_resolver.resolve(rel_intent.target_raw_name)
+                        # Also check if lexical search argument query itself matches a known symbol
+                        lexical_query = str(arguments.get("query", "")).strip()
+                        if not resolved_target and lexical_query:
+                            resolved_target = self.tool_dispatch.target_resolver.resolve(lexical_query)
+
+                        if resolved_target:
+                            # Map semantic query class to relationship_type and direction
+                            target_name = getattr(resolved_target, "name", None) or rel_intent.target_raw_name
+                            rel_type_map = {
+                                SemanticQueryClass.CALLS_REVERSE: ("CALLS", "REVERSE"),
+                                SemanticQueryClass.CALLS_FORWARD: ("CALLS", "FORWARD"),
+                                SemanticQueryClass.IMPORTS_REVERSE: ("IMPORTS", "REVERSE"),
+                                SemanticQueryClass.IMPORTS_FORWARD: ("IMPORTS", "FORWARD"),
+                                SemanticQueryClass.INHERITS_REVERSE: ("INHERITS", "REVERSE"),
+                                SemanticQueryClass.INHERITS_FORWARD: ("INHERITS", "FORWARD"),
+                                SemanticQueryClass.DATABASE_ACCESS: ("DATABASE_ACCESS", "REVERSE"),
+                            }
+                            mapped_rel, mapped_dir = rel_type_map.get(
+                                rel_intent.query_class, ("GENERIC", rel_intent.direction.value)
+                            )
+                            # Only reroute if get_code_relationships has not already been queried for this target & relationship
+                            already_queried = any(
+                                t.tool_call
+                                and t.tool_call.get("tool_name") == "get_code_relationships"
+                                and str(t.tool_call.get("arguments", {}).get("entity_name", "")).lower() == target_name.lower()
+                                and str(t.tool_call.get("arguments", {}).get("relationship_type", "")).upper() == mapped_rel
+                                for t in result.turns
+                            )
+                            if not already_queried:
+                                logger.info(
+                                    f"[QALoop:RelationalRouting] Strong relational intent detected ({rel_intent.query_class.value}). "
+                                    f"Deterministically routing '{tool_name}' -> 'get_code_relationships' for entity '{target_name}'."
+                                )
+                                print(
+                                    f"[QALoop:RELATIONAL_ROUTING] turn={turn_index} rerouting {tool_name} -> "
+                                    f"get_code_relationships(entity_name={target_name}, relationship_type={mapped_rel}, direction={mapped_dir})"
+                                )
+                                tool_name = "get_code_relationships"
+                                arguments = {
+                                    "entity_name": target_name,
+                                    "relationship_type": mapped_rel,
+                                    "direction": mapped_dir,
+                                    "scope": "LOCAL",
+                                    "depth": 1,
+                                    "limit": 15,
+                                }
+                                # Update tool_call dict so recording and observations reflect the routed tool
+                                tool_call["tool_name"] = tool_name
+                                tool_call["arguments"] = arguments
+
+                # 4b. Smart read_file unread interval adjustment:
+                # If model requested a range for a file that was partially read (e.g. read 1-96, requested 1-200),
+                # calculate the unread portion (e.g. 97-200) and execute that directly instead of blocking as duplicate!
+                if tool_name == "read_file" and isinstance(arguments, dict) and arguments.get("path"):
+                    r_path = str(arguments.get("path", ""))
+                    r_start = arguments.get("start_line")
+                    r_end = arguments.get("end_line")
+                    if r_start is not None and r_end is not None:
+                        try:
+                            s_int = int(r_start)
+                            e_int = int(r_end)
+                            unread_slice = self.guardrails.state.get_unread_slice_for_request(r_path, s_int, e_int)
+                            if unread_slice is not None:
+                                unread_s, unread_e = unread_slice
+                                if (unread_s, unread_e) != (s_int, e_int):
+                                    logger.info(
+                                        f"[QALoop:SmartRead] Adjusting read_file({r_path}) from {s_int}-{e_int} to "
+                                        f"unread range {unread_s}-{unread_e}."
+                                    )
+                                    arguments["start_line"] = unread_s
+                                    arguments["end_line"] = unread_e
+                                    tool_call["arguments"] = arguments
+                        except (ValueError, TypeError):
+                            pass
+
+                # 5. Check duplicate tool call in current session with state awareness
+                is_sufficient, suff_msg = self.check_evidence_sufficiency(question, result)
+                self.guardrails.state.evidence_sufficient = is_sufficient
+                is_duplicate, duplicate_feedback = self.guardrails.is_duplicate_call(
+                    tool_name, arguments, is_evidence_sufficient=is_sufficient
+                )
+                if is_duplicate:
+                    logger.warning(
+                        f"[QALoop] Duplicate tool call detected at turn {turn_index}: {tool_name} with {arguments}"
+                    )
+                    has_relevant_evidence = is_sufficient or self.guardrails.state.evidence_sufficient or self.guardrails.state.answer_ready
+
+                    if has_relevant_evidence:
+                        # Better duplicate recovery: Branch YES -> Transition directly to final synthesis
+                        logger.info(
+                            f"[QALoop] Duplicate tool call with sufficient evidence at turn {turn_index}; "
+                            f"transitioning directly to final answer synthesis."
+                        )
+                        self.guardrails.state.evidence_sufficient = True
+                        self.guardrails.state.answer_ready = True
+
+                        feedback_msg = duplicate_feedback or (
+                            f"[DUPLICATE TOOL CALL] [EVIDENCE SUFFICIENT] Duplicate call to '{tool_name}' prevented. "
+                            f"Relevant evidence is already collected in your conversation history. "
+                            f"Synthesize and output your final answer now."
+                        )
+                        messages.append({
+                            "role": "assistant",
+                            "content": llm_response.content,
+                        })
+                        messages.append({
+                            "role": "user",
+                            "content": (
+                                f"{suff_msg or '[EVIDENCE SUFFICIENT]'}\n"
+                                f"{feedback_msg}\n"
+                                "Do not make any further tool calls. Please synthesize and output your final answer now."
+                            ),
+                        })
+
+                        turn.tool_call = {"tool_name": tool_name, "arguments": arguments}
+                        turn.tool_observation = {
+                            "tool_name": tool_name,
+                            "success": False,
+                            "error": {"type": "duplicate_call_prevented", "message": feedback_msg},
+                            "data": None,
+                            "formatted_message": feedback_msg,
+                        }
+                        result.turns.append(turn)
+                        if self.on_turn:
+                            await self.on_turn(turn)
+
+                        final_turn = await self._do_final_answer_turn(
+                            turn_index + 1, messages, llm_total_ms, tool_total_ms, loop_start
+                        )
+                        result.turns.append(final_turn)
+                        if self.on_turn:
+                            await self.on_turn(final_turn)
+                        answer = self.protocol_adapter.parse_final_synthesis(final_turn.raw_model_output)
+                        if not answer:
+                            answer = final_turn.raw_model_output
+                        _, _, caveated = self._validate_final_answer_against_evidence(answer, result)
+                        result.answer = caveated
+                        result.stop_reason = StopReason.COMPLETED_FOR_VERIFICATION
+                        break
+                    else:
+                        # Better duplicate recovery: Branch NO -> Use state-aware duplicate feedback and targeted guidance
+                        missing_guidance = identify_missing_evidence(question, result, tool_name, arguments)
+                        base_feedback = duplicate_feedback or f"[DUPLICATE TOOL CALL] You already called '{tool_name}' with these arguments. Do not repeat identical calls."
+                        if missing_guidance and "Do not repeat identical calls" not in missing_guidance:
+                            targeted_feedback = (
+                                f"[DUPLICATE TOOL CALL - EVIDENCE INCOMPLETE]\n"
+                                f"{base_feedback}\n"
+                                f"Missing evidence needed: {missing_guidance}"
+                            )
+                        else:
+                            targeted_feedback = base_feedback
+
+                        assistant_message = {
+                            "role": "assistant",
+                            "content": llm_response.content,
+                        }
+                        if llm_response.tool_calls:
+                            assistant_message["tool_calls"] = [
+                                {
+                                    "type": "function",
+                                    "id": tc.tool_call_id,
+                                    "function": {
+                                        "name": tc.tool_name,
+                                        "arguments": tc.parameters if isinstance(tc.parameters, str) else json.dumps(tc.parameters),
+                                    },
+                                }
+                                for tc in llm_response.tool_calls
+                            ]
+                        messages.append(assistant_message)
+                        messages.append({
+                            "role": "user",
+                            "content": targeted_feedback,
+                        })
+
+                        turn.tool_call = {"tool_name": tool_name, "arguments": arguments}
+                        turn.tool_observation = {
+                            "tool_name": tool_name,
+                            "success": False,
+                            "error": {"type": "duplicate_call_prevented", "message": targeted_feedback},
+                            "data": None,
+                            "formatted_message": targeted_feedback,
+                        }
+                        result.turns.append(turn)
+                        if self.on_turn:
+                            await self.on_turn(turn)
+                        # Do not increment result.tool_call_count because execution was intercepted
+                        continue
+
+                # 5b. Evidence-sufficiency advisory check:
+                # Do NOT forcibly stop or hijack the agent if it is still proposing valid, non-duplicate tool calls.
+                # Evidence sufficiency is purely informational; the LLM remains in control of deciding when to finalize.
+                is_sufficient, suff_msg = self.check_evidence_sufficiency(question, result)
+                if is_sufficient:
+                    self.guardrails.state.evidence_sufficient = True
+                    logger.debug(f"[QALoop] Evidence sufficiency advisory noted at turn {turn_index} (allowing agent tool call to proceed).")
+
+                # 6. Check guardrails on tool call
                 stop_reason, should_warn = self.guardrails.record_tool_call(tool_name, arguments)
                 if stop_reason:
                     logger.warning(f"[QALoop] Tool call limit hit: {stop_reason}")
@@ -398,23 +752,40 @@ class QALoop:
                     result.turns.append(final_turn)
                     if self.on_turn:
                         await self.on_turn(final_turn)
-                    # Parse the final answer response to extract the answer field, then strip XML/JSON tags
-                    parsed_final = self.protocol_adapter.parse_response(final_turn.raw_model_output)
-                    answer_text = parsed_final.get("answer", final_turn.raw_model_output)
-                    # Strip both XML tags and JSON wrappers
-                    answer = strip_xml_tags(answer_text)
-                    answer = extract_json_answer(answer)
-                    result.answer = answer
+                    # Parse the final answer response using dedicated synthesis parser
+                    answer = self.protocol_adapter.parse_final_synthesis(final_turn.raw_model_output)
+                    if not answer:
+                        answer = final_turn.raw_model_output
+                    # Run fact validation on tool-limit final answer and append caveats if needed
+                    _, _, caveated = self._validate_final_answer_against_evidence(answer, result)
+                    result.answer = caveated
                     break
 
-                # 6. Execute tool
+                # 7. Execute tool with pre-calculated content token budget
                 logger.debug(f"[QALoop] Turn {turn_index}: executing tool '{tool_name}'")
                 tool_start = time.perf_counter()
                 loop_elapsed = (tool_start - loop_start) * 1000
                 print(f"[QALoop:EXEC] T+{loop_elapsed:.0f}ms turn={turn_index} executing {tool_name}")
 
+                # Calculate remaining token budget available for tool output before execution
+                profile = self._get_provider_budget_profile()
+                control_res = profile.get("control_reservation", 60)
+                safe_budget = profile["safe_budget"]
+                # Approximate current conversation tokens
+                current_chars = len(self.system_prompt_parts.full_text) + sum(len(m.get("content", "")) for m in messages if isinstance(m, dict))
+                est_current_tokens = int(current_chars / 3.5)
+                # For read_file, ensure a viable minimum token budget (>= 2000 tokens) so normal files (<= 200 lines)
+                # can be inspected cleanly without forced ~25-line micro-clamping. Deterministic compaction handles context window limits.
+                min_tool_floor = 2000 if tool_name == "read_file" else 500
+                remaining_for_tool = max(min_tool_floor, safe_budget - est_current_tokens - control_res)
+
                 try:
-                    tool_observation = self.tool_dispatch.dispatch(tool_name, arguments)
+                    tool_observation = self.tool_dispatch.dispatch(
+                        tool_name,
+                        arguments,
+                        max_content_tokens=remaining_for_tool,
+                        control_reservation_tokens=control_res,
+                    )
                 except Exception as e:
                     logger.error(f"[QALoop] Tool dispatch error: {e}", exc_info=True)
                     tool_observation = ToolObservation(
@@ -427,7 +798,17 @@ class QALoop:
                 tool_elapsed = time.perf_counter() - tool_start
                 tool_total_ms += tool_elapsed * 1000
                 loop_elapsed_after = (time.perf_counter() - loop_start) * 1000
-                print(f"[QALoop:RESULT] T+{loop_elapsed_after:.0f}ms turn={turn_index} {tool_name} → success={tool_observation.success} elapsed={tool_elapsed*1000:.0f}ms")
+                print(f"[QALoop:RESULT] T+{loop_elapsed_after:.0f}ms turn={turn_index} {tool_name} -> success={tool_observation.success} elapsed={tool_elapsed*1000:.0f}ms")
+
+                # Record execution result in guardrails for duplicate detection
+                self.guardrails.record_tool_result(
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    success=tool_observation.success,
+                    data=tool_observation.data,
+                    error=tool_observation.error,
+                    turn_index=turn_index,
+                )
 
                 # Log tool call if structured logger is available
                 if self.structured_logger and self.request_id:
@@ -478,8 +859,8 @@ class QALoop:
                                     symbol_name = item["symbol_name"]
                                     if symbol_name and symbol_name not in result.symbols_searched:
                                         result.symbols_searched.append(symbol_name)
-                elif tool_name == "query_rim" and tool_observation.success:
-                    # Track RIM access from query_rim tool
+                elif tool_name == "get_code_relationships" and tool_observation.success:
+                    # Track RIM access from get_code_relationships tool
                     data = tool_observation.data or {}
                     if data.get("found"):
                         entity_name = arguments.get("entity_name", "")
@@ -514,9 +895,14 @@ class QALoop:
                     ]
                 messages.append(assistant_message)
 
+                obs_content = self._format_tool_observation(tool_name, tool_observation, sanitized_data)
+                is_sufficient, suff_msg = self.check_evidence_sufficiency(question, result)
+                if is_sufficient and suff_msg:
+                    obs_content += f"\n\n{suff_msg}"
+
                 messages.append({
                     "role": "user",
-                    "content": self._format_tool_observation(tool_name, tool_observation, sanitized_data),
+                    "content": obs_content,
                 })
 
                 # Record turn with tool info (include data and formatted message for later reconstruction)
@@ -618,19 +1004,78 @@ class QALoop:
         turn_start = time.perf_counter()
 
         try:
-            # Build LLMRequest with system prompt as first message
+            # Build dedicated synthesis system prompt (do not send the tool-calling prompt!)
+            final_system_prompt = (
+                "You are an expert repository analysis assistant. "
+                "The exploration phase is complete. Based strictly on the conversation history "
+                "and tool observations above, provide a comprehensive, clear, and well-structured Markdown "
+                "answer to the user's initial question. Do NOT attempt to call any tools or output tool syntax. "
+                "Provide only your final answer in Markdown directly."
+            )
             llm_messages = [
-                Message(role=MessageRole.SYSTEM, content=self.system_prompt_parts.full_text),
+                Message(role=MessageRole.SYSTEM, content=final_system_prompt),
             ]
-            for msg in messages:
+
+            # Context windowing: keep initial query and recent turns to prevent token explosion on rate-limited providers,
+            # while ensuring verified file observations from earlier turns are preserved in the synthesis pool.
+            window_size = 10
+            msgs_to_include = messages
+            if len(messages) > window_size and len(messages) > 1:
+                recent_msgs = messages[-(window_size - 1):]
+                # Identify any unique read_file evidence messages from older history not in recent_msgs
+                older_evidence = []
+                recent_ids = {id(m) for m in recent_msgs}
+                seen_evidence_paths = set()
+                # Check recent messages for paths already present
+                for m in recent_msgs:
+                    c = m.get("content", "") if isinstance(m, dict) else str(m)
+                    meta = extract_read_file_metadata(c)
+                    if meta and meta.get("path"):
+                        seen_evidence_paths.add(meta["path"])
+
+                for m in messages[1:-(window_size - 1)]:
+                    if id(m) in recent_ids:
+                        continue
+                    c = m.get("content", "") if isinstance(m, dict) else str(m)
+                    meta = extract_read_file_metadata(c)
+                    # If this older message contains source evidence for a file not in recent messages, preserve it
+                    if meta and meta.get("path") and meta["path"] not in seen_evidence_paths:
+                        older_evidence.append(m)
+                        seen_evidence_paths.add(meta["path"])
+
+                msgs_to_include = [messages[0]] + older_evidence + recent_msgs
+
+            # Enforce provider-aware budgeting on final answer turn as well
+            profile = self._get_provider_budget_profile()
+            safe_budget = profile["safe_budget"]
+
+            # First apply deterministic compaction to msgs_to_include if conversation is heavy
+            msgs_to_include = self._compact_messages_deterministically(msgs_to_include, safe_budget)
+
+            for msg in msgs_to_include:
                 try:
                     role_str = msg.get("role", "user").lower() if isinstance(msg, dict) else "user"
                     role = MessageRole(role_str) if role_str in ["system", "user", "assistant", "tool"] else MessageRole.USER
                     content = msg.get("content", "") if isinstance(msg, dict) else str(msg)
+                    # If content is a tool observation, truncate if excessively long (>2000 chars)
+                    if role == MessageRole.TOOL or "[read_file]" in content or "[search" in content:
+                        if len(content) > 2000:
+                            content = content[:2000] + "\n...[truncated for synthesis]..."
                     llm_messages.append(Message(role=role, content=content))
                 except Exception as msg_err:
                     logger.error(f"[QALoop] Error processing message in final answer turn: {msg_err}")
                     raise
+
+            # Add explicit instruction for final synthesis
+            llm_messages.append(
+                Message(
+                    role=MessageRole.USER,
+                    content=(
+                        "Please provide your complete, final answer in Markdown now based on all the findings "
+                        "and evidence gathered above. Do not call any tools."
+                    ),
+                )
+            )
 
             request = LLMRequest(
                 messages=llm_messages,
@@ -638,7 +1083,62 @@ class QALoop:
                 temperature=0.2,
                 max_tokens=settings.llm_max_tokens,
             )
+
+            # Preflight check on final synthesis request
+            counted_final = await count_full_request(request, profile["provider"], profile["model"])
+            req_chars = sum(len(m.content or "") for m in request.messages)
+            est_tokens_final = max(int(req_chars / 3.5), 1)
+            effective_final = max(counted_final.total_tokens, est_tokens_final)
+            logger.debug(
+                f"[QALoop] Final answer preflight: {effective_final} tokens (counted={counted_final.total_tokens}, "
+                f"est={est_tokens_final}) vs safe_budget={safe_budget}"
+            )
+
+            if effective_final > safe_budget and len(llm_messages) > 2:
+                logger.warning(
+                    f"[QALoop] Final synthesis request ({effective_final} tokens) exceeds safe budget "
+                    f"({safe_budget} tokens). Compacting aggressively for synthesis..."
+                )
+                # Keep system prompt, initial user query, compact summaries, and final instruction
+                emergency_msgs = [llm_messages[0], llm_messages[1]]
+                for m in llm_messages[2:-1]:
+                    c = m.content or ""
+                    if len(c) > 500:
+                        lines = c.splitlines()
+                        hdr = lines[0] if lines else ""
+                        c = f"{hdr}\n... [Evidence summary: {len(lines)} lines] ..."
+                    emergency_msgs.append(Message(role=m.role, content=c))
+                emergency_msgs.append(llm_messages[-1])
+                request.messages = emergency_msgs
+
             llm_response = await self.llm_service.generate(request)
+
+            raw_output = (llm_response.content or "").strip()
+            # Parse final answer using dedicated synthesis parser
+            parsed_answer = self.protocol_adapter.parse_final_synthesis(raw_output)
+
+            # If model returned no content or returned only unexecuted tool calls in final turn, synthesize fallback from observations
+            if not parsed_answer:
+                logger.warning("[QALoop] Final turn produced no usable answer text; synthesizing summary from observations")
+                obs_snippets = []
+                for m in reversed(messages):
+                    content = m.get("content", "") if isinstance(m, dict) else ""
+                    if any(k in content for k in ["[read_file]", "[search", "routes", "export", "class ", "def "]):
+                        lines = [line for line in content.splitlines() if line.strip() and not line.startswith("[")]
+                        if lines:
+                            obs_snippets.append("\n".join(lines[:12]))
+                    if len(obs_snippets) >= 3:
+                        break
+                if obs_snippets:
+                    raw_output = (
+                        "### Key Repository Findings\n\n"
+                        + "\n\n---\n\n".join(reversed(obs_snippets))
+                    )
+                else:
+                    raw_output = "The repository analysis finished. Please review the collected evidence in the session."
+            else:
+                raw_output = parsed_answer
+
         except Exception as e:
             logger.error(f"[QALoop] Final answer LLM call failed: {e}", exc_info=True)
             return QALoopTurn(
@@ -653,361 +1153,49 @@ class QALoop:
 
         return QALoopTurn(
             turn_index=turn_index,
-            raw_model_output=llm_response.content,
-            prompt_tokens=llm_response.usage.prompt_tokens,
-            completion_tokens=llm_response.usage.completion_tokens,
+            raw_model_output=raw_output,
+            prompt_tokens=llm_response.usage.prompt_tokens if llm_response.usage else 0,
+            completion_tokens=llm_response.usage.completion_tokens if llm_response.usage else 0,
             provider=llm_response.provider,
             model=llm_response.model,
             duration_ms=(time.perf_counter() - turn_start) * 1000,
         )
 
     def _has_retrieval_been_performed(self, result: QALoopResult) -> bool:
-        """
-        Check if any repository retrieval has been performed in this execution.
+        """Check if any repository retrieval has been performed in this execution."""
+        return has_retrieval_been_performed(result)
 
-        Verification-gate enforcement: absence claims require actual retrieval evidence.
+    def check_evidence_sufficiency(self, question: str, result: QALoopResult) -> Tuple[bool, Optional[str]]:
+        """Evaluate whether collected evidence is sufficient to answer the question."""
+        return check_evidence_sufficiency(question, result)
 
-        Returns True if: search_repository, read_file, or get_symbol was called and succeeded.
-        """
-        retrieval_tools = ["search_repository", "read_file", "get_symbol", "search_code"]
-
-        for turn in result.turns:
-            if turn.tool_call:
-                tool_name = turn.tool_call.get("tool_name", "")
-                if tool_name in retrieval_tools:
-                    # Check if tool call succeeded
-                    if turn.tool_observation and turn.tool_observation.get("success", False):
-                        return True
-
-        return False
-
-    def _retrieval_evidence_supports_absence(self, result: QALoopResult) -> bool:
-        """
-        Check if the actual retrieval result data supports an absence claim.
-
-        An absence claim is supported by retrieval evidence only if:
-        - Retrieval tools were executed
-        - AND all retrieval results were empty/not-found
-        - AND no positive evidence of the claimed absence entity was discovered
-
-        Returns True if absence is justified by the retrieval evidence.
-        Returns False if retrieval found relevant results (contradicting absence).
-        """
-        retrieval_tools = ["search_repository", "read_file", "get_symbol", "search_code"]
-        found_any_relevant_result = False
-        checked_any_retrieval = False
-
-        for turn in result.turns:
-            if not turn.tool_call or not turn.tool_observation:
-                continue
-
-            tool_name = turn.tool_call.get("tool_name", "")
-            if tool_name not in retrieval_tools:
-                continue
-
-            # Check if retrieval succeeded
-            if not turn.tool_observation.get("success", False):
-                # Failed retrieval doesn't prove absence
-                continue
-
-            checked_any_retrieval = True
-            result_data = turn.tool_observation.get("data", None)
-
-            # Analyze result based on tool type
-            if tool_name == "search_repository":
-                # search_repository returns list of matches
-                if isinstance(result_data, list) and len(result_data) > 0:
-                    # Found relevant results - contradicts absence
-                    found_any_relevant_result = True
-                    break
-
-            elif tool_name == "search_code":
-                # search_code returns list of matches
-                if isinstance(result_data, list) and len(result_data) > 0:
-                    found_any_relevant_result = True
-                    break
-
-            elif tool_name == "get_symbol":
-                # get_symbol returns symbol data or None
-                if result_data is not None and result_data:
-                    # Symbol found - contradicts absence
-                    found_any_relevant_result = True
-                    break
-
-            elif tool_name == "read_file":
-                # read_file returns file content or None
-                if result_data is not None and result_data:
-                    # File found - contradicts absence
-                    found_any_relevant_result = True
-                    break
-
-        # Evidence supports absence only if:
-        # 1. We actually performed retrieval
-        # 2. We found no relevant results
-        if checked_any_retrieval and not found_any_relevant_result:
-            return True
-
-        # If no retrieval was performed, or retrieval found results
-        return False
+    def _retrieval_evidence_supports_absence(self, result: QALoopResult, answer: str = "") -> Tuple[bool, str]:
+        """Check if retrieval evidence supports an absence claim."""
+        return retrieval_evidence_supports_absence(result, answer)
 
     def _is_absence_claim(self, answer: str) -> bool:
-        """
-        Improved heuristic: detect if answer claims repository-wide absence.
+        """Detect if answer claims repository-wide absence."""
+        return is_absence_claim(answer)
 
-        Handles multiple formulations:
-        - Direct negation: "does not X", "there is no X"
-        - Soft negation: "doesn't appear", "seems not to"
-        - Search-qualified: "found no X", "no results"
-        - Question-response: "Is there X?" answered with "No"
-        """
-        answer_lower = answer.lower()
-
-        # Direct negation patterns (primary)
-        direct_negation = [
-            "does not",
-            "doesn't",
-            "do not",
-            "don't",
-            "is not",
-            "isn't",
-            "was not",
-            "wasn't",
-            "are not",
-            "aren't",
-            "no function",
-            "no module",
-            "no package",
-            "no component",
-            "no service",
-            "no feature",
-            "no implementation",
-            "no code",
-            "there is no",
-            "there are no",
-            "there's no",
-        ]
-
-        # Soft/qualified negation (secondary)
-        soft_negation = [
-            "does not appear",
-            "doesn't appear",
-            "appears not",
-            "appears to not",
-            "doesn't seem",
-            "does not seem",
-            "seems not",
-            "unable to find",
-            "cannot find",
-            "could not find",
-            "couldn't find",
-            "found no",
-            "no evidence",
-            "no mention",
-            "no instances",
-            "no references",
-            "not found",
-            "not present",
-            "not implemented",
-            "not detected",
-            "no results",
-        ]
-
-        # Entity context (broadened)
-        entity_context = [
-            "function",
-            "module",
-            "package",
-            "library",
-            "component",
-            "service",
-            "feature",
-            "class",
-            "interface",
-            "method",
-            "implementation",
-            "pattern",
-            "dependency",
-            "tool",
-            "framework",
-            "redis",
-            "database",
-            "cache",
-            "authentication",
-            "reset",
-            "recovery",
-        ]
-
-        repo_context = [
-            "repository",
-            "codebase",
-            "project",
-            "code",
-            "repo",
-            "repository",
-            "this repo",
-            "this project",
-        ]
-
-        # Strategy: Detect absence if:
-        # 1. Direct negation is present
-        # 2. OR soft negation + entity/repo context
-        # This catches most natural absence formulations
-
-        has_direct = any(p in answer_lower for p in direct_negation)
-
-        has_soft = any(p in answer_lower for p in soft_negation)
-        has_context = (
-            any(e in answer_lower for e in entity_context) or
-            any(r in answer_lower for r in repo_context)
-        )
-
-        # Direct negation alone is usually sufficient
-        # OR soft negation WITH entity/repo context
-        return has_direct or (has_soft and has_context)
+    def _validate_final_answer_against_evidence(
+        self, answer: str, result: QALoopResult
+    ) -> Tuple[bool, Optional[str], str]:
+        """Validate factual claims in the final answer against tool results."""
+        return validate_final_answer_against_evidence(answer, result)
 
     def _verify_absence_claim(self, answer: str, result: QALoopResult) -> bool:
-        """
-        Enforcement gate: absence claims must be backed by actual retrieval evidence.
-
-        Returns True if:
-        - Answer does NOT claim absence, OR
-        - Answer claims absence AND retrieval result data genuinely supports it
-
-        Returns False if:
-        - Answer claims absence but retrieval found contradicting evidence, OR
-        - Answer claims absence but no retrieval was performed, OR
-        - Answer claims absence but retrieval result data contradicts the claim
-        """
+        """Enforcement gate: absence claims must be backed by actual retrieval evidence."""
         if not self._is_absence_claim(answer):
-            # Not an absence claim, pass through
             return True
-
-        # This is an absence claim; validate with retrieval evidence
-        if self._retrieval_evidence_supports_absence(result):
-            # Absence claim is backed by actual retrieval evidence (results were empty)
-            return True
-
-        # Absence claim NOT supported by evidence
-        logger.warning(f"[VerificationGate] Absence claim without supporting retrieval evidence: {answer[:100]}...")
-        return False
+        supported, _ = self._retrieval_evidence_supports_absence(result, answer)
+        if not supported:
+            logger.warning(f"[VerificationGate] Absence claim without supporting retrieval evidence: {answer[:100]}...")
+            return False
+        return True
 
     def _format_tool_observation(
         self, tool_name: str, observation: ToolObservation, data: Any
     ) -> str:
-        """Format tool observation for appending to conversation.
+        """Format tool observation for appending to conversation."""
+        return format_tool_observation(tool_name, observation, data)
 
-        Includes both summary and actual data so LLM can reason over results.
-        """
-        if not observation.success:
-            error = observation.error or {}
-            return f"[TOOL ERROR] {tool_name}: {error.get('message', 'unknown error')}"
-
-        # Format with summary + actual data so LLM can use the results
-        if tool_name == "read_file" and isinstance(data, dict):
-            # Check if data was truncated by sanitization
-            if data.get("_truncated"):
-                path = data.get('path', 'unknown file')
-                return (
-                    f"[read_file] FILE TOO LARGE: {path} exceeds size limit.\n\n"
-                    f"SOLUTION: Use one of these approaches:\n"
-                    f"1. search_repository: Find specific functions/classes in the file\n"
-                    f"   Example: search_repository with query 'function_name' or 'class_name'\n"
-                    f"2. read_file with line range: Read specific sections\n"
-                    f"   Example: read_file('{path}', start_line=50, end_line=150)\n"
-                    f"3. get_symbol: Find definitions of specific symbols\n"
-                    f"   Example: get_symbol('MyClass') or get_symbol('my_function')\n\n"
-                    f"These tools will help you locate and read relevant parts without loading the entire file."
-                )
-
-            path = data.get('path', '')
-            start_line = data.get('start_line', 1)
-            end_line = data.get('end_line')  # Don't default to 0 - let it be None if missing
-            total_lines = data.get('total_lines', 0)
-            content = data.get('content', '')
-            raw_text = data.get('raw_text', '')
-
-            # Use actual content if available, otherwise try formatted content
-            actual_content = raw_text or content
-
-            # If end_line is missing, use total_lines
-            if end_line is None:
-                end_line = total_lines or start_line
-
-            summary = f"[read_file] {path} lines {start_line}-{end_line}: {len(actual_content)} chars (total: {total_lines})\n"
-            # Include actual file content so LLM can reason over code
-            if actual_content:
-                # Cap individual file results at 25 KB to prevent context window overflow
-                # Evidence: Turn 8 file exceeded capacity; accumulated files hit 89.6 KB on turn 9
-                MAX_FILE_CONTENT_PER_RESULT = 25 * 1024  # 25 KB
-                if len(actual_content) > MAX_FILE_CONTENT_PER_RESULT:
-                    truncated_content = actual_content[:MAX_FILE_CONTENT_PER_RESULT]
-                    truncation_notice = (
-                        f"\n\n[TRUNCATED: File content exceeded {MAX_FILE_CONTENT_PER_RESULT // 1024} KB limit for LLM context. "
-                        f"Original: {len(actual_content)} chars. To read more:\n"
-                        f"  • Use read_file with a smaller line range (e.g., start_line=100, end_line=200)\n"
-                        f"  • Use search_repository to find specific functions/classes\n"
-                        f"  • Use get_symbol to inspect specific definitions]\n"
-                    )
-                    return summary + truncated_content + truncation_notice
-                return summary + actual_content
-            return summary
-        elif tool_name == "query_rim" and isinstance(data, dict):
-            if not data.get("found"):
-                return f"[query_rim] Entity not found: {data.get('message', '')}"
-            related = data.get("related", [])
-            summary = f"[query_rim] Found {len(related)} related entities:\n"
-            # Include actual entity details so LLM understands relationships
-            for entity in related:
-                name = entity.get("name", "?")
-                entity_type = entity.get("entity_type", "?")
-                location = entity.get("location", "?")
-                line_num = entity.get("line_number", "?")
-                role = entity.get("relationship_role", "?")
-                summary += f"  - {name} ({entity_type}, {location}:{line_num}, role: {role})\n"
-            return summary
-        elif tool_name == "search_repository" and isinstance(data, list):
-            summary = f"[search_repository] Found {len(data)} results:\n"
-            for result in data[:10]:  # Include first 10 results
-                if isinstance(result, dict):
-                    file_path = result.get("file", result.get("path", "?"))
-                    result_type = result.get("type", "")
-                    # For symbol/code results, include additional context
-                    if result_type == "symbol" and "symbol" in result:
-                        summary += f"  - {file_path}: {result['symbol']} (lines {result.get('lines', '?')})\n"
-                    elif result_type == "code" and "line" in result:
-                        snippet = result.get("snippet", "")[:50]
-                        summary += f"  - {file_path}:{result['line']} {snippet}\n"
-                    else:
-                        summary += f"  - {file_path}\n"
-                else:
-                    summary += f"  - {str(result)[:50]}\n"
-            if len(data) > 10:
-                summary += f"  ... and {len(data) - 10} more results available.\n"
-                summary += f"To fetch more: search_repository(query=..., limit=10, offset={len(data[:10])})\n"
-            return summary
-        elif tool_name == "get_symbol" and isinstance(data, list):
-            summary = f"[get_symbol] Found {len(data)} symbols:\n"
-            for symbol in data[:10]:  # Include first 10 symbols
-                name = symbol.get("name", "?") if isinstance(symbol, dict) else str(symbol)[:50]
-                summary += f"  - {name}\n"
-            if len(data) > 10:
-                summary += f"  ... and {len(data) - 10} more symbols\n"
-            return summary
-        elif tool_name == "get_tree" and isinstance(data, dict):
-            # Special handling for tree output - preserve Unicode box drawing characters
-            tree = data.get("tree", "")
-            file_count = data.get("file_count", 0)
-            path = data.get("path", "/")
-            summary = f"[get_tree] {path} ({file_count} files):\n"
-            return summary + tree
-        else:
-            # Generic summary with actual data included
-            import json
-            try:
-                if isinstance(data, (dict, list)):
-                    data_str = json.dumps(data, default=str)[:500]
-                else:
-                    data_str = str(data)[:500]
-            except:
-                data_str = str(data)[:500]
-            return f"[{tool_name}] Result: {data_str}"

@@ -124,13 +124,11 @@ async def build_repository_context(db: Session, repo: Repository, analysis_id: O
         context_parts.append("\nKey Components:")
         top_symbols = db.query(FactSymbol).filter(
             FactSymbol.analysis_id == analysis_id,
-            FactSymbol.type.in_(["class", "interface", "function", "enum"])
+            FactSymbol.symbol_type.in_(["class", "interface", "function", "enum"])
         ).limit(15).all()
 
         for sym in top_symbols:
-            context_parts.append(f"- {sym.name} ({sym.type})")
-            if sym.description:
-                context_parts.append(f"  {sym.description}")
+            context_parts.append(f"- {sym.name} ({sym.symbol_type})")
 
         # 5. Sample files/directories
         context_parts.append("\nSample Files:")
@@ -154,19 +152,26 @@ def get_valid_models() -> Dict[str, str]:
     """
     Return available models based on deployment mode.
 
-    LOCAL mode: Qwen/Ollama models only
-    PROD mode: Cloud providers (Gemini, OpenRouter) with actual model names
+    LOCAL mode: Defaults to local Qwen models, but allows selecting Cloud models (Gemini, Groq, OpenRouter).
+    PROD mode: Cloud providers (Gemini, Groq, OpenRouter) ONLY.
     """
+    cloud_models = {
+        settings.gemini_model: f"Gemini ({settings.gemini_model})",
+        settings.groq_model: f"Groq ({settings.groq_model})",
+        settings.openrouter_model: f"OpenRouter ({settings.openrouter_model})",
+    }
+
     if settings.deployment_type == "PROD":
-        return {
-            settings.gemini_model: f"Gemini ({settings.gemini_model})",
-            settings.openrouter_model: f"OpenRouter ({settings.openrouter_model})",
+        # PROD: Cloud models only
+        return cloud_models
+    else:
+        # LOCAL: Qwen models by default, plus options to choose cloud models (OpenRouter, Groq, Gemini)
+        models = {
+            settings.model_local_fast: "Qwen 3 4B (Local - Fast)",
+            settings.model_local_quality: "Qwen 2.5 Coder 7B (Local - Quality)",
         }
-    else:  # LOCAL or any other mode defaults to local models
-        return {
-            settings.model_local_fast: "Qwen 3 4B (Fast)",
-            settings.model_local_quality: "Qwen 2.5 Coder 7B (Quality)",
-        }
+        models.update(cloud_models)
+        return models
 
 
 VALID_MODELS = get_valid_models()
@@ -193,6 +198,7 @@ class AnalyzeRequest(BaseModel):
     repo_hash: str
     model: str = None
     show_tool_details: bool = True
+    investigation_mode: Optional[str] = "single_agent"  # "single_agent" or "multi_agent"
 
 
 @router.get("/models", response_model=ModelsListResponse)
@@ -237,6 +243,8 @@ def set_model(
     # For cloud models, check that API keys are configured
     if request.model == settings.gemini_model and not os.environ.get("GEMINI_API_KEY"):
         logger.warning(f"Gemini model '{request.model}' selected but GEMINI_API_KEY not configured")
+    if request.model == settings.groq_model and not os.environ.get("GROQ_API_KEY"):
+        logger.warning(f"Groq model '{request.model}' selected but GROQ_API_KEY not configured")
     if request.model == settings.openrouter_model and not os.environ.get("OPENROUTER_API_KEY"):
         logger.warning(f"OpenRouter model '{request.model}' selected but OPENROUTER_API_KEY not configured")
 
@@ -327,8 +335,8 @@ async def analyze_repository_stream(
             if request.model:
                 os.environ["OLLAMA_MODEL"] = model
 
-            # Cloud models use their actual model names (gemini-2.0-flash, gpt-4-turbo, etc.)
-            model_for_llm = None if model in (settings.gemini_model, settings.openrouter_model) else model
+            # Pass explicit model name so downstream QALoop and token counters know the active model
+            model_for_llm = model
 
             # 4. Initialize structured logging
             structured_log = StructuredLogger(session_id=current_user.id, repository=repo_display_name)
@@ -338,7 +346,34 @@ async def analyze_repository_stream(
             # Route to provider based on model selection - NO FALLBACK FOR EXPLICIT MODEL SELECTION
             from backend.ai.service import LLMService
 
-            if model.startswith("qwen"):
+            if model == settings.gemini_model:
+                # Gemini-only service - NO FALLBACK
+                from backend.ai.providers.gemini import GeminiProvider
+                gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+                gemini_provider = GeminiProvider(api_key=gemini_api_key, model=model)
+                llm_service = LLMService(providers=[gemini_provider])
+                selected_provider = "gemini"
+                logger.info(f"[router] Using Gemini provider for model {model}")
+
+            elif model == settings.groq_model:
+                # Groq-only service - NO FALLBACK
+                from backend.ai.providers.groq import GroqProvider
+                groq_api_key = os.environ.get("GROQ_API_KEY", "")
+                groq_provider = GroqProvider(api_key=groq_api_key, model=model)
+                llm_service = LLMService(providers=[groq_provider])
+                selected_provider = "groq"
+                logger.info(f"[router] Using Groq provider for model {model}")
+
+            elif model == settings.openrouter_model:
+                # OpenRouter-only service - NO FALLBACK
+                from backend.ai.providers.openrouter import OpenRouterProvider
+                openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "")
+                openrouter_provider = OpenRouterProvider(api_key=openrouter_api_key, model=model)
+                llm_service = LLMService(providers=[openrouter_provider])
+                selected_provider = "openrouter"
+                logger.info(f"[router] Using OpenRouter provider for model {model}")
+
+            elif model.startswith("qwen"):
                 # Local Qwen model - Ollama-only service
                 from backend.ai.providers.ollama import OllamaProvider
                 ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
@@ -352,27 +387,13 @@ async def analyze_repository_stream(
                     llm_service = LLMService(providers=[primary_provider, fallback_provider])
                 else:
                     llm_service = LLMService(providers=[primary_provider])
+                selected_provider = "ollama"
                 logger.info(f"[router] Using Ollama provider for model {model}")
-
-            elif model == settings.gemini_model:
-                # Gemini-only service - NO FALLBACK
-                from backend.ai.providers.gemini import GeminiProvider
-                gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-                gemini_provider = GeminiProvider(api_key=gemini_api_key, model=model)
-                llm_service = LLMService(providers=[gemini_provider])
-                logger.info(f"[router] Using Gemini provider for model {model}")
-
-            elif model == settings.openrouter_model:
-                # OpenRouter-only service - NO FALLBACK
-                from backend.ai.providers.openrouter import OpenRouterProvider
-                openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "")
-                openrouter_provider = OpenRouterProvider(api_key=openrouter_api_key, model=model)
-                llm_service = LLMService(providers=[openrouter_provider])
-                logger.info(f"[router] Using OpenRouter provider for model {model}")
 
             else:
                 # Unknown model - use default service chain (should not reach here due to validation)
                 llm_service = get_llm_service()
+                selected_provider = llm_service.providers[0].provider_name if getattr(llm_service, "providers", None) else None
                 logger.info(f"[router] Using default cloud provider chain for model {model}")
 
             repo_root = resolve_repo_root(repo_name=repo_display_name, user_id=current_user.id, db=db) if repo else None
@@ -380,17 +401,43 @@ async def analyze_repository_stream(
             # 6. Create event queue for real-time tool visibility
             event_queue: asyncio.Queue = asyncio.Queue()
 
-            async def on_turn_callback(turn: QALoopTurn) -> None:
-                """Called when each turn completes; emits structured events to queue."""
+            async def on_turn_callback(turn_or_event: Any) -> None:
+                """Called when each turn completes or orchestrator emits lifecycle events."""
                 nonlocal total_prompt_tokens, total_completion_tokens
 
                 if not request.show_tool_details:
-                    print(f"[on_turn] show_tool_details=False, skipping event queue")
                     return
 
-                if turn.tool_call:
+                # If orchestrator emitted structured event dictionary directly
+                if isinstance(turn_or_event, dict):
+                    event = dict(turn_or_event)
+                    if "timestamp" not in event:
+                        event["timestamp"] = (datetime.now() - start_time).total_seconds()
+
+                    # Update token totals if token event emitted
+                    if event.get("type") == "token-update":
+                        if "prompt_tokens" in event:
+                            total_prompt_tokens = event["prompt_tokens"]
+                        if "completion_tokens" in event:
+                            total_completion_tokens = event["completion_tokens"]
+
+                    try:
+                        event_queue.put_nowait(event)
+                    except Exception as e:
+                        print(f"[on_turn] ERROR queueing orchestrator event: {e}")
+                    return
+
+
+                # Otherwise standard QALoopTurn object
+                turn = turn_or_event
+                tc_obj = getattr(turn, "tool_call", None) or {}
+                obs_obj = getattr(turn, "tool_observation", None) or {}
+                single_turn_call_id = tc_obj.get("tool_call_id") or obs_obj.get("tool_call_id") or f"turn_{turn.turn_index}"
+
+                if getattr(turn, "tool_call", None):
                     event = {
                         "type": "tool-call",
+                        "tool_call_id": single_turn_call_id,
                         "tool_name": turn.tool_call.get("tool_name"),
                         "arguments": turn.tool_call.get("arguments", {}),
                         "turn_index": turn.turn_index,
@@ -398,16 +445,16 @@ async def analyze_repository_stream(
                     }
                     try:
                         event_queue.put_nowait(event)
-                        print(f"[on_turn] tool-call queued: turn={turn.turn_index} tool={event['tool_name']}")
                     except Exception as e:
                         print(f"[on_turn] ERROR queueing tool-call: {e}")
 
-                if turn.tool_observation:
+                if getattr(turn, "tool_observation", None):
                     event = {
                         "type": "tool-response",
+                        "tool_call_id": single_turn_call_id,
                         "tool_name": turn.tool_observation.get("tool_name"),
                         "success": turn.tool_observation.get("success", False),
-                        "result_summary": turn.tool_observation.get("formatted_message", ""),
+                        "result_summary": turn.tool_observation.get("formatted_message") or turn.tool_observation.get("data", ""),
                         "result_count": len(turn.tool_observation.get("data", [])) if isinstance(turn.tool_observation.get("data"), list) else None,
                         "error": turn.tool_observation.get("error"),
                         "duration_ms": turn.duration_ms,
@@ -416,28 +463,27 @@ async def analyze_repository_stream(
                     }
                     try:
                         event_queue.put_nowait(event)
-                        print(f"[on_turn] tool-response queued: turn={turn.turn_index} tool={event['tool_name']} success={event['success']}")
                     except Exception as e:
                         print(f"[on_turn] ERROR queueing tool-response: {e}")
 
                 # Emit token update after every turn
-                total_prompt_tokens += turn.prompt_tokens
-                total_completion_tokens += turn.completion_tokens
+                total_prompt_tokens += getattr(turn, "prompt_tokens", 0)
+                total_completion_tokens += getattr(turn, "completion_tokens", 0)
                 token_event = {
                     "type": "token-update",
                     "prompt_tokens": total_prompt_tokens,
                     "completion_tokens": total_completion_tokens,
                     "total_tokens": total_prompt_tokens + total_completion_tokens,
-                    "turn_index": turn.turn_index,
+                    "turn_index": getattr(turn, "turn_index", 0),
                     "timestamp": (datetime.now() - start_time).total_seconds(),
                 }
                 try:
                     event_queue.put_nowait(token_event)
-                    print(f"[on_turn] token-update queued: total_tokens={token_event['total_tokens']}")
                 except Exception as e:
                     print(f"[on_turn] ERROR queueing token-update: {e}")
 
-            # 7. Build analysis service using shared factory (eliminates duplication with RIM comparison)
+            # 7. Build analysis service using shared factory
+            service_mode = "multi_agent" if request.investigation_mode == "multi_agent" else "rim"
             analysis_service = build_analysis_service(
                 llm_service=llm_service,
                 db=db,
@@ -445,13 +491,14 @@ async def analyze_repository_stream(
                 analysis_id=analysis_id,
                 user_id=current_user.id,
                 model=model_for_llm,
+                provider=selected_provider,
                 repo_root=repo_root,
                 rim_metadata_block=repo_context or None,
                 on_turn_callback=on_turn_callback,
                 structured_logger=structured_log,
                 request_id=request_id,
                 repository=repo_display_name,
-                mode="rim",
+                mode=service_mode,
             )
 
             # Run analysis as background task
@@ -466,16 +513,22 @@ async def analyze_repository_stream(
             print(f"[stream_generator] Starting event drain loop, analysis_task.done()={loop_task.done()}")
 
             try:
+                last_keepalive = time.time()
                 while not loop_task.done():
                     try:
-                        # Check for queued events (non-blocking with timeout to prevent stall)
+                        # Check for queued events with short timeout
                         try:
                             event = event_queue.get_nowait()
                         except asyncio.QueueEmpty:
-                            # No events, yield control briefly
-                            await asyncio.sleep(0.01)
+                            now = time.time()
+                            # Emit SSE keepalive comment every 15s to keep proxy/Undici socket and body alive
+                            if now - last_keepalive >= 15.0:
+                                last_keepalive = now
+                                yield ": keepalive\n\n"
+                            await asyncio.sleep(0.05)
                             continue
 
+                        last_keepalive = time.time()
                         try:
                             json_str = json.dumps(event)
                             events_yielded += 1
@@ -540,4 +593,12 @@ async def analyze_repository_stream(
             logger.error(f"Error in analyze_repository_stream: {e}", exc_info=True)
             yield f"data: {json.dumps({'type': 'error', 'content': format_error_message(e)})}\n\n"
 
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

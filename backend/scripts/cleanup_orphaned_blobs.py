@@ -21,48 +21,48 @@ def cleanup_orphaned_blobs():
 
     db = SessionLocal()
     try:
-        # Get all repository IDs from database
-        repos = db.query(Repository.id).all()
-        db_repo_ids = {r[0] for r in repos}
+        # Get all repository IDs and UUID hashes from database
+        repos = db.query(Repository).all()
+        db_identifiers = set()
+        for r in repos:
+            db_identifiers.add(str(r.id))
+            if r.repository_hash:
+                db_identifiers.add(str(r.repository_hash))
 
-        print(f"[Database] Found {len(db_repo_ids)} repositories: {sorted(db_repo_ids)}")
+        print(f"[Database] Found {len(repos)} repositories in database")
 
         # Get storage and list all repository folders
         storage = get_storage()
         all_blobs = list(storage.list_objects(prefix="repositories/"))
 
-        # Extract unique repository IDs from blob paths
-        blob_repo_ids = set()
+        # Extract unique repository prefixes from blob paths
+        blob_prefixes = set()
         for blob_name in all_blobs:
-            # blob_name format: "repositories/1/snapshots/..."
+            # blob_name format: "repositories/{hash_or_id}/snapshots/..."
             parts = blob_name.split("/")
             if len(parts) >= 2 and parts[0] == "repositories":
-                try:
-                    repo_id = int(parts[1])
-                    blob_repo_ids.add(repo_id)
-                except ValueError:
-                    pass
+                blob_prefixes.add(parts[1])
 
-        print(f"[Blob Storage] Found {len(blob_repo_ids)} repository IDs: {sorted(blob_repo_ids)}")
+        print(f"[Blob Storage] Found {len(blob_prefixes)} repository prefixes: {sorted(blob_prefixes)}")
 
-        # Find orphaned repository IDs (in blobs but not in database)
-        orphaned_ids = blob_repo_ids - db_repo_ids
+        # Find orphaned repository prefixes (in blobs but not in database)
+        orphaned_prefixes = blob_prefixes - db_identifiers
 
-        if not orphaned_ids:
+        if not orphaned_prefixes:
             print("\n✅ No orphaned repositories found!")
             return
 
-        print(f"\n⚠️  Found {len(orphaned_ids)} orphaned repository IDs: {sorted(orphaned_ids)}")
+        print(f"\n⚠️  Found {len(orphaned_prefixes)} orphaned repository prefixes: {sorted(orphaned_prefixes)}")
 
         # Show what will be deleted
-        for repo_id in sorted(orphaned_ids):
-            prefix = f"repositories/{repo_id}/"
+        for prefix_key in sorted(orphaned_prefixes):
+            prefix = f"repositories/{prefix_key}/"
             blobs_to_delete = [b for b in all_blobs if b.startswith(prefix)]
-            print(f"\n  Repository {repo_id}:")
+            print(f"\n  Repository {prefix_key}:")
             print(f"    - Blobs to delete: {len(blobs_to_delete)}")
 
         # Confirm before deletion
-        user_input = input(f"\nDelete {len(orphaned_ids)} orphaned repositories? (yes/no): ").strip().lower()
+        user_input = input(f"\nDelete {len(orphaned_prefixes)} orphaned repositories? (yes/no): ").strip().lower()
 
         if user_input != "yes":
             print("Cancelled.")
@@ -70,9 +70,9 @@ def cleanup_orphaned_blobs():
 
         # Delete orphaned blobs
         total_deleted = 0
-        for repo_id in sorted(orphaned_ids):
-            prefix = f"repositories/{repo_id}/"
-            print(f"\nDeleting repository {repo_id}...")
+        for prefix_key in sorted(orphaned_prefixes):
+            prefix = f"repositories/{prefix_key}/"
+            print(f"\nDeleting repository {prefix_key}...")
             deleted_count = storage.delete_prefix(prefix)
             print(f"  ✓ Deleted {deleted_count} blobs")
             total_deleted += deleted_count

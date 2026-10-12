@@ -42,12 +42,18 @@ from backend.models.repository import Repository
 logger = logging.getLogger(__name__)
 
 
-def _delete_blob_storage(repository_id: int) -> None:
+def _delete_blob_storage(repository_id: int, repository_hash: Optional[str] = None) -> None:
     try:
         from backend.storage import get_storage
         storage = get_storage()
-        deleted = storage.delete_prefix(f"repositories/{repository_id}/")
-        logger.info(f"Deleted {deleted} blob(s) under repositories/{repository_id}/")
+        prefixes = []
+        if repository_hash:
+            prefixes.append(f"repositories/{repository_hash}/")
+        prefixes.append(f"repositories/{repository_id}/")
+        for prefix in prefixes:
+            deleted = storage.delete_prefix(prefix)
+            if deleted:
+                logger.info(f"Deleted {deleted} blob(s) under {prefix}")
     except Exception as e:
         logger.warning(f"Blob storage cleanup failed for repository {repository_id}: {e}")
 
@@ -117,6 +123,6 @@ def delete_repository_state(repo: Repository, repo_name: str) -> None:
     database-side Analysis/FactFile/etc. rows). Never raises — a cleanup failure here
     must not prevent the user's delete request from completing, but is always logged.
     """
-    _delete_blob_storage(repo.id)
+    _delete_blob_storage(repo.id, getattr(repo, "repository_hash", None))
     _delete_worktrees(repo.id, repo_name)
     _delete_local_repo_cache(repo_name)

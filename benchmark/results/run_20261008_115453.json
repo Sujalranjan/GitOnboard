@@ -1,0 +1,416 @@
+[
+  {
+    "run_id": "GB01_model_prior_iter1_1791459982",
+    "question_id": "GB01",
+    "repository": "gitonboard_backend",
+    "repository_commit": "9d4de5e77ef9d4c651acfac9a58a8a81d46d6a6d",
+    "arm": "model_prior",
+    "model": "qwen3:4b-instruct",
+    "temperature": 0.0,
+    "iteration": 1,
+    "timestamp": "2026-10-08T11:46:22.349983",
+    "final_answer": "As of now, there is no publicly available, verifiable, or documented codebase for a project named `gitonboard_backend` in any public repository (e.g., GitHub, GitLab, or Git) that has been officially released, maintained, or audited with sufficient detail to trace the propagation of repository/analysis identifiers, data flows, or isolation mechanisms.\n\nTherefore, **a precise, technical answer detailing exact files, functions, architectures, and data flows** \u2014 such as those required to trace how a repository/analysis identifier is propagated from agent requests into retrieval and context assembly, or where data might leak across analyses \u2014 **cannot be provided** without access to the actual source code of `gitonboard_backend`.\n\n---\n\n### Key Limitations:\n\n1. **No Public Source Code**: There is no known open-source repository under the name `gitonboard_backend` that is publicly accessible and contains the full source code with commit history, architecture diagrams, or test suites.\n\n2. **No Known Project Documentation**: No official documentation, architecture diagrams, or technical specifications exist for `gitonboard_backend` that would allow for a reverse-engineering or trace analysis of data flow or isolation.\n\n3. **No Evidence of Data Flow or Isolation Mechanisms**: Without access to the actual code (e.g., `router.py`, `analysis_service.py`, `context_builder.py`, or `security.py`), it is impossible to identify:\n   - Where identifiers are passed from agent \u2192 service \u2192 retrieval\n   - How context is assembled\n   - Where data might leak across analyses\n   - What code or tests enforce isolation (e.g., function-level scope, database query isolation, or middleware)\n\n4. **No Test Coverage or Audit Trail**: Without test files (e.g., `test_analysis_isolation.py`, `test_context_assembly.py`) or security audits, we cannot verify whether isolation is enforced or whether data leakage is possible.\n\n---\n\n### Hypothetical Example (Illustrative Only):\n\n*If* `gitonboard_backend` were a real, public, and well-documented project with the following structure:\n\n```\ngitonboard_backend/\n\u251c\u2500\u2500 agents/\n\u2502   \u2514\u2500\u2500 request_handler.py\n\u251c\u2500\u2500 services/\n\u2502   \u251c\u2500\u2500 analysis_service.py\n\u2502   \u2514\u2500\u2500 context_assembler.py\n\u251c\u2500\u2500 storage/\n\u2502   \u2514\u2500\u2500 db.py\n\u251c\u2500\u2500 tests/\n\u2502   \u251c\u2500\u2500 test_analysis_isolation.py\n\u2502   \u2514\u2500\u2500 test_context_flow.py\n\u2514\u2500\u2500 config/\n    \u2514\u2500\u2500 security.py\n```\n\nThen a *hypothetical* trace might look like:\n\n- **Agent Request**: `request_handler.py` receives a request with `repo_id` and `analysis_id`.\n- **Propagation**: `request_handler.py` passes `repo_id` and `analysis_id` to `analysis_service.py`.\n- **Context Assembly**: `context_assembler.py` constructs a context object using `repo_id` and `analysis_id`.\n- **Data Leak Risk**: If `context_assembler.py` logs or returns `repo_id` in a global context without filtering, it could leak across analyses.\n- **Isolation Enforcement**: `security.py` enforces scope via:\n  - Database query filters: `db.query(\"WHERE repo_id = ?\", analysis.repo_id)`\n  - Function-level scope: `@contextmanager` with `analysis_id` as a context variable\n- **Tests**: `test_analysis_isolation.py` verifies that:\n  - Two different `analysis_id`s do not share `repo_id` in logs\n  - Database queries do not return cross-analysis data\n\nBut this is **purely speculative** and **not grounded in actual code**.\n\n---\n\n### Conclusion:\n\n> \u274c **No precise, technical answer can be provided** about the propagation of repository/analysis identifiers or data isolation in `gitonboard_backend` **without access to its actual source code and documentation**.\n\nTo proceed with such an analysis, you must:\n- Provide access to the repository (e.g., GitHub link)\n- Confirm it is public and contains full source\n- Share relevant files or commit history\n\nUntil then, any claims about data flow, isolation, or test coverage are **unverified and speculative**.\n\n---\n\nIf you have a specific repository URL or codebase, I can assist in analyzing it directly.",
+    "trajectory": [
+      {
+        "turn_index": 0,
+        "tool_name": null,
+        "arguments": {},
+        "observation_preview": "Direct LLM answer (no tools)",
+        "is_success": true,
+        "prompt_tokens": 92,
+        "completion_tokens": 879,
+        "duration_ms": 123596.48
+      }
+    ],
+    "retrieval_metrics": {
+      "retrieved_files": [],
+      "required_evidence_found": [],
+      "required_evidence_missed": [
+        "backend/agent/context/assembler.py",
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/repository_tools/tools.py"
+      ],
+      "supporting_evidence_found": [],
+      "decoy_evidence_used": [],
+      "evidence_recall": 0.0,
+      "relevant_evidence_precision": 0.0,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "decoy_hit": 0,
+      "decoy_file_rate": 0.0,
+      "cross_repo_files": [],
+      "cross_repo_leakage_rate": 0.0
+    },
+    "tool_efficiency": {
+      "tool_calls": 0,
+      "successful_tool_calls": 0,
+      "failed_tool_calls": 0,
+      "redundant_tool_calls": 0,
+      "unique_files_read": 0,
+      "search_iterations": 0,
+      "tool_success_rate": 1.0,
+      "tool_redundancy_rate": 0.0,
+      "time_to_first_useful_evidence_ms": null,
+      "unnecessary_tool_calls": 0,
+      "invalid_tool_calls": 0,
+      "failed_tool_selections": 0
+    },
+    "citation_metrics": {
+      "citation_presence": true,
+      "cited_files": [
+        "context_builder.py",
+        "analysis_service.py",
+        "security.py",
+        "router.py",
+        "test_context_assembly.py",
+        "request_handler.py",
+        "db.py",
+        "test_context_flow.py",
+        "context_assembler.py",
+        "test_analysis_isolation.py"
+      ],
+      "valid_citations": [
+        "context_builder.py",
+        "analysis_service.py",
+        "security.py",
+        "router.py",
+        "test_context_assembly.py",
+        "request_handler.py",
+        "db.py",
+        "test_context_flow.py",
+        "context_assembler.py",
+        "test_analysis_isolation.py"
+      ],
+      "invalid_citations": [],
+      "citation_correctness": 1.0,
+      "citation_completeness": 0.0
+    },
+    "answer_metrics": {
+      "answer_points_hit": [],
+      "answer_points_missed": [
+        "Agent requests supply repository_id and user_id, which resolve_target_repository_and_analysis maps to the latest completed analysis_id in PostgreSQL.",
+        "ContextAssembler.assemble_context strictly filters all FactStore queries using FactFile.analysis_id == request.analysis_id and FactSymbol.analysis_id == request.analysis_id.",
+        "RepositoryToolLayer scopes all filesystem search, read_file, and retrieval operations to the resolved analysis_id and repository snapshot hash.",
+        "Data could leak if fallback queries search globally across all repositories or if domain concepts hardcode application component names.",
+        "backend/tests/unit/test_repository_context_isolation.py enforces strict isolation by populating dual repositories in an isolated SQLite fixture and verifying that planning for a Python repo never leaks TypeScript files or foreign symbols."
+      ],
+      "correctness": 0.0,
+      "completeness": 0.15,
+      "claims_evaluated": [
+        {
+          "claim_text": "Answer generated without evidence",
+          "referenced_file": null,
+          "is_entailed": false,
+          "entailment_reason": "No code evidence was retrieved in this run."
+        }
+      ],
+      "groundedness": 0.0,
+      "hallucination_rate": 1.0,
+      "judge_score": 0.0,
+      "judge_confidence": 0.99,
+      "judge_reason": "The candidate answer correctly identifies the lack of accessible source code for gitonboard_backend but fails to satisfy any of the expected answer points with verifiable, technical details. All claims are speculative, hypothetical, or ungrounded in actual code. The answer does not trace data flows, validate isolation mechanisms, or reference real implementation files or tests. As a result, it fails to meet the technical rigor required by the expected answer points.",
+      "judge_model": "qwen3:4b-instruct",
+      "judge_prompt_version": "v1"
+    },
+    "trajectory_validity": "INSUFFICIENT_EVIDENCE",
+    "primary_failure": "HALLUCINATION",
+    "total_duration_ms": 123596.48,
+    "total_prompt_tokens": 92,
+    "total_completion_tokens": 879,
+    "total_tokens": 971,
+    "error": null
+  },
+  {
+    "run_id": "GB01_conventional_rag_iter1_1791460219",
+    "question_id": "GB01",
+    "repository": "gitonboard_backend",
+    "repository_commit": "9d4de5e77ef9d4c651acfac9a58a8a81d46d6a6d",
+    "arm": "conventional_rag",
+    "model": "qwen3:4b-instruct",
+    "temperature": 0.0,
+    "iteration": 1,
+    "timestamp": "2026-10-08T11:50:19.105084",
+    "final_answer": "No matching code snippets retrieved.\n\nTherefore, I cannot trace how a repository/analysis identifier is propagated, nor can I identify where repository data might leak across analyses or what code/tests enforce isolation.\n\nThe requested information is missing because no code snippets were retrieved from the repository 'gitonboard_backend'. Without access to the actual code, files, functions, or data flows, it is not possible to provide a technically specific answer grounded in the source code. \n\nTo proceed, the retrieval must include relevant code snippets from the repository, such as those handling request processing, analysis execution, context assembly, or data isolation mechanisms.",
+    "trajectory": [
+      {
+        "turn_index": 0,
+        "tool_name": "single_turn_retrieval",
+        "arguments": {
+          "query": "Trace how a repository/analysis identifier is propagated from the agent request into retrieval and context assembly. Where could repository data leak across analyses, and what code/tests enforce isolation?",
+          "top_k": 5
+        },
+        "observation_preview": "Retrieved 0 files: ",
+        "is_success": true,
+        "prompt_tokens": 144,
+        "completion_tokens": 123,
+        "duration_ms": 53748.84
+      }
+    ],
+    "retrieval_metrics": {
+      "retrieved_files": [],
+      "required_evidence_found": [],
+      "required_evidence_missed": [
+        "backend/agent/context/assembler.py",
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/repository_tools/tools.py"
+      ],
+      "supporting_evidence_found": [],
+      "decoy_evidence_used": [],
+      "evidence_recall": 0.0,
+      "relevant_evidence_precision": 0.0,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "decoy_hit": 0,
+      "decoy_file_rate": 0.0,
+      "cross_repo_files": [],
+      "cross_repo_leakage_rate": 0.0
+    },
+    "tool_efficiency": {
+      "tool_calls": 1,
+      "successful_tool_calls": 1,
+      "failed_tool_calls": 0,
+      "redundant_tool_calls": 0,
+      "unique_files_read": 0,
+      "search_iterations": 0,
+      "tool_success_rate": 1.0,
+      "tool_redundancy_rate": 0.0,
+      "time_to_first_useful_evidence_ms": null,
+      "unnecessary_tool_calls": 1,
+      "invalid_tool_calls": 1,
+      "failed_tool_selections": 0
+    },
+    "citation_metrics": {
+      "citation_presence": false,
+      "cited_files": [],
+      "valid_citations": [],
+      "invalid_citations": [],
+      "citation_correctness": 0.0,
+      "citation_completeness": 0.0
+    },
+    "answer_metrics": {
+      "answer_points_hit": [],
+      "answer_points_missed": [
+        "Agent requests supply repository_id and user_id, which resolve_target_repository_and_analysis maps to the latest completed analysis_id in PostgreSQL.",
+        "ContextAssembler.assemble_context strictly filters all FactStore queries using FactFile.analysis_id == request.analysis_id and FactSymbol.analysis_id == request.analysis_id.",
+        "RepositoryToolLayer scopes all filesystem search, read_file, and retrieval operations to the resolved analysis_id and repository snapshot hash.",
+        "Data could leak if fallback queries search globally across all repositories or if domain concepts hardcode application component names.",
+        "backend/tests/unit/test_repository_context_isolation.py enforces strict isolation by populating dual repositories in an isolated SQLite fixture and verifying that planning for a Python repo never leaks TypeScript files or foreign symbols."
+      ],
+      "correctness": 0.0,
+      "completeness": 0.0,
+      "claims_evaluated": [
+        {
+          "claim_text": "Answer generated without evidence",
+          "referenced_file": null,
+          "is_entailed": false,
+          "entailment_reason": "No code evidence was retrieved in this run."
+        }
+      ],
+      "groundedness": 0.0,
+      "hallucination_rate": 1.0,
+      "judge_score": 0.0,
+      "judge_confidence": 0.99,
+      "judge_reason": "The candidate answer fails to address any of the expected answer points. It does not trace data propagation, identify isolation mechanisms, or describe potential data leakage. The response is entirely missing technical content and relies on a non-existent retrieval of code snippets. As a result, it provides no valid technical evaluation of the codebase or its isolation mechanisms.",
+      "judge_model": "qwen3:4b-instruct",
+      "judge_prompt_version": "v1"
+    },
+    "trajectory_validity": "INSUFFICIENT_EVIDENCE",
+    "primary_failure": "HALLUCINATION",
+    "total_duration_ms": 53748.84,
+    "total_prompt_tokens": 144,
+    "total_completion_tokens": 123,
+    "total_tokens": 267,
+    "error": null
+  },
+  {
+    "run_id": "GB01_gitonboard_rag_iter1_1791460356",
+    "question_id": "GB01",
+    "repository": "gitonboard_backend",
+    "repository_commit": "9d4de5e77ef9d4c651acfac9a58a8a81d46d6a6d",
+    "arm": "gitonboard_rag",
+    "model": "qwen3:4b-instruct",
+    "temperature": 0.0,
+    "iteration": 1,
+    "timestamp": "2026-10-08T11:52:36.560966",
+    "final_answer": "No matching code snippets retrieved.\n\nThe question asks for a technical trace of how a repository/analysis identifier is propagated through the system, including data flow and isolation mechanisms. However, no code snippets were retrieved from the repository 'gitonboard_backend' to support this analysis.\n\nAs a result, I cannot cite specific files, functions, or data flows to trace the propagation of identifiers or enforce isolation. The necessary code context is missing, and without it, any assertions about data leakage or isolation enforcement would be speculative.\n\nTherefore, the answer is: **Insufficient data \u2014 no code snippets were retrieved to trace identifier propagation or enforce isolation.**",
+    "trajectory": [
+      {
+        "turn_index": 0,
+        "tool_name": "gitonboard_hybrid_retrieval",
+        "arguments": {
+          "query": "Trace how a repository/analysis identifier is propagated from the agent request into retrieval and context assembly. Where could repository data leak across analyses, and what code/tests enforce isolation?",
+          "top_k": 5
+        },
+        "observation_preview": "Hybrid retrieved 0 files: ",
+        "is_success": true,
+        "prompt_tokens": 145,
+        "completion_tokens": 128,
+        "duration_ms": 55846.47
+      }
+    ],
+    "retrieval_metrics": {
+      "retrieved_files": [],
+      "required_evidence_found": [],
+      "required_evidence_missed": [
+        "backend/agent/context/assembler.py",
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/repository_tools/tools.py"
+      ],
+      "supporting_evidence_found": [],
+      "decoy_evidence_used": [],
+      "evidence_recall": 0.0,
+      "relevant_evidence_precision": 0.0,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "decoy_hit": 0,
+      "decoy_file_rate": 0.0,
+      "cross_repo_files": [],
+      "cross_repo_leakage_rate": 0.0
+    },
+    "tool_efficiency": {
+      "tool_calls": 1,
+      "successful_tool_calls": 1,
+      "failed_tool_calls": 0,
+      "redundant_tool_calls": 0,
+      "unique_files_read": 0,
+      "search_iterations": 0,
+      "tool_success_rate": 1.0,
+      "tool_redundancy_rate": 0.0,
+      "time_to_first_useful_evidence_ms": null,
+      "unnecessary_tool_calls": 1,
+      "invalid_tool_calls": 1,
+      "failed_tool_selections": 0
+    },
+    "citation_metrics": {
+      "citation_presence": false,
+      "cited_files": [],
+      "valid_citations": [],
+      "invalid_citations": [],
+      "citation_correctness": 0.0,
+      "citation_completeness": 0.0
+    },
+    "answer_metrics": {
+      "answer_points_hit": [],
+      "answer_points_missed": [
+        "Agent requests supply repository_id and user_id, which resolve_target_repository_and_analysis maps to the latest completed analysis_id in PostgreSQL.",
+        "ContextAssembler.assemble_context strictly filters all FactStore queries using FactFile.analysis_id == request.analysis_id and FactSymbol.analysis_id == request.analysis_id.",
+        "RepositoryToolLayer scopes all filesystem search, read_file, and retrieval operations to the resolved analysis_id and repository snapshot hash.",
+        "Data could leak if fallback queries search globally across all repositories or if domain concepts hardcode application component names.",
+        "backend/tests/unit/test_repository_context_isolation.py enforces strict isolation by populating dual repositories in an isolated SQLite fixture and verifying that planning for a Python repo never leaks TypeScript files or foreign symbols."
+      ],
+      "correctness": 0.0,
+      "completeness": 0.0,
+      "claims_evaluated": [
+        {
+          "claim_text": "Answer generated without evidence",
+          "referenced_file": null,
+          "is_entailed": false,
+          "entailment_reason": "No code evidence was retrieved in this run."
+        }
+      ],
+      "groundedness": 0.0,
+      "hallucination_rate": 1.0,
+      "judge_score": 0.0,
+      "judge_confidence": 0.99,
+      "judge_reason": "The candidate answer fails to address any of the expected answer points. It does not provide any trace of identifier propagation, isolation mechanisms, or test enforcement. The response is entirely speculative and lacks all required technical details, resulting in a complete failure to meet the evaluation criteria.",
+      "judge_model": "qwen3:4b-instruct",
+      "judge_prompt_version": "v1"
+    },
+    "trajectory_validity": "INSUFFICIENT_EVIDENCE",
+    "primary_failure": "HALLUCINATION",
+    "total_duration_ms": 55846.47,
+    "total_prompt_tokens": 145,
+    "total_completion_tokens": 128,
+    "total_tokens": 273,
+    "error": null
+  },
+  {
+    "run_id": "GB01_gitonboard_agent_iter1_1791460485",
+    "question_id": "GB01",
+    "repository": "gitonboard_backend",
+    "repository_commit": "9d4de5e77ef9d4c651acfac9a58a8a81d46d6a6d",
+    "arm": "gitonboard_agent",
+    "model": "error",
+    "temperature": 0.0,
+    "iteration": 1,
+    "timestamp": "2026-10-08T11:54:45.034532",
+    "final_answer": "",
+    "trajectory": [],
+    "retrieval_metrics": {
+      "retrieved_files": [],
+      "required_evidence_found": [],
+      "required_evidence_missed": [
+        "backend/agent/context/assembler.py",
+        "backend/tests/unit/test_repository_context_isolation.py",
+        "backend/repository_tools/tools.py"
+      ],
+      "supporting_evidence_found": [],
+      "decoy_evidence_used": [],
+      "evidence_recall": 0.0,
+      "relevant_evidence_precision": 0.0,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "decoy_hit": 0,
+      "decoy_file_rate": 0.0,
+      "cross_repo_files": [],
+      "cross_repo_leakage_rate": 0.0
+    },
+    "tool_efficiency": {
+      "tool_calls": 0,
+      "successful_tool_calls": 0,
+      "failed_tool_calls": 0,
+      "redundant_tool_calls": 0,
+      "unique_files_read": 0,
+      "search_iterations": 0,
+      "tool_success_rate": 1.0,
+      "tool_redundancy_rate": 0.0,
+      "time_to_first_useful_evidence_ms": null,
+      "unnecessary_tool_calls": 0,
+      "invalid_tool_calls": 0,
+      "failed_tool_selections": 0
+    },
+    "citation_metrics": {
+      "citation_presence": false,
+      "cited_files": [],
+      "valid_citations": [],
+      "invalid_citations": [],
+      "citation_correctness": 0.0,
+      "citation_completeness": 0.0
+    },
+    "answer_metrics": {
+      "answer_points_hit": [],
+      "answer_points_missed": [
+        "Agent requests supply repository_id and user_id, which resolve_target_repository_and_analysis maps to the latest completed analysis_id in PostgreSQL.",
+        "ContextAssembler.assemble_context strictly filters all FactStore queries using FactFile.analysis_id == request.analysis_id and FactSymbol.analysis_id == request.analysis_id.",
+        "RepositoryToolLayer scopes all filesystem search, read_file, and retrieval operations to the resolved analysis_id and repository snapshot hash.",
+        "Data could leak if fallback queries search globally across all repositories or if domain concepts hardcode application component names.",
+        "backend/tests/unit/test_repository_context_isolation.py enforces strict isolation by populating dual repositories in an isolated SQLite fixture and verifying that planning for a Python repo never leaks TypeScript files or foreign symbols."
+      ],
+      "correctness": 0.0,
+      "completeness": 0.0,
+      "claims_evaluated": [],
+      "groundedness": 1.0,
+      "hallucination_rate": 0.0,
+      "judge_score": 0.0,
+      "judge_confidence": 1.0,
+      "judge_reason": "Empty answer",
+      "judge_model": "empty",
+      "judge_prompt_version": "v1"
+    },
+    "trajectory_validity": "INSUFFICIENT_EVIDENCE",
+    "primary_failure": "INSUFFICIENT_SEARCH",
+    "total_duration_ms": 0.0,
+    "total_prompt_tokens": 0,
+    "total_completion_tokens": 0,
+    "total_tokens": 0,
+    "error": "'charmap' codec can't encode character '\\u2192' in position 34: character maps to <undefined>"
+  }
+]

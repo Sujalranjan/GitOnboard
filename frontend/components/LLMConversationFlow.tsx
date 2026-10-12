@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, MessageCircle, CheckCircle2, Eye, EyeOff, Send, Settings } from 'lucide-react';
+import { Zap, MessageCircle, CheckCircle2, Eye, EyeOff, Send, Settings, Wrench, Clock, MessageSquare, Activity, Cpu } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // Component to display tree structure
 function TreeDisplay({ content }: { content: string }) {
@@ -24,7 +25,7 @@ function TreeDisplay({ content }: { content: string }) {
   }
 
   return (
-    <div className="bg-slate-900/50 rounded px-3 py-2 text-sm whitespace-pre font-mono text-slate-200 overflow-x-auto">
+    <div className="bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded px-3 py-2 text-sm whitespace-pre font-mono text-slate-800 dark:text-slate-200 overflow-x-auto">
       {treeContent}
     </div>
   );
@@ -51,10 +52,10 @@ function CodeDisplay({ content }: { content: string }) {
   const codeLines = lines.slice(codeStartIdx);
 
   return (
-    <div className="bg-slate-900/50 rounded overflow-x-auto text-slate-200 font-mono text-sm">
+    <div className="bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded overflow-x-auto text-slate-800 dark:text-slate-200 font-mono text-sm">
       <div className="flex">
         {/* Line numbers column */}
-        <div className="bg-slate-950/50 px-3 py-2 text-right select-none text-slate-500 border-r border-slate-700 min-w-fit">
+        <div className="bg-slate-200/60 dark:bg-slate-950/50 px-3 py-2 text-right select-none text-slate-500 border-r border-slate-200 dark:border-slate-700 min-w-fit">
           {codeLines.map((_, idx) => (
             <div key={idx} className="h-5 leading-5">{startLine + idx}</div>
           ))}
@@ -63,7 +64,7 @@ function CodeDisplay({ content }: { content: string }) {
         <div className="px-3 py-2 flex-1 overflow-x-auto">
           {codeLines.map((line, idx) => (
             <div key={idx} className="h-5 leading-5 whitespace-pre">
-              {line || ' '}
+              {line || ' '}
             </div>
           ))}
         </div>
@@ -122,6 +123,12 @@ const FALLBACK_MODELS: ModelOption[] = [
     id: 'cloud-openrouter',
     name: 'OpenRouter (Cloud)',
     description: 'Multiple models (Claude, GPT-4), requires API key',
+    category: 'cloud',
+  },
+  {
+    id: 'openai/gpt-oss-120b',
+    name: 'Groq (GPT-OSS 120B)',
+    description: 'Ultra-fast 131K context inference via Groq, requires API key',
     category: 'cloud',
   },
 ];
@@ -421,19 +428,21 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
   ];
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-white overflow-hidden">
-      {/* Chat Area - Full Height */}
-      <div className="flex-1 overflow-y-auto px-6 py-8">
+    <div className="flex h-full w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden">
+      {/* Left / Center Column: Chat Messages + Bottom Input */}
+      <div className="flex-1 flex flex-col h-full min-w-0">
+        {/* Chat Area - Full Height (Only this scrolls) */}
+        <div className="flex-1 overflow-y-auto px-6 py-8 chat-scroll-area">
         <div className="max-w-3xl mx-auto">
           {/* Empty State */}
           {messages.length === 0 && !running && (
             <div className="flex flex-col items-center justify-center h-full">
-              <MessageCircle className="w-20 h-20 text-slate-600 mb-6" />
-              <p className="text-xl text-slate-400 mb-8">Ask a question to get started</p>
+              <MessageCircle className="w-20 h-20 text-slate-300 dark:text-slate-600 mb-6" />
+              <p className="text-xl font-medium text-slate-700 dark:text-slate-300 mb-8">Ask a question to get started</p>
 
               {/* Suggested Queries */}
               <div className="w-full">
-                <p className="text-xs font-semibold text-slate-500 mb-4 uppercase">Try asking about:</p>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Try asking about:</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {suggestedQueries.map((q, idx) => (
                     <button
@@ -442,7 +451,7 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                         setQuery(q);
                         setTimeout(() => simulateQuery(q), 0);
                       }}
-                      className="text-left px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700"
+                      className="text-left px-4 py-3 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
                     >
                       → {q}
                     </button>
@@ -463,38 +472,38 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                   }`}
                 >
                   <div
-                    className={`max-w-2xl px-4 py-3 rounded-lg ${
+                    className={`max-w-2xl px-4 py-3 rounded-xl shadow-sm ${
                       msg.type === 'user-query'
                         ? 'bg-blue-600 text-white rounded-br-none'
                         : msg.type === 'tool-call'
-                          ? 'bg-amber-900/40 border border-amber-700/50 text-amber-100 rounded-bl-none'
+                          ? 'bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-700/50 text-amber-900 dark:text-amber-100 rounded-bl-none'
                           : msg.type === 'tool-response'
-                            ? 'bg-slate-700/50 border border-slate-600 text-slate-200 rounded-bl-none'
+                            ? 'bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-bl-none'
                             : msg.type === 'final-answer'
-                              ? 'bg-green-900/30 border border-green-700 text-slate-100 rounded-bl-none'
-                              : 'bg-slate-800 text-slate-300 rounded-bl-none'
+                              ? 'bg-white dark:bg-slate-900/90 border border-emerald-200 dark:border-emerald-700/60 text-slate-900 dark:text-slate-100 rounded-bl-none'
+                              : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-300 rounded-bl-none'
                     }`}
                   >
                     {/* Tool Call Header */}
                     {msg.type === 'tool-call' && (
                       <div>
                         <div className="flex items-center gap-2 mb-3">
-                          <Zap className="w-4 h-4 animate-pulse text-amber-400" />
-                          <span className="text-xs font-semibold text-amber-300 uppercase">🔧 Tool Call</span>
+                          <Zap className="w-4 h-4 animate-pulse text-amber-600 dark:text-amber-400" />
+                          <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 uppercase">🔧 Tool Call</span>
                         </div>
                         {msg.toolName && (
                           <div className="space-y-2">
                             {/* Tool name chip */}
-                            <div className="inline-block bg-amber-600/40 border border-amber-500/50 rounded-full px-3 py-1 text-xs font-mono font-semibold text-amber-200">
+                            <div className="inline-block bg-amber-100 dark:bg-amber-600/40 border border-amber-300 dark:border-amber-500/50 rounded-full px-3 py-1 text-xs font-mono font-semibold text-amber-800 dark:text-amber-200">
                               {msg.toolName}
                             </div>
                             {/* Arguments */}
                             {msg.arguments && Object.keys(msg.arguments).length > 0 && (
-                              <div className="bg-slate-900/50 rounded px-3 py-2 text-xs space-y-1">
+                              <div className="bg-white/80 dark:bg-slate-900/50 border border-amber-200/60 dark:border-transparent rounded px-3 py-2 text-xs space-y-1">
                                 {Object.entries(msg.arguments).map(([key, val]) => (
-                                  <div key={key} className="text-slate-300">
-                                    <span className="text-slate-400">{key}:</span>{' '}
-                                    <span className="text-slate-200 font-mono">
+                                  <div key={key} className="text-slate-600 dark:text-slate-300">
+                                    <span className="text-slate-500 dark:text-slate-400">{key}:</span>{' '}
+                                    <span className="text-slate-800 dark:text-slate-200 font-mono">
                                       {typeof val === 'string' ? `"${val}"` : JSON.stringify(val)}
                                     </span>
                                   </div>
@@ -513,25 +522,25 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                           <div className="flex items-center gap-2">
                             {msg.success ? (
                               <>
-                                <CheckCircle2 className="w-4 h-4 text-green-400" />
-                                <span className="text-xs font-semibold text-green-300 uppercase">✓ Success</span>
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-green-400" />
+                                <span className="text-xs font-semibold text-emerald-700 dark:text-green-300 uppercase">✓ Success</span>
                               </>
                             ) : (
                               <>
                                 <span className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-white text-xs font-bold">!</span>
-                                <span className="text-xs font-semibold text-red-300 uppercase">✗ Failed</span>
+                                <span className="text-xs font-semibold text-red-700 dark:text-red-300 uppercase">✗ Failed</span>
                               </>
                             )}
                           </div>
                           {msg.durationMs !== undefined && (
-                            <span className="text-xs text-slate-400">({msg.durationMs.toFixed(0)}ms)</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">({msg.durationMs.toFixed(0)}ms)</span>
                           )}
                         </div>
 
                         {/* Tool name and result count/total lines */}
                         {msg.toolName && (
                           <div className="mb-2 flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-mono text-slate-400">{msg.toolName}</span>
+                            <span className="text-xs font-mono text-slate-600 dark:text-slate-400">{msg.toolName}</span>
                             {msg.toolName === 'read_file' && msg.totalLines !== undefined && (
                               <span className="text-xs text-slate-500">(total_lines: {msg.totalLines})</span>
                             )}
@@ -543,9 +552,9 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
 
                         {/* Error state */}
                         {msg.error && (
-                          <div className="mb-2 bg-red-900/30 border border-red-700/50 rounded px-3 py-2 text-xs">
-                            <div className="text-red-300 font-semibold mb-1">{msg.error.type}</div>
-                            <div className="text-red-200">{msg.error.message}</div>
+                          <div className="mb-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded px-3 py-2 text-xs">
+                            <div className="text-red-700 dark:text-red-300 font-semibold mb-1">{msg.error.type}</div>
+                            <div className="text-red-600 dark:text-red-200">{msg.error.message}</div>
                           </div>
                         )}
 
@@ -557,7 +566,7 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                             ) : msg.toolName === 'get_tree' ? (
                               <TreeDisplay content={msg.resultSummary} />
                             ) : (
-                              <div className="bg-slate-900/50 rounded px-3 py-2 text-sm whitespace-pre-wrap font-mono text-slate-200">
+                              <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded px-3 py-2 text-sm whitespace-pre-wrap font-mono text-slate-800 dark:text-slate-200">
                                 {msg.resultSummary}
                               </div>
                             )}
@@ -570,10 +579,10 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                     {msg.type === 'llm-thinking' && (
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-pulse" />
-                          <span className="text-xs font-semibold text-slate-400">Thinking</span>
+                          <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-pulse" />
+                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Thinking</span>
                         </div>
-                        <p className="text-sm leading-relaxed italic text-slate-400">
+                        <p className="text-sm leading-relaxed italic text-slate-600 dark:text-slate-400">
                           {msg.content}
                         </p>
                       </div>
@@ -583,24 +592,44 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                     {msg.type === 'final-answer' && (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
-                          <CheckCircle2 className="w-5 h-5 text-green-400" />
-                          <span className="text-sm font-semibold text-green-400">Answer</span>
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-green-400" />
+                          <span className="text-sm font-semibold text-emerald-700 dark:text-green-400">Answer</span>
                         </div>
-                        <div className="text-sm leading-relaxed prose prose-invert max-w-none">
+                        <div className="text-sm leading-relaxed prose prose-slate dark:prose-invert max-w-none">
                           <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
                             components={{
-                              h1: ({ children }) => <h1 className="text-xl font-bold mt-4 mb-2 text-white">{children}</h1>,
-                              h2: ({ children }) => <h2 className="text-lg font-bold mt-3 mb-2 text-white">{children}</h2>,
-                              h3: ({ children }) => <h3 className="text-base font-bold mt-2 mb-1 text-slate-200">{children}</h3>,
-                              p: ({ children }) => <p className="mb-2 text-slate-300">{children}</p>,
-                              ul: ({ children }) => <ul className="list-disc pl-6 mb-2 text-slate-300">{children}</ul>,
-                              ol: ({ children }) => <ol className="list-decimal pl-6 mb-2 text-slate-300">{children}</ol>,
-                              li: ({ children }) => <li className="mb-1 text-slate-300">{children}</li>,
-                              code: ({ children }) => <code className="bg-slate-800 px-2 py-1 rounded text-slate-200 font-mono text-xs">{children}</code>,
-                              pre: ({ children }) => <pre className="bg-slate-900 p-3 rounded mb-2 overflow-x-auto text-slate-200 text-xs">{children}</pre>,
-                              blockquote: ({ children }) => <blockquote className="border-l-4 border-slate-600 pl-4 italic text-slate-400 my-2">{children}</blockquote>,
-                              strong: ({ children }) => <strong className="font-bold text-slate-100">{children}</strong>,
-                              em: ({ children }) => <em className="italic text-slate-300">{children}</em>,
+                              h1: ({ children }) => <h1 className="text-xl font-bold mt-4 mb-2 text-slate-900 dark:text-white">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-lg font-bold mt-3 mb-2 text-slate-900 dark:text-white">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-base font-bold mt-2 mb-1 text-slate-800 dark:text-slate-200">{children}</h3>,
+                              p: ({ children }) => <p className="mb-2 text-slate-700 dark:text-slate-300 leading-relaxed">{children}</p>,
+                              ul: ({ children }) => <ul className="list-disc pl-6 mb-2 text-slate-700 dark:text-slate-300 space-y-1">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal pl-6 mb-2 text-slate-700 dark:text-slate-300 space-y-1">{children}</ol>,
+                              li: ({ children }) => <li className="mb-0.5 text-slate-700 dark:text-slate-300">{children}</li>,
+                              code: ({ children }) => <code className="bg-slate-100 dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-slate-200 dark:border-slate-700/60 px-1.5 py-0.5 rounded font-mono text-xs">{children}</code>,
+                              pre: ({ children }) => (
+                                <pre className="bg-slate-900 text-slate-200 border border-slate-800 p-3 rounded-lg mb-2 overflow-x-auto font-mono text-xs leading-relaxed whitespace-pre-wrap break-words [&>code]:bg-transparent [&>code]:p-0 [&>code]:text-slate-200 [&>code]:border-0">
+                                  {children}
+                                </pre>
+                              ),
+                              table: ({ children }) => (
+                                <div className="overflow-x-auto my-3 rounded-lg border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900/50 shadow-sm">
+                                  <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700/60 text-xs">{children}</table>
+                                </div>
+                              ),
+                              thead: ({ children }) => <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-semibold">{children}</thead>,
+                              tbody: ({ children }) => <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">{children}</tbody>,
+                              tr: ({ children }) => <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">{children}</tr>,
+                              th: ({ children }) => (
+                                <th className="px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                                  {children}
+                                </th>
+                              ),
+                              td: ({ children }) => <td className="px-3.5 py-2 text-xs text-slate-700 dark:text-slate-300 leading-relaxed align-top">{children}</td>,
+                              hr: () => <hr className="border-slate-200 dark:border-slate-800 my-4" />,
+                              blockquote: ({ children }) => <blockquote className="border-l-4 border-slate-300 dark:border-slate-600 pl-4 italic text-slate-600 dark:text-slate-400 my-2">{children}</blockquote>,
+                              strong: ({ children }) => <strong className="font-bold text-slate-900 dark:text-slate-100">{children}</strong>,
+                              em: ({ children }) => <em className="italic text-slate-800 dark:text-slate-300">{children}</em>,
                             }}
                           >
                             {(() => {
@@ -633,12 +662,12 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
 
               {running && messages.length > 0 && (
                 <div className="flex justify-start">
-                  <div className="bg-slate-800 px-4 py-3 rounded-lg rounded-bl-none">
+                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm px-4 py-3 rounded-lg rounded-bl-none">
                     <div className="flex gap-2 items-center">
-                      <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" />
-                      <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                      <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
-                      <span className="text-xs text-slate-400 ml-2">Processing...</span>
+                      <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" />
+                      <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                      <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                      <span className="text-xs text-slate-500 dark:text-slate-400 ml-2">Processing...</span>
                     </div>
                   </div>
                 </div>
@@ -651,44 +680,8 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
       </div>
 
       {/* Footer - Input Area (Sticky) */}
-      <div className="flex-shrink-0 bg-slate-950 px-6 py-6 border-t border-slate-800">
+      <div className="flex-shrink-0 bg-white dark:bg-slate-950 px-6 py-4 border-t border-slate-200 dark:border-slate-800">
         <div className="max-w-3xl mx-auto">
-          {/* Metrics */}
-          {(done || running) && (
-            <>
-              <div className="grid grid-cols-5 gap-2 mb-4">
-                <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg p-2 text-center">
-                  <div className="text-lg font-bold text-amber-400">{toolCalls}</div>
-                  <div className="text-xs text-amber-300">Tools</div>
-                </div>
-                <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-2 text-center">
-                  <div className="text-lg font-bold text-blue-400">{Math.floor(elapsed)}</div>
-                  <div className="text-xs text-blue-300">Seconds</div>
-                </div>
-                <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-2 text-center">
-                  <div className="text-lg font-bold text-green-400">{messages.length}</div>
-                  <div className="text-xs text-green-300">Messages</div>
-                </div>
-                <div className="bg-purple-900/30 border border-purple-700/50 rounded-lg p-2 text-center">
-                  <div className="text-lg font-bold text-purple-400">{totalTokens.toLocaleString()}</div>
-                  <div className="text-xs text-purple-300">Tokens</div>
-                </div>
-                <div className={`rounded-lg p-2 text-center border ${done ? 'bg-green-900/30 border-green-700/50' : 'bg-slate-700/30 border-slate-600/50'}`}>
-                  <div className={`text-sm font-bold ${done ? 'text-green-400' : 'text-slate-400'}`}>
-                    {done ? '✓ Done' : 'Running'}
-                  </div>
-                  <div className={`text-xs ${done ? 'text-green-300' : 'text-slate-400'}`}>Status</div>
-                </div>
-              </div>
-              {modelUsed && (
-                <div className="text-center text-xs text-slate-400 mb-3">
-                  Model: <span className="text-slate-300 font-semibold">{modelUsed}</span> •
-                  Rate: <span className="text-slate-300 font-semibold">{totalTokens > 0 && elapsed > 0 ? Math.round((totalTokens / elapsed) * 10) / 10 : 0} tokens/sec</span>
-                </div>
-              )}
-            </>
-          )}
-
           {/* Input Area */}
           <form onSubmit={handleSubmit} className="relative flex gap-2 items-center">
             <input
@@ -697,7 +690,7 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask about your codebase..."
               disabled={running}
-              className="flex-1 px-4 py-3 rounded-full bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-3 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors disabled:opacity-50"
             />
 
             {/* Settings Button */}
@@ -705,14 +698,14 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
               <button
                 type="button"
                 onClick={() => setSettingsOpen(!settingsOpen)}
-                className="p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-300 transition-colors"
+                className="p-2.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors border border-slate-200 dark:border-slate-700"
               >
                 <Settings className="w-5 h-5" />
               </button>
 
               {/* Settings Dropdown */}
               {settingsOpen && (
-                <div className="absolute bottom-full right-0 mb-2 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-50 min-w-56">
+                <div className="absolute bottom-full right-0 mb-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 min-w-56 text-slate-800 dark:text-slate-200">
                   {/* Tool Details Toggle */}
                   <button
                     type="button"
@@ -720,24 +713,24 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                       setShowToolDetails(!showToolDetails);
                       setSettingsOpen(false);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-700 transition-colors border-b border-slate-700 first:rounded-t-lg"
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-colors border-b border-slate-100 dark:border-slate-700 first:rounded-t-xl text-slate-700 dark:text-slate-300"
                   >
                     {showToolDetails ? (
                       <>
-                        <Eye className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm text-slate-300">Hide Tool Details</span>
+                        <Eye className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                        <span className="text-sm font-medium">Hide Tool Details</span>
                       </>
                     ) : (
                       <>
-                        <EyeOff className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm text-slate-300">Show Tool Details</span>
+                        <EyeOff className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                        <span className="text-sm font-medium">Show Tool Details</span>
                       </>
                     )}
                   </button>
 
                   {/* Model Selector */}
-                  <div className="px-4 py-3 last:rounded-b-lg">
-                    <label className="text-xs font-semibold text-slate-400 mb-2 block uppercase">
+                  <div className="px-4 py-3 last:rounded-b-xl">
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 block uppercase">
                       Select Model
                     </label>
                     <select
@@ -747,7 +740,7 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                         setSettingsOpen(false);
                       }}
                       disabled={changingModel || running}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
+                      className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                     >
                       {availableModels.map((model) => (
                         <option key={model.id} value={model.id}>
@@ -755,7 +748,7 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs text-slate-400 mt-2">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
                       {availableModels.find((m) => m.id === selectedModel)?.description}
                     </p>
                   </div>
@@ -767,7 +760,7 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
             <button
               type="submit"
               disabled={running || !query.trim()}
-              className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              className="p-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 shadow-sm"
             >
               {running ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -778,6 +771,127 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
           </form>
         </div>
       </div>
+    </div>
+
+    {/* Right Column: Execution Stats Sidebar in One Unified Sticky Non-Scrolling Container */}
+    <div className="w-80 flex-shrink-0 border-l border-slate-200 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-950/50 p-5 flex flex-col justify-start overflow-hidden select-none">
+      {/* The Unified Stats Card */}
+      <div className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/90 rounded-2xl p-4 shadow-sm dark:shadow-xl backdrop-blur-sm flex flex-col gap-3.5">
+        {/* Header with Live Status Badge */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span className="text-xs font-bold tracking-wider uppercase text-slate-700 dark:text-slate-200">
+              Execution Stats
+            </span>
+          </div>
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+            done
+              ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300'
+              : running
+                ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-200 dark:border-blue-500/40 text-blue-700 dark:text-blue-300 animate-pulse'
+                : 'bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/50 text-slate-600 dark:text-slate-400'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              done ? 'bg-emerald-500 dark:bg-emerald-400' : running ? 'bg-blue-500 dark:bg-blue-400 animate-ping' : 'bg-slate-400 dark:bg-slate-500'
+            }`} />
+            {done ? 'Completed' : running ? 'Running' : 'Ready'}
+          </span>
+        </div>
+
+        {/* Stacked Stats Rows */}
+        <div className="space-y-2">
+          {/* Tools */}
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/50 border border-amber-200/80 dark:border-amber-500/20 hover:border-amber-400 dark:hover:border-amber-500/40 transition-colors">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <Wrench className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-slate-700 dark:text-slate-300">Tools</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-500">Repository tools</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-base font-bold text-amber-600 dark:text-amber-400 font-mono">{toolCalls}</div>
+              <div className="text-[10px] text-amber-700/70 dark:text-amber-300/60">{toolCalls === 1 ? '1 call' : `${toolCalls} calls`}</div>
+            </div>
+          </div>
+
+          {/* Seconds */}
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/50 border border-blue-200/80 dark:border-blue-500/20 hover:border-blue-400 dark:hover:border-blue-500/40 transition-colors">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                <Clock className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-slate-700 dark:text-slate-300">Seconds</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-500">Wall clock</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-base font-bold text-blue-600 dark:text-blue-400 font-mono">{Math.floor(elapsed)}s</div>
+              <div className="text-[10px] text-blue-700/70 dark:text-blue-300/60">Duration</div>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/50 border border-emerald-200/80 dark:border-emerald-500/20 hover:border-emerald-400 dark:hover:border-emerald-500/40 transition-colors">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <MessageSquare className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-slate-700 dark:text-slate-300">Messages</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-500">Turns</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-base font-bold text-emerald-600 dark:text-emerald-400 font-mono">{messages.length}</div>
+              <div className="text-[10px] text-emerald-700/70 dark:text-emerald-300/60">Total turns</div>
+            </div>
+          </div>
+
+          {/* Tokens */}
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/50 border border-purple-200/80 dark:border-purple-500/20 hover:border-purple-400 dark:hover:border-purple-500/40 transition-colors">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-purple-100 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                <Zap className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-slate-700 dark:text-slate-300">Tokens</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-500">Prompt & response</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-base font-bold text-purple-600 dark:text-purple-400 font-mono">{totalTokens.toLocaleString()}</div>
+              <div className="text-[10px] text-purple-700/70 dark:text-purple-300/60">Tokens</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Model & Generation Rate Footer */}
+        {(modelUsed || selectedModel) && (
+          <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 text-xs flex flex-col gap-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5 text-slate-400" />
+                Model
+              </span>
+              <span className="font-mono text-slate-700 dark:text-slate-200 truncate max-w-[140px]" title={modelUsed || selectedModel}>
+                {modelUsed || selectedModel}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-500 dark:text-slate-400">Rate</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono">
+                {totalTokens > 0 && elapsed > 0 ? (Math.round((totalTokens / elapsed) * 10) / 10) : 0} tokens/sec
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
 
       <style jsx>{`
         @keyframes slide-up {
@@ -793,6 +907,20 @@ export const LLMConversationFlow: React.FC<LLMConversationFlowProps> = ({ repoNa
 
         .animate-slide-up {
           animation: slide-up 0.3s ease-out;
+        }
+
+        .chat-scroll-area::-webkit-scrollbar {
+          width: 6px;
+        }
+        .chat-scroll-area::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .chat-scroll-area::-webkit-scrollbar-thumb {
+          background: rgba(100, 116, 139, 0.25);
+          border-radius: 9999px;
+        }
+        .chat-scroll-area::-webkit-scrollbar-thumb:hover {
+          background: rgba(100, 116, 139, 0.45);
         }
       `}</style>
     </div>

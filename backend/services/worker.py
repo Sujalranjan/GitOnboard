@@ -18,72 +18,14 @@ from backend.intelligence.stages.metrics_stage import MetricsStage
 
 logger = logging.getLogger(__name__)
 
-def cleanup_orphaned_blobs(repo_id: int, snapshot_id: str = ""):
-    """
-    Remove orphaned blobs from Azure if repository/analysis is deleted.
-    Prevents desynchronization between database and blob storage.
-    """
-    try:
-        from backend.storage import get_storage
-        storage = get_storage()
-        container_client = storage.service_client.get_container_client(storage.container_name)
-
-        # If snapshot_id is empty, search all snapshots for this repo
-        if snapshot_id:
-            prefix = f"repositories/{repo_id}/snapshots/{snapshot_id}"
-        else:
-            prefix = f"repositories/{repo_id}/snapshots/"
-
-        blobs_to_delete = list(container_client.list_blobs(name_starts_with=prefix))
-
-        if blobs_to_delete:
-            logger.info(f"[DESYNC_CLEANUP] Found {len(blobs_to_delete)} orphaned blobs for repo {repo_id}")
-
-            # Delete blobs
-            for blob in blobs_to_delete:
-                try:
-                    container_client.delete_blob(blob.name)
-                    logger.debug(f"[DESYNC_CLEANUP] Deleted blob: {blob.name}")
-                except Exception as blob_err:
-                    logger.warning(f"[DESYNC_CLEANUP] Failed to delete blob {blob.name}: {blob_err}")
-
-            logger.info(f"[DESYNC_CLEANUP] Cleaned up {len(blobs_to_delete)} orphaned blobs from Azure")
-        else:
-            logger.info(f"[DESYNC_CLEANUP] No orphaned blobs found for repo {repo_id}")
-
-    except Exception as e:
-        logger.error(f"[DESYNC_CLEANUP] Failed to clean up orphaned blobs: {e}", exc_info=True)
-
-def cleanup_orphaned_database_records(analysis_id: int, job_id: int):
-    """
-    Remove orphaned database records if blob upload or analysis fails.
-    Prevents desynchronization between database and blob storage.
-    """
-    try:
-        db = SessionLocal()
-
-        logger.info(f"[DESYNC_CLEANUP] Cleaning orphaned database records for Analysis {analysis_id}")
-
-        # Delete job
-        db.query(AnalysisJob).filter(AnalysisJob.id == job_id).delete()
-
-        # Delete analysis (and related fact store records via cascade)
-        db.query(Analysis).filter(Analysis.id == analysis_id).delete()
-
-        db.commit()
-        logger.info(f"[DESYNC_CLEANUP] Deleted orphaned Analysis {analysis_id} and Job {job_id} from database")
-
-    except Exception as e:
-        logger.error(f"[DESYNC_CLEANUP] Failed to clean up database records: {e}", exc_info=True)
-        try:
-            db.rollback()
-        except:
-            pass
-    finally:
-        try:
-            db.close()
-        except:
-            pass
+from backend.services.worker_cleanup import (
+    cleanup_orphaned_blobs,
+    cleanup_orphaned_database_records,
+)
+from backend.services.worker_indexing import (
+    build_and_record_indexes,
+    build_semantic_index_background,
+)
 
 def _serialize_dataclass(obj):
     import dataclasses
@@ -456,140 +398,14 @@ class AnalysisWorker(WorkerInterface):
                 from backend.services.progress_tracker import ProgressTracker
                 progress = ProgressTracker(db, analysis.id)
 
-                # Track indexing health
-                from backend.intelligence.retrieval.indexing_health import (
-                    IndexStatus, OverallIndexingStatus, IndexFailureCode,
-                    IndexingHealthReport, IndexHealthSnapshot, record_indexing_failure,
-                    compute_overall_status
-                )
-
-                exact_ok = False
-                bm25_ok = False
-                semantic_ok = False
-
                 if rim_model:
-                    try:
-                        from backend.intelligence.store.fact_store import save_rim_to_fact_store
-                        save_rim_to_fact_store(db, analysis.id, rim_model)
-                        entity_count = len(rim_model.entities)
-                        logger.info(f"Saved {entity_count} entities to Fact Store")
-                        exact_ok = True  # Exact search depends on FactStore
-
-                        # Update progress after persistence
-                        progress.update(
-                            "Persisting facts",
-                            f"Saved {entity_count} entities to database",
-                            entity_count,
-                            entity_count,
-                            "entities"
-                        )
-                    except Exception as e:
-                        db.rollback()
-                        logger.error(f"Error persisting facts to Fact Store: {e}")
-
-                    # Generate immutability version for FactStore
-                    # This ensures BM25 built now corresponds to current FactStore
-                    analysis.fact_store_version = str(uuid.uuid4())
-
-                    # Build retrieval indexes (BM25 and Chroma) for this analysis
-                    logger.info("Building semantic and lexical indexes...")
-
-                    bm25_doc_count = 0
-                    bm25_error_code = None
-                    bm25_error_msg = ""
-
-                    semantic_doc_count = 0
-                    semantic_error_code = None
-                    semantic_error_msg = ""
-
-                    try:
-                        from backend.intelligence.retrieval.retriever import HybridRetriever
-
-                        # Build BM25 index and store in memory for export
-                        try:
-                            retriever_temp = HybridRetriever(db=db, analysis_id=analysis.id)
-                            if retriever_temp.bm25_index:
-                                bm25_doc_count = retriever_temp.bm25_index.corpus_size
-                                bm25_data = {
-                                    "documents": retriever_temp.bm25_index.documents,
-                                    "idf": dict(retriever_temp.bm25_index.idf),
-                                    "doc_len": retriever_temp.bm25_index.doc_len,
-                                    "corpus_size": retriever_temp.bm25_index.corpus_size,
-                                    "avg_doc_len": retriever_temp.bm25_index.avg_doc_len,
-                                    "fact_store_version": analysis.fact_store_version,  # Store version for staleness check
-                                }
-                                results["bm25_index"] = bm25_data
-                                logger.info(f"BM25 index ready with {bm25_doc_count} documents (version={analysis.fact_store_version[:8]}...)")
-
-                                # Update progress for BM25 indexing
-                                progress.update(
-                                    "Building indexes",
-                                    f"Built BM25 index with {bm25_doc_count} documents",
-                                    bm25_doc_count,
-                                    bm25_doc_count,
-                                    "documents"
-                                )
-                                bm25_ok = True
-                            else:
-                                if not rim_model.entities:
-                                    bm25_error_code = IndexFailureCode.BM25_EMPTY_FACTSTORE
-                                    bm25_error_msg = "No entities in FactStore"
-                                else:
-                                    bm25_error_code = IndexFailureCode.BM25_BUILD_FAILED
-                                    bm25_error_msg = "BM25 index creation returned None"
-                                record_indexing_failure(analysis.id, "bm25", bm25_error_code, bm25_error_msg)
-                        except Exception as bm25_err:
-                            bm25_error_code = IndexFailureCode.BM25_BUILD_FAILED
-                            bm25_error_msg = str(bm25_err)[:100]
-                            record_indexing_failure(analysis.id, "bm25", bm25_error_code, bm25_error_msg)
-
-                        # Build Chroma semantic index (BACKGROUND, NON-BLOCKING)
-                        # Semantic indexing is optional and will run async after analysis completes
-                        logger.info("Semantic (Chroma) indexing: SCHEDULED for background processing (non-blocking)")
-                        semantic_error_code = IndexFailureCode.CHROMA_UNAVAILABLE
-                        semantic_error_msg = "Semantic indexing scheduled for background (non-blocking)"
-                        # Don't block on semantic indexing - let it run after analysis READY
-                        # semantic_ok remains False, which results in PARTIAL overall status
-
-                    except Exception as e:
-                        logger.error(f"Failed to build retrieval indexes: {e}", exc_info=True)
-                        if not bm25_ok and not bm25_error_code:
-                            bm25_error_code = IndexFailureCode.BM25_BUILD_FAILED
-                            bm25_error_msg = str(e)[:100]
-                        if not semantic_ok and not semantic_error_code:
-                            semantic_error_code = IndexFailureCode.CHROMA_BUILD_FAILED
-                            semantic_error_msg = str(e)[:100]
-
-                    # Record indexing health
-                    overall_status = compute_overall_status(exact_ok, bm25_ok, semantic_ok)
-                    health_report = IndexingHealthReport(
-                        overall_status=overall_status,
-                        exact=IndexHealthSnapshot(
-                            status=IndexStatus.SUCCESS if exact_ok else IndexStatus.FAILED,
-                            document_count=len(rim_model.entities) if exact_ok else 0,
-                        ),
-                        bm25=IndexHealthSnapshot(
-                            status=IndexStatus.SUCCESS if bm25_ok else IndexStatus.FAILED,
-                            document_count=bm25_doc_count,
-                            error_code=bm25_error_code,
-                            error_message=bm25_error_msg,
-                            created_at=datetime.now(timezone.utc),
-                        ),
-                        semantic=IndexHealthSnapshot(
-                            status=IndexStatus.SUCCESS if semantic_ok else (
-                                IndexStatus.UNAVAILABLE if semantic_error_code == IndexFailureCode.CHROMA_UNAVAILABLE else IndexStatus.FAILED
-                            ),
-                            document_count=semantic_doc_count,
-                            error_code=semantic_error_code,
-                            error_message=semantic_error_msg,
-                            created_at=datetime.now(timezone.utc),
-                        ),
+                    exact_ok, bm25_ok, semantic_ok = build_and_record_indexes(
+                        db=db,
+                        analysis=analysis,
+                        rim_model=rim_model,
+                        results=results,
+                        progress=progress,
                     )
-
-                    analysis.indexing_status = overall_status.value
-                    analysis.indexing_details = health_report.to_dict()
-                    analysis.indexed_at = datetime.now(timezone.utc)
-                    logger.info(f"Indexing health: overall={overall_status.value} exact={exact_ok} bm25={bm25_ok} semantic={semantic_ok}")
 
                 for art_type, data in results.items():
                     if isinstance(data, bytes):
@@ -767,65 +583,4 @@ class AnalysisWorker(WorkerInterface):
             db.close()
 
     def _build_semantic_index_background(self, analysis_id: int):
-        """
-        Build semantic (Chroma) index in background thread.
-
-        Loads entities from FactStore (not stale in-memory dict).
-        Runs after analysis is marked COMPLETED, non-blocking.
-        Stores semantic index in analysis_artifacts when complete.
-        """
-        logger.info(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Background semantic indexing started")
-        db_session = None
-        try:
-            from backend.intelligence.retrieval.semantic_builder import SemanticIndexBuilder
-            from backend.models.repository import AnalysisArtifact
-            from backend.models.fact_store import FactSymbol
-
-            # FIX: Create fresh session (don't use stale worker session)
-            db_session = SessionLocal()
-
-            # Load entities fresh from FactStore (not stale in-memory dict)
-            entities_from_db = db_session.query(FactSymbol).filter(
-                FactSymbol.analysis_id == analysis_id
-            ).all()
-
-            if not entities_from_db:
-                logger.info(f"[SEMANTIC_INDEX] Analysis {analysis_id}: No symbols, skipping")
-                return
-
-            logger.info(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Found {len(entities_from_db)} symbols")
-
-            # Convert FactSymbol records to dict format for semantic builder
-            entities_dict = {}
-            for symbol in entities_from_db:
-                entities_dict[symbol.id] = {
-                    'name': symbol.name,
-                    'type': symbol.symbol_type,
-                    'file_path': symbol.file.path if symbol.file else '',
-                    'qualified_name': symbol.qualified_name,
-                }
-
-            builder = SemanticIndexBuilder()
-            chroma_bytes = builder.build_index_from_symbols(entities_dict)
-
-            if chroma_bytes:
-                # Store in database using existing session
-                try:
-                    artifact = AnalysisArtifact(
-                        analysis_id=analysis_id,
-                        type="semantic_index_db",
-                        data={},
-                        blob_data=chroma_bytes
-                    )
-                    db_session.add(artifact)
-                    db_session.commit()
-                    logger.info(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Stored ({len(chroma_bytes)} bytes)")
-                except Exception as db_err:
-                    logger.error(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Failed to store: {db_err}")
-                    db_session.rollback()
-            else:
-                logger.error(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Build returned None")
-        except ImportError as ie:
-            logger.error(f"[SEMANTIC_INDEX] Analysis {analysis_id}: chromadb unavailable: {ie}")
-        except Exception as bg_err:
-            logger.error(f"[SEMANTIC_INDEX] Analysis {analysis_id}: Error: {bg_err}", exc_info=True)
+        return build_semantic_index_background(analysis_id)

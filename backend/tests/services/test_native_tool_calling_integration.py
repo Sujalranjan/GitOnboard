@@ -87,15 +87,15 @@ class TestParseResponseFromLLMResponse:
         assert result["action"] == "tool_call"
         assert result["tool_calls"][0]["arguments"] == {"path": "backend", "depth": 2}
 
-    def test_no_native_tools_falls_through_to_text_parsing(self):
-        """Test that when tool_calls is None, falls through to text parsing."""
-        adapter = QAProtocolAdapter(model_id="gpt-4")
+    def test_local_ollama_falls_through_to_text_parsing(self):
+        """Test that for local ollama models (native_tools=False), text JSON is parsed."""
+        adapter = QAProtocolAdapter(model_id="local-model", native_tools=False)
 
         # Simulate response with text-format tool call (no native tool_calls)
         llm_response = LLMResponse(
             content='{"action": "tool_call", "tool_name": "search_code", "arguments": {"query": "auth"}}',
-            model="gpt-4",
-            provider="openrouter",
+            model="local-model",
+            provider="ollama",
             tool_calls=None,  # No native tool calls
         )
 
@@ -111,7 +111,7 @@ class TestParseResponseFromLLMResponse:
         adapter = QAProtocolAdapter(model_id="gpt-4")
 
         llm_response = LLMResponse(
-            content='{"action": "final_answer", "answer": "The system uses FastAPI"}',
+            content="The system uses FastAPI",
             model="gpt-4",
             provider="openrouter",
             tool_calls=None,
@@ -120,15 +120,15 @@ class TestParseResponseFromLLMResponse:
         result = adapter.parse_response_from_llm_response(llm_response)
 
         assert result["action"] == "final_answer"
-        assert "answer" in result
+        assert result["answer"] == "The system uses FastAPI"
         assert "tool_calls" not in result
 
-    def test_malformed_response_passed_through_unchanged(self):
-        """Test that malformed responses pass through unchanged."""
+    def test_cloud_models_no_fallback_treats_content_as_final_answer(self):
+        """Test that cloud models (Groq, OpenRouter, Gemini) do NOT fall back to JSON text parsing."""
         adapter = QAProtocolAdapter(model_id="gpt-4")
 
         llm_response = LLMResponse(
-            content="This is not valid JSON",
+            content="This is natural language answering the user directly.",
             model="gpt-4",
             provider="openrouter",
             tool_calls=None,
@@ -136,13 +136,13 @@ class TestParseResponseFromLLMResponse:
 
         result = adapter.parse_response_from_llm_response(llm_response)
 
-        # Should pass through as malformed error
-        assert result.get("action") == "malformed"
-        assert "error" in result
+        # For cloud models: no native tool call means it's a final answer directly (no fallback)
+        assert result.get("action") == "final_answer"
+        assert result.get("answer") == "This is natural language answering the user directly."
 
     def test_qwen_hermes_xml_format_still_works(self):
-        """Test that Qwen/Hermes XML parsing still works (backward compatibility)."""
-        adapter = QAProtocolAdapter(model_id="qwen3:4b-instruct")
+        """Test that local Qwen/Hermes XML parsing works for local ollama."""
+        adapter = QAProtocolAdapter(model_id="qwen3:4b-instruct", native_tools=False)
 
         # Simulate Qwen response with Hermes XML format
         hermes_response = """<tool_call>
@@ -155,7 +155,7 @@ class TestParseResponseFromLLMResponse:
             content=hermes_response,
             model="qwen3:4b-instruct",
             provider="ollama",
-            tool_calls=None,  # No native tool calls (Qwen uses text format)
+            tool_calls=None,  # No native tool calls (local Qwen uses Hermes format)
         )
 
         result = adapter.parse_response_from_llm_response(llm_response)
@@ -188,11 +188,11 @@ class TestParseResponseFromLLMResponse:
         assert result["tool_calls"][0]["tool_name"] == "correct_tool"
 
     def test_empty_tool_calls_list_falls_through(self):
-        """Test that empty tool_calls list falls through to text parsing."""
+        """Test that empty tool_calls list returns final_answer directly for cloud models."""
         adapter = QAProtocolAdapter(model_id="gpt-4")
 
         llm_response = LLMResponse(
-            content='{"action": "final_answer", "answer": "No tools needed"}',
+            content="No tools needed",
             model="gpt-4",
             provider="openrouter",
             tool_calls=[],  # Empty list
@@ -200,33 +200,41 @@ class TestParseResponseFromLLMResponse:
 
         result = adapter.parse_response_from_llm_response(llm_response)
 
-        # Should fall through to text parsing
         assert result["action"] == "final_answer"
+        assert result["answer"] == "No tools needed"
 
 
 class TestProviderToolCallingBackwardCompatibility:
-    """Tests to ensure existing provider behavior is preserved."""
+    """Tests to ensure cloud providers use native tool calling."""
 
-    def test_openrouter_without_native_tools_unchanged(self):
-        """Verify OpenRouter without tool_calls still works as before."""
-        adapter = QAProtocolAdapter(model_id="gpt-4")
+    def test_groq_native_tools_format(self):
+        """Test Groq native tool calling format."""
+        adapter = QAProtocolAdapter(model_id="openai/gpt-oss-120b")
+        assert adapter.is_native is True
+        assert adapter.is_qwen is False
 
-        # Simulate old-style OpenRouter response (text format)
         llm_response = LLMResponse(
-            content='{"action": "tool_call", "tool_name": "search_code", "arguments": {"query": "test"}}',
-            model="gpt-4",
-            provider="openrouter",
-            tool_calls=None,
+            content="",
+            model="openai/gpt-oss-120b",
+            provider="groq",
+            tool_calls=[
+                ToolCall(
+                    tool_name="read_file",
+                    parameters={"path": "backend/config.py"},
+                    tool_call_id="groq-0",
+                ),
+            ],
         )
 
         result = adapter.parse_response_from_llm_response(llm_response)
-
         assert result["action"] == "tool_call"
-        assert result["tool_calls"][0]["tool_name"] == "search_code"
+        assert result["tool_calls"][0]["tool_name"] == "read_file"
+        assert result["tool_calls"][0]["arguments"]["path"] == "backend/config.py"
 
     def test_gemini_native_tools_format(self):
         """Test Gemini native tool calling format."""
-        adapter = QAProtocolAdapter(model_id="claude-3-5-sonnet")
+        adapter = QAProtocolAdapter(model_id="gemini-2.0-flash")
+        assert adapter.is_native is True
 
         # Simulate Gemini's native tool call format
         llm_response = LLMResponse(
@@ -247,3 +255,26 @@ class TestProviderToolCallingBackwardCompatibility:
         assert result["action"] == "tool_call"
         assert result["tool_calls"][0]["tool_name"] == "query_rim"
         assert result["tool_calls"][0]["arguments"]["entity_name"] == "LLMService"
+
+    def test_ollama_cloud_native_tools_format(self):
+        """Test Ollama cloud native tool calling format."""
+        adapter = QAProtocolAdapter(model_id="custom-cloud", provider="ollama_cloud")
+        assert adapter.is_native is True
+
+        llm_response = LLMResponse(
+            content="",
+            model="custom-cloud",
+            provider="ollama_cloud",
+            tool_calls=[
+                ToolCall(
+                    tool_name="get_tree",
+                    parameters={},
+                    tool_call_id="ollama-0",
+                ),
+            ],
+        )
+
+        result = adapter.parse_response_from_llm_response(llm_response)
+        assert result["action"] == "tool_call"
+        assert result["tool_calls"][0]["tool_name"] == "get_tree"
+

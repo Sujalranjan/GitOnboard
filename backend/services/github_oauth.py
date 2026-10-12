@@ -99,7 +99,25 @@ def get_or_create_user(db: Session, github_data: dict, access_token: str) -> Use
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return new_user
+    user = new_user
+
+    # Seamlessly transfer any repositories imported under mock local_developer to the authenticated user
+    local_dev = db.query(User).filter(User.github_id == "local_developer").first()
+    if local_dev and local_dev.id != user.id:
+        try:
+            from backend.models.repository import Repository, TaskStatus
+            local_repos = db.query(Repository).filter(Repository.user_id == local_dev.id).all()
+            for lr in local_repos:
+                existing = db.query(Repository).filter(Repository.user_id == user.id, Repository.url == lr.url).first()
+                if not existing:
+                    lr.user_id = user.id
+            db.query(TaskStatus).filter(TaskStatus.user_id == local_dev.id).update({TaskStatus.user_id: user.id})
+            db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to migrate local_developer repositories to user {user.id}: {e}")
+            db.rollback()
+
+    return user
 
 def create_jwt(user: User) -> str:
     now = datetime.now(timezone.utc)

@@ -8,6 +8,7 @@ class LanguageDetector:
     """
     EXTENSION_MAP = {
         ".py": {"name": "Python", "code": True},
+        ".ipynb": {"name": "Python", "code": True},
         ".js": {"name": "JavaScript", "code": True},
         ".jsx": {"name": "JavaScript", "code": True},
         ".ts": {"name": "TypeScript", "code": True},

@@ -42,11 +42,17 @@ class ASTParserManager:
             
         try:
             with open(full_path, "r", encoding="utf-8") as f:
-                source = f.read()
+                raw_source = f.read()
         except Exception:
             return None
-            
-        parsed_file = provider.parse(rel_path, source)
+
+        from backend.intelligence.notebook import resolve_source_document
+        doc = resolve_source_document(rel_path, raw_source)
+        if doc.conversion_error:
+            # Notebook conversion failed; do not attempt fake Python parsing
+            return None
+
+        parsed_file = provider.parse(rel_path, doc.source)
         self._cache[rel_path] = parsed_file
         return parsed_file
         

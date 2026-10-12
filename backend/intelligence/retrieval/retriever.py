@@ -14,19 +14,16 @@ from backend.intelligence.retrieval.schema import (
 )
 from backend.models.fact_store import FactSymbol, FactFile, FactRoute, FactDatabaseObject, FactCapability
 
+from backend.intelligence.retrieval.retriever_index import (
+    extract_symbol_file_path,
+    build_factstore_documents,
+    load_semantic_collection_from_artifact,
+)
+
 logger = logging.getLogger(__name__)
 
 def _extract_symbol_file_path(sym: Optional[FactSymbol]) -> str:
-    if not sym:
-        return ""
-    if sym.file and sym.file.path:
-        return sym.file.path
-    if sym.id:
-        import re
-        match = re.search(r":urn:[^:]+:(.+?)#", sym.id)
-        if match:
-            return match.group(1)
-    return ""
+    return extract_symbol_file_path(sym)
 
 
 class HybridRetriever:
@@ -186,114 +183,7 @@ class HybridRetriever:
         if not self.analysis_id:
             return
 
-        docs: List[Dict[str, Any]] = []
-
-        # 1. Index Files
-        files = self.db.query(FactFile).filter(FactFile.analysis_id == self.analysis_id).all()
-        for f in files:
-            search_text = f"file path {f.path} {f.language or ''} {f.content_type or ''}"
-            docs.append({
-                "id": f.id,
-                "analysis_id": self.analysis_id,  # CRITICAL: Retain analysis_id for filtering
-                "name": f.path,
-                "qualified_name": f.path,
-                "type": "file",
-                "file_path": f.path,
-                "search_text": search_text,
-                "line_start": 1,
-                "line_end": 1,
-                "match_type": "file",
-                "match_name": f.path,
-            })
-
-        # 2. Index Symbols
-        symbols = self.db.query(FactSymbol).filter(FactSymbol.analysis_id == self.analysis_id).all()
-        for sym in symbols:
-            fpath = _extract_symbol_file_path(sym)
-            meta = sym.metadata_json or {}
-            docstring = meta.get("docstring", "")
-            signature = meta.get("signature", "")
-
-            # Form rich searchable document
-            search_text = f"{sym.name} {sym.qualified_name or ''} {sym.symbol_type} {fpath} {signature} {docstring}"
-            docs.append({
-                "id": sym.id,
-                "analysis_id": self.analysis_id,  # CRITICAL: Retain analysis_id
-                "symbol_id": sym.id,  # Include symbol_id for proper expansion resolution
-                "name": sym.name,
-                "qualified_name": sym.qualified_name or sym.name,
-                "type": sym.symbol_type,
-                "file_path": fpath,
-                "search_text": search_text,
-                "line_start": sym.line_start,
-                "line_end": sym.line_end,
-                "match_type": sym.symbol_type,
-                "match_name": sym.name,
-            })
-
-        # 3. Index Routes
-        routes = self.db.query(FactRoute).filter(FactRoute.analysis_id == self.analysis_id).all()
-        for r in routes:
-            handler_id = r.handler_symbol_id or r.symbol_id
-            fpath = ""
-            l_start = None
-            l_end = None
-            if handler_id:
-                sym = self.db.query(FactSymbol).filter(FactSymbol.id == handler_id).first()
-                if sym:
-                    fpath = _extract_symbol_file_path(sym)
-                    l_start = sym.line_start
-                    l_end = sym.line_end
-            search_text = f"route {r.method} {r.path} {fpath}"
-            docs.append({
-                "id": r.id,
-                "analysis_id": self.analysis_id,  # CRITICAL: Retain analysis_id
-                "name": f"{r.method} {r.path}",
-                "qualified_name": f"{r.method} {r.path}",
-                "type": "route",
-                "file_path": fpath,
-                "search_text": search_text,
-                "match_type": "route",
-                "match_name": f"{r.method} {r.path}",
-                "symbol_id": handler_id or r.symbol_id or r.id,
-                "line_start": l_start,
-                "line_end": l_end,
-            })
-
-        # 4. Index DB Objects
-        db_objs = self.db.query(FactDatabaseObject).filter(FactDatabaseObject.analysis_id == self.analysis_id).all()
-        for d in db_objs:
-            fpath = ""
-            l_start = None
-            l_end = None
-            if d.symbol_id:
-                sym = self.db.query(FactSymbol).filter(FactSymbol.id == d.symbol_id).first()
-                if sym:
-                    fpath = _extract_symbol_file_path(sym)
-                    l_start = sym.line_start
-                    l_end = sym.line_end
-            search_text = f"database table {d.name} {d.object_type} {fpath}"
-            docs.append({
-                "id": d.id,
-                "analysis_id": self.analysis_id,  # CRITICAL: Retain analysis_id
-                "name": d.name,
-                "qualified_name": d.name,
-                "type": "database_table",
-                "file_path": fpath,
-                "search_text": search_text,
-                "match_type": "database_table",
-                "match_name": d.name,
-                "symbol_id": d.symbol_id or d.id,
-                "line_start": l_start,
-                "line_end": l_end,
-            })
-
-        # 5. Index Capabilities (DISABLED)
-        # Capabilities are abstract concepts without file locations.
-        # Indexing them causes empty file_path to propagate downstream, breaking inspection tools.
-        # For code navigation queries, files and symbols are sufficient.
-        # If capability search is needed in future, link capabilities to their source files first.
-
+        docs = build_factstore_documents(self.db, self.analysis_id)
         self.bm25_index = BM25Index()
         self.bm25_index.index(docs, text_key="search_text")
 
@@ -302,51 +192,13 @@ class HybridRetriever:
         if not self.analysis_id or self.chroma_collection:
             return
 
-        try:
-            from backend.models.repository import AnalysisArtifact
-            artifact = self.db.query(AnalysisArtifact).filter(
-                AnalysisArtifact.analysis_id == self.analysis_id,
-                AnalysisArtifact.type == "semantic_index_db"
-            ).first()
-
-            if not artifact:
-                self.semantic_degradation = "artifact_not_found"
-                logger.debug(f"No semantic_index_db artifact for analysis {self.analysis_id}")
-                return
-
-            if not artifact.blob_data:
-                self.semantic_degradation = "artifact_empty"
-                logger.debug(f"semantic_index_db artifact is empty for analysis {self.analysis_id}")
-                return
-
-            try:
-                import chromadb
-                import tempfile
-                import zipfile
-                import io
-
-                # Extract Chroma database from zip
-                temp_dir = tempfile.mkdtemp(prefix="chroma_load_")
-                try:
-                    with zipfile.ZipFile(io.BytesIO(artifact.blob_data)) as zf:
-                        zf.extractall(temp_dir)
-
-                    # Load from extracted directory
-                    client = chromadb.PersistentClient(path=temp_dir)
-                    self.chroma_collection = client.get_collection(name="semantic_index")
-                    logger.debug(f"Loaded semantic index for analysis {self.analysis_id}")
-                except Exception as e:
-                    self.semantic_degradation = f"load_error: {str(e)[:50]}"
-                    logger.warning(f"Failed to load semantic index from artifact: {e}")
-                    # Keep temp_dir for cleanup - will be handled at end
-
-            except ImportError:
-                self.semantic_degradation = "chromadb_unavailable"
-                logger.debug("chromadb not available - semantic search disabled")
-
-        except Exception as e:
-            self.semantic_degradation = f"artifact_load_error: {str(e)[:50]}"
-            logger.debug(f"Failed to load semantic index artifact: {e}")
+        collection, degradation = load_semantic_collection_from_artifact(self.db, self.analysis_id)
+        if collection:
+            self.chroma_collection = collection
+            logger.debug(f"Loaded semantic index for analysis {self.analysis_id}")
+        elif degradation:
+            self.semantic_degradation = degradation
+            logger.debug(f"Semantic index not loaded for analysis {self.analysis_id}: {degradation}")
 
     def _search_exact_facts(self, query: str) -> List[Dict[str, Any]]:
         """Finds direct, exact matches in the Fact Store (symbols, routes, database tables)."""

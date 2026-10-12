@@ -173,6 +173,16 @@ export default function CodeDetailsViewer({
                     <p className="text-sm text-gray-400 dark:text-slate-500 italic">No imports found.</p>
                   )}
                 </div>
+
+                {/* Source Code / Cell Content */}
+                {astData.source_code && (
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-3 border-b border-gray-200 dark:border-slate-800 pb-2">Source Code &amp; Cells</h3>
+                    <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg text-sm font-mono overflow-x-auto whitespace-pre leading-relaxed border border-slate-800 max-h-[500px]">
+                      {astData.source_code}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
             

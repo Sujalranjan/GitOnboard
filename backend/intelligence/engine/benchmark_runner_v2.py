@@ -386,11 +386,15 @@ async def benchmark_fail_closed(
 
         # Run the Q&A loop
         logger.debug(f"[FailClosed] Running condition {req.condition} for: {req.question}")
+        runner_provider = llm_service.providers[0].provider_name if getattr(llm_service, "providers", None) else None
+        runner_model = getattr(llm_service.providers[0], "default_model", None) if getattr(llm_service, "providers", None) else None
         qa_loop = QALoop(
             llm_service=llm_service,
             tool_dispatch=tool_dispatch,
             config=config,
             system_prompt_parts=prompt_parts,
+            model=runner_model,
+            provider=runner_provider,
             structured_logger=structured_log,
             request_id=request_id,
             repository=repo_name,

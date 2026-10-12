@@ -99,6 +99,43 @@ class TestGeminiTokenCounter:
             assert result.method == "heuristic"
             assert result.estimated is True
 
+    @pytest.mark.asyncio
+    async def test_gemini_empty_model_raises_value_error(self):
+        """E & F. Missing Gemini model raises ValueError, never generates /models/:countTokens and never hardcodes 2.5."""
+        counter = GeminiTokenCounter()
+        counter.api_key = "test-key"
+        with pytest.raises(ValueError, match="Explicit model name is required"):
+            await counter.count("hello", "gemini", "")
+
+        from backend.ai.schemas import LLMRequest, Message, MessageRole
+        req = LLMRequest(messages=[Message(role=MessageRole.USER, content="hello")])
+        with pytest.raises(ValueError, match="Explicit model name is required"):
+            await counter.count_request(req, "gemini", "")
+
+    @pytest.mark.asyncio
+    async def test_gemini_uses_exact_configured_model(self):
+        """B & E. Gemini uses exact configured model (gemini-3.8-flash) in URL without hardcoding."""
+        counter = GeminiTokenCounter()
+        counter.api_key = "test-key"
+        from backend.ai.schemas import LLMRequest, Message, MessageRole
+        req = LLMRequest(messages=[Message(role=MessageRole.USER, content="hello")])
+
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_post = AsyncMock()
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {"totalTokens": 123}
+            mock_resp.raise_for_status = MagicMock()
+            mock_post.return_value = mock_resp
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            result = await counter.count_request(req, "gemini", "gemini-3.8-flash")
+            assert result.total_tokens == 123
+            assert result.is_exact is True
+            # Verify exact URL has model name and NOT empty /models/:countTokens
+            called_url = mock_post.call_args[0][0]
+            assert "gemini-3.8-flash:countTokens" in called_url
+            assert "/models/:countTokens" not in called_url
+
 
 class TestOpenRouterTokenCounter:
     """Tests for OpenRouter best-effort counter."""
@@ -246,3 +283,41 @@ class TestTokenCountingIntegration:
         )
         assert result.estimated is True
         assert result.provider == "openrouter"
+
+    @pytest.mark.asyncio
+    async def test_groq_token_counter_tiktoken(self):
+        """Groq uses tiktoken o200k_harmony with estimated=True."""
+        result = await count_tokens(
+            "hello world",
+            provider="groq",
+            model="openai/gpt-oss-120b"
+        )
+        assert isinstance(result, TokenCountResult)
+        assert result.count == 2
+        assert result.method == "tiktoken_o200k_harmony"
+        assert result.estimated is True
+        assert result.provider == "groq"
+
+    @pytest.mark.asyncio
+    async def test_count_full_request_groq(self):
+        """count_full_request for Groq counts message content, tool calls, and tool schemas."""
+        from backend.ai.tokencount.registry import count_full_request
+        from backend.ai.schemas import LLMRequest, Message, MessageRole, Tool
+
+        req = LLMRequest(
+            messages=[
+                Message(role=MessageRole.SYSTEM, content="You are a code assistant."),
+                Message(role=MessageRole.USER, content="Explain this repo."),
+            ],
+            tools=[
+                Tool(name="read_file", description="Read file", parameters={"type": "object", "properties": {"path": {"type": "string"}}})
+            ],
+            model="openai/gpt-oss-120b"
+        )
+
+        res = await count_full_request(req, "groq", "openai/gpt-oss-120b")
+        assert res.total_tokens > 0
+        assert res.tool_schema_tokens > 0
+        assert res.framing_overhead_tokens > 0
+        assert res.is_exact is False  # Framing is estimated
+        assert res.method == "groq_tiktoken_o200k_estimated"

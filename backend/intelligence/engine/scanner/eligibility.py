@@ -89,7 +89,7 @@ class FileEligibility:
     # we don't accidentally analyze .db, .log, .pyc, etc.
     INCLUSION_EXTENSIONS: Set[str] = {
         # Python (primary)
-        ".py", ".pyi",
+        ".py", ".pyi", ".ipynb",
 
         # TypeScript/JavaScript (primary)
         ".ts", ".tsx", ".mts", ".cts",  # TypeScript
@@ -136,7 +136,7 @@ class FileEligibility:
     # ====================
     SOURCE_EXTENSIONS: Set[str] = {
         # Python
-        ".py", ".pyi",
+        ".py", ".pyi", ".ipynb",
         # JavaScript/TypeScript
         ".js", ".jsx", ".mjs", ".cjs",
         ".ts", ".tsx", ".mts", ".cts",

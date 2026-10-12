@@ -113,3 +113,45 @@ async def test_provider_order_matters():
 def test_service_requires_at_least_one_provider():
     with pytest.raises(ValueError):
         LLMService(providers=[])
+
+
+def test_build_default_service_prod_with_groq():
+    """Verify GroqProvider is registered in PROD mode when GROQ_API_KEY is present."""
+    from backend.ai.service import build_default_service
+    from unittest.mock import patch
+
+    with patch.dict(
+        "os.environ",
+        {
+            "DEPLOYMENT_TYPE": "PROD",
+            "GROQ_API_KEY": "test-groq-key",
+            "GEMINI_API_KEY": "",
+            "OPENROUTER_API_KEY": "",
+        },
+        clear=False,
+    ):
+        service = build_default_service()
+        assert len(service.providers) == 1
+        assert service.providers[0].provider_name == "groq"
+        assert service.providers[0].default_model == "openai/gpt-oss-120b"
+
+
+def test_build_default_service_prod_full_chain_order():
+    """Verify fallback chain in PROD mode is Gemini -> Groq -> OpenRouter."""
+    from backend.ai.service import build_default_service
+    from unittest.mock import patch
+
+    with patch.dict(
+        "os.environ",
+        {
+            "DEPLOYMENT_TYPE": "PROD",
+            "GEMINI_API_KEY": "test-gemini",
+            "GROQ_API_KEY": "test-groq",
+            "OPENROUTER_API_KEY": "test-openrouter",
+        },
+        clear=False,
+    ):
+        service = build_default_service()
+        names = [p.provider_name for p in service.providers]
+        assert names == ["gemini", "groq", "openrouter"]
+

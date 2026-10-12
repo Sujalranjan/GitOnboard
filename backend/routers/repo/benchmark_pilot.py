@@ -170,11 +170,15 @@ async def pilot_benchmark(
 
         # Run the Q&A loop
         logger.info(f"[Pilot] Running condition {req.condition} for: {req.question}")
+        pilot_provider = llm_service.providers[0].provider_name if getattr(llm_service, "providers", None) else None
+        pilot_model = getattr(llm_service.providers[0], "default_model", None) if getattr(llm_service, "providers", None) else None
         qa_loop = QALoop(
             llm_service=llm_service,
             tool_dispatch=tool_dispatch,
             config=config,
             system_prompt_parts=prompt_parts,
+            model=pilot_model,
+            provider=pilot_provider,
             structured_logger=structured_log,
             request_id=request_id,
             repository=repo_name,

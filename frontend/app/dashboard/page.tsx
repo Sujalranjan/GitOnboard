@@ -39,7 +39,7 @@ function DashboardContent() {
       const data = await repositoryService.getAll();
       const repoList = Array.isArray(data) ? data : (data?.repositories || []);
       console.log('[Dashboard] Fetched repos:', repoList);
-      repoList.forEach(repo => {
+      repoList.forEach((repo: any) => {
         console.log(`[Dashboard] Repo: ${repo.project_name}, status=${repo.status}, job_status=${repo.job_status}, progress=${repo.progress}`);
       });
       setRepos(repoList);
@@ -301,7 +301,7 @@ function DashboardContent() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredRepos.map((repo, idx) => (
-            <Link key={idx} href={`/repository/${repo.project_name}`}>
+            <Link key={idx} href={`/repository/${repo.project_name}/investigation`}>
               <Card className="h-full hover:shadow-md transition-shadow cursor-pointer group flex flex-col">
                 <div className="flex justify-between items-start mb-4">
                   <h3 className="font-bold text-lg text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors line-clamp-1">{repo.project_name}</h3>

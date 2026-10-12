@@ -4,8 +4,9 @@ OpenRouter token counter: best-effort, always marked estimated since underlying 
 
 import logging
 import time
+from typing import Any
 
-from .base import TokenCounter, TokenCountResult
+from .base import TokenCounter, TokenCountResult, RequestTokenCount
 from .heuristic import HeuristicTokenCounter
 from .qwen import QwenTokenCounter
 
@@ -68,6 +69,26 @@ class OpenRouterTokenCounter(TokenCounter):
             count=result.count,
             method=result.method,
             estimated=True,  # ALWAYS estimated for OpenRouter
+            provider="openrouter",
+            model=model,
+            latency_ms=elapsed_ms,
+        )
+
+    async def count_request(self, request: Any, provider: str, model: str) -> RequestTokenCount:
+        """
+        Count total tokens in full LLMRequest for OpenRouter-routed models.
+        Uses Qwen tokenizer if Qwen model, else heuristic, always marked estimated=True.
+        """
+        start = time.perf_counter()
+        res = await super().count_request(request, provider or "openrouter", model)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        return RequestTokenCount(
+            total_tokens=res.total_tokens,
+            message_tokens=res.message_tokens,
+            tool_schema_tokens=res.tool_schema_tokens,
+            framing_overhead_tokens=res.framing_overhead_tokens,
+            is_exact=False,  # ALWAYS estimated for OpenRouter
+            method=f"openrouter_{res.method}",
             provider="openrouter",
             model=model,
             latency_ms=elapsed_ms,

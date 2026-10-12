@@ -24,7 +24,7 @@ def build_default_service() -> "LLMService":
     """
     Construct LLMService strictly according to DEPLOYMENT_TYPE.
     - DEPLOYMENT_TYPE=LOCAL: Ollama only -> deterministic fallback.
-    - DEPLOYMENT_TYPE=PROD: Gemini first -> OpenRouter -> deterministic fallback.
+    - DEPLOYMENT_TYPE=PROD: Gemini first -> Groq -> OpenRouter -> deterministic fallback.
     - Never cross-use providers between LOCAL and PROD.
 
     PYTEST_CURRENT_TEST environment variable does NOT override an explicitly
@@ -48,22 +48,30 @@ def build_default_service() -> "LLMService":
         return LLMService(providers=providers)
 
     if deployment_type == "PROD":
+        from backend.config import settings
         # 1. Gemini (Priority 1 in PROD)
         gemini_key = os.environ.get("GEMINI_API_KEY", "")
         if gemini_key:
             from .providers.gemini import GeminiProvider
-            providers.append(GeminiProvider(api_key=gemini_key))
+            providers.append(GeminiProvider(api_key=gemini_key, model=settings.gemini_model))
             logger.info("LLMService: PROD mode - GeminiProvider registered.")
 
-        # 2. OpenRouter (Priority 2 in PROD)
+        # 2. Groq (Priority 2 in PROD)
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+        if groq_key:
+            from .providers.groq import GroqProvider
+            providers.append(GroqProvider(api_key=groq_key, model=settings.groq_model))
+            logger.info("LLMService: PROD mode - GroqProvider registered.")
+
+        # 3. OpenRouter (Priority 3 in PROD)
         openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
         if openrouter_key:
             from .providers.openrouter import OpenRouterProvider
-            providers.append(OpenRouterProvider(api_key=openrouter_key))
+            providers.append(OpenRouterProvider(api_key=openrouter_key, model=settings.openrouter_model))
             logger.info("LLMService: PROD mode - OpenRouterProvider registered.")
 
         if not providers:
-            logger.warning("LLMService: PROD mode specified but no cloud API keys (GEMINI_API_KEY, OPENROUTER_API_KEY) found.")
+            logger.warning("LLMService: PROD mode specified but no cloud API keys (GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY) found.")
     else:
         # LOCAL Mode (Default): primary Qwen instruct (faster) with Qwen coder fallback (more capable)
         ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
