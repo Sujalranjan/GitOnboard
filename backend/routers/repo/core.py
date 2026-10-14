@@ -342,6 +342,7 @@ def list_repos(db: Session = Depends(get_db), current_user: User = Depends(get_c
         results.append({
             "id": r.id,
             "project_name": repo_name,
+            "repository_hash": r.repository_hash,
             "url": r.url,
             "status": status,
             "job_status": job_status,

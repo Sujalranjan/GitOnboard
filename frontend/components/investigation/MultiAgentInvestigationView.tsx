@@ -98,16 +98,22 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
         console.warn('Failed to load LLM models:', err);
       }
 
-      try {
-        const resHash = await fetch(`/api/repos/lookup-hash?name=${encodeURIComponent(repoName)}`);
-        if (resHash.ok) {
-          const hData = await resHash.json();
-          if (hData.repository_hash) {
-            setRepoHash(hData.repository_hash);
+      // If repoName is already a 36-character UUID repository_hash, use it directly
+      const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(repoName);
+      if (isUuid) {
+        setRepoHash(repoName);
+      } else {
+        try {
+          const resHash = await fetch(`/api/repos/lookup-hash?name=${encodeURIComponent(repoName)}`);
+          if (resHash.ok) {
+            const hData = await resHash.json();
+            if (hData.repository_hash) {
+              setRepoHash(hData.repository_hash);
+            }
           }
+        } catch (err) {
+          console.warn('Failed to lookup repo hash:', err);
         }
-      } catch (err) {
-        console.warn('Failed to lookup repo hash:', err);
       }
     }
 

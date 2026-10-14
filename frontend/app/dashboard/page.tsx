@@ -12,7 +12,7 @@ import { Plus, FolderGit2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 function DashboardContent() {
-  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { user, isLoading: authLoading, isAuthenticated, authStatus } = useAuth();
   const [repos, setRepos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -40,7 +40,7 @@ function DashboardContent() {
       const repoList = Array.isArray(data) ? data : (data?.repositories || []);
       console.log('[Dashboard] Fetched repos:', repoList);
       repoList.forEach((repo: any) => {
-        console.log(`[Dashboard] Repo: ${repo.project_name}, status=${repo.status}, job_status=${repo.job_status}, progress=${repo.progress}`);
+        console.log(`[Dashboard] Repo: ${repo.project_name}, hash=${repo.repository_hash}, status=${repo.status}, job_status=${repo.job_status}, progress=${repo.progress}`);
       });
       setRepos(repoList);
     } catch (err) {
@@ -74,15 +74,19 @@ function DashboardContent() {
   });
 
   useEffect(() => {
-    console.log('[Dashboard] useEffect triggered: authLoading=', authLoading, 'isAuthenticated=', isAuthenticated, 'repos.length=', repos.length, 'hasActiveJobs=', hasActiveJobs);
+    console.log('[Dashboard] useEffect triggered: authLoading=', authLoading, 'authStatus=', authStatus, 'isAuthenticated=', isAuthenticated, 'repos.length=', repos.length, 'hasActiveJobs=', hasActiveJobs);
 
-    if (!authLoading) {
-      if (!isAuthenticated) {
-        console.log('[Dashboard] Not authenticated, redirecting to home');
-        window.location.href = "/";
-      } else {
-        console.log('[Dashboard] Authenticated, fetching repos (initial load)');
-        fetchRepos(true);
+    if (authLoading || authStatus === 'backend-unavailable') {
+      // Don't redirect while backend is starting or offline; keep waiting/retrying
+      return;
+    }
+
+    if (authStatus === 'unauthenticated') {
+      console.log('[Dashboard] Confirmed unauthenticated, redirecting to home');
+      window.location.href = "/";
+    } else if (authStatus === 'authenticated' || isAuthenticated) {
+      console.log('[Dashboard] Authenticated, fetching repos (initial load)');
+      fetchRepos(true);
 
         // Subscribe to real-time task updates via SSE for repos with active jobs
         // This ensures we get notified whenever any repo's job status changes
@@ -159,9 +163,8 @@ function DashboardContent() {
         } else {
           console.log('[Dashboard] repos.length is 0, not setting up SSE');
         }
-      }
     }
-  }, [authLoading, isAuthenticated, hasActiveJobs]);
+  }, [authLoading, isAuthenticated, authStatus, hasActiveJobs]);
 
   const repoList = Array.isArray(repos) ? repos : [];
   const filteredRepos = repoList.filter((repo) => {
@@ -300,11 +303,13 @@ function DashboardContent() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredRepos.map((repo, idx) => (
-            <Link key={idx} href={`/repository/${repo.project_name}/investigation`}>
-              <Card className="h-full hover:shadow-md transition-shadow cursor-pointer group flex flex-col">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="font-bold text-lg text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors line-clamp-1">{repo.project_name}</h3>
+          {filteredRepos.map((repo, idx) => {
+            const repoSlug = repo.repository_hash || encodeURIComponent(repo.project_name);
+            return (
+              <Link key={idx} href={`/repository/${repoSlug}/investigation`}>
+                <Card className="h-full hover:shadow-md transition-shadow cursor-pointer group flex flex-col">
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="font-bold text-lg text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors line-clamp-1">{repo.project_name}</h3>
                   <div className="flex gap-2 flex-wrap justify-end">
                     {repo.frameworks?.slice(0, 2).map((fw: string) => (
                       <span key={fw} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
@@ -407,7 +412,8 @@ function DashboardContent() {
                 </div>
               </Card>
             </Link>
-          ))}
+          );
+          })}
         </div>
       )}
 
