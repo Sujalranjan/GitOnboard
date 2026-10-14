@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { MermaidViewer } from '@/components/common/MermaidViewer';
 import { ChatMessage, TaskItem, FindingItem } from '@/types/investigation';
 
 interface ChatPanelProps {
@@ -189,12 +190,30 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            pre: ({ children }) => (
-                              <pre className="overflow-x-auto max-w-full p-3 rounded-lg bg-slate-900/90 text-slate-100 font-mono text-xs my-2 border border-slate-700/60">
-                                {children}
-                              </pre>
-                            ),
+                            pre: ({ children }: any) => {
+                              // If children contains a Mermaid block, avoid wrapping in styled <pre> box
+                              const childProps = (children as any)?.props;
+                              const className = childProps?.className || '';
+                              const codeString = String(childProps?.children || '');
+                              const isMermaid = className.includes('language-mermaid') || codeString.startsWith('graph ') || codeString.startsWith('flowchart ');
+                              if (isMermaid) {
+                                return <>{children}</>;
+                              }
+                              return (
+                                <pre className="overflow-x-auto max-w-full p-3 rounded-lg bg-slate-900/90 text-slate-100 font-mono text-xs my-2 border border-slate-700/60">
+                                  {children}
+                                </pre>
+                              );
+                            },
                             code: ({ className, children, ...props }: any) => {
+                              const match = /language-(\w+)/.exec(className || '');
+                              const codeString = String(children).replace(/\n$/, '');
+                              const isMermaid = match && match[1] === 'mermaid' || (!match && (codeString.startsWith('graph ') || codeString.startsWith('flowchart ') || codeString.startsWith('sequenceDiagram') || codeString.startsWith('classDiagram') || codeString.startsWith('erDiagram')));
+
+                              if (isMermaid) {
+                                return <MermaidViewer chart={codeString} />;
+                              }
+
                               const isMultiline = String(children).includes('\n');
                               if (!isMultiline) {
                                 return (
