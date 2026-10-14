@@ -165,10 +165,11 @@ def get_valid_models() -> Dict[str, str]:
         # PROD: Cloud models only
         return cloud_models
     else:
-        # LOCAL: Qwen models by default, plus options to choose cloud models (OpenRouter, Groq, Gemini)
+        # LOCAL: Qwen & Nemotron models by default, plus options to choose cloud models (OpenRouter, Groq, Gemini)
         models = {
             settings.model_local_fast: "Qwen 3 4B (Local - Fast)",
             settings.model_local_quality: "Qwen 2.5 Coder 7B (Local - Quality)",
+            settings.model_local_nemotron: "Nemotron Mini (Local - Ollama)",
         }
         models.update(cloud_models)
         return models
@@ -373,22 +374,23 @@ async def analyze_repository_stream(
                 selected_provider = "openrouter"
                 logger.info(f"[router] Using OpenRouter provider for model {model}")
 
-            elif model.startswith("qwen"):
-                # Local Qwen model - Ollama-only service
+            elif model.startswith("qwen") or ("nemotron" in model.lower() and "nvidia" not in model.lower()):
+                # Local Qwen or Nemotron model - Ollama-only service
                 from backend.ai.providers.ollama import OllamaProvider
                 ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
                 ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
-                primary_provider = OllamaProvider(base_url=ollama_url, model=model, timeout=ollama_timeout)
+                planner_ctx = int(os.environ.get("INVESTIGATION_PLANNER_CONTEXT", str(settings.investigation_planner_context)))
+                primary_provider = OllamaProvider(base_url=ollama_url, model=model, timeout=ollama_timeout, num_ctx=planner_ctx)
 
                 # Add fallback provider if different model configured
                 fallback_model = os.environ.get("OLLAMA_FALLBACK_MODEL", "qwen2.5-coder:7b")
                 if fallback_model and fallback_model != model:
-                    fallback_provider = OllamaProvider(base_url=ollama_url, model=fallback_model, timeout=ollama_timeout)
+                    fallback_provider = OllamaProvider(base_url=ollama_url, model=fallback_model, timeout=ollama_timeout, num_ctx=planner_ctx)
                     llm_service = LLMService(providers=[primary_provider, fallback_provider])
                 else:
                     llm_service = LLMService(providers=[primary_provider])
                 selected_provider = "ollama"
-                logger.info(f"[router] Using Ollama provider for model {model}")
+                logger.info(f"[router] Using Ollama provider for model {model} (context={planner_ctx})")
 
             else:
                 # Unknown model - use default service chain (should not reach here due to validation)
