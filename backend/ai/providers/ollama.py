@@ -109,7 +109,8 @@ class OllamaProvider:
         if resp.status_code == 400:
             raise NonRetriableError(f"Ollama bad request: {resp.text}", resp.status_code)
         if resp.status_code >= 500:
-            raise RetriableError(f"Ollama server error {resp.status_code}", resp.status_code)
+            logger.error(f"[OllamaProvider] Server error {resp.status_code} from {self.base_url}/api/chat: {resp.text}")
+            raise RetriableError(f"Ollama server error {resp.status_code}: {resp.text}", resp.status_code)
         if resp.status_code != 200:
             raise NonRetriableError(f"Ollama unexpected {resp.status_code}: {resp.text}", resp.status_code)
 

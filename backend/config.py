@@ -86,9 +86,9 @@ class Settings(BaseSettings):
     model_terminal_implement: str = "qwen3:4b-instruct"
 
     # LOCAL mode models (Ollama/Qwen/Nemotron)
-    model_local_default: str = "qwen3:4b-instruct"
-    model_local_fast: str = "qwen3:4b-instruct"
-    model_local_quality: str = "qwen2.5-coder:7b"
+    model_local_default: str = "qwen3.5:2b"
+    model_local_fast: str = "qwen3.5:2b"
+    model_local_quality: str = "qwen2.5-coder:3b"
     model_local_nemotron: str = "nemotron-mini:latest"
     model_local_max_tokens: int = 8192
 

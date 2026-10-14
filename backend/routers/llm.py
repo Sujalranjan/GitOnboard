@@ -150,32 +150,47 @@ async def build_repository_context(db: Session, repo: Repository, analysis_id: O
 
 def get_valid_models() -> Dict[str, str]:
     """
-    Return available models based on deployment mode.
+    Return available models based on deployment mode and configured API keys.
 
-    LOCAL mode: Defaults to local Qwen models, but allows selecting Cloud models (Gemini, Groq, OpenRouter).
-    PROD mode: Cloud providers (Gemini, Groq, OpenRouter) ONLY.
+    Cloud models (Gemini, Groq, OpenRouter) are optional. If their API keys
+    are not set or empty, they are omitted from the available models list
+    so users won't see them as options and the system won't crash trying to use them.
+
+    LOCAL mode: Local Qwen & Nemotron models + any available Cloud models.
+    PROD mode: Cloud providers with active API keys ONLY (falls back to local models if no cloud keys are configured).
     """
-    cloud_models = {
-        settings.gemini_model: f"Gemini ({settings.gemini_model})",
-        settings.groq_model: f"Groq ({settings.groq_model})",
-        settings.openrouter_model: f"OpenRouter ({settings.openrouter_model})",
+    cloud_models: Dict[str, str] = {}
+
+    gemini_key = os.environ.get("GEMINI_API_KEY", "") or getattr(settings, "gemini_api_key", "")
+    if gemini_key and gemini_key.strip():
+        cloud_models[settings.gemini_model] = f"Gemini ({settings.gemini_model})"
+
+    groq_key = os.environ.get("GROQ_API_KEY", "") or getattr(settings, "groq_api_key", "")
+    if groq_key and groq_key.strip():
+        cloud_models[settings.groq_model] = f"Groq ({settings.groq_model})"
+
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "") or getattr(settings, "openrouter_api_key", "")
+    if openrouter_key and openrouter_key.strip():
+        cloud_models[settings.openrouter_model] = f"OpenRouter ({settings.openrouter_model})"
+
+    local_models = {
+        settings.model_local_fast: f"Qwen 3.5 2B (Local - Default)",
+        settings.model_local_quality: f"Qwen 2.5 Coder 3B (Local - Quality)",
+        settings.model_local_nemotron: "Nemotron Mini (Local - Ollama)",
     }
 
     if settings.deployment_type == "PROD":
-        # PROD: Cloud models only
-        return cloud_models
+        # In PROD mode, return available cloud models.
+        # If no cloud keys are configured, fallback gracefully to local models so the system does not crash.
+        if cloud_models:
+            return cloud_models
+        logger.warning("PROD mode configured but no cloud API keys found. Falling back to local models.")
+        return local_models
     else:
-        # LOCAL: Qwen & Nemotron models by default, plus options to choose cloud models (OpenRouter, Groq, Gemini)
-        models = {
-            settings.model_local_fast: "Qwen 3 4B (Local - Fast)",
-            settings.model_local_quality: "Qwen 2.5 Coder 7B (Local - Quality)",
-            settings.model_local_nemotron: "Nemotron Mini (Local - Ollama)",
-        }
+        # LOCAL mode: local models + whichever cloud models have API keys configured
+        models = dict(local_models)
         models.update(cloud_models)
         return models
-
-
-VALID_MODELS = get_valid_models()
 
 
 class SetModelRequest(BaseModel):
@@ -328,9 +343,12 @@ async def analyze_repository_stream(
                 yield f"data: {json.dumps({'type': 'llm-thinking', 'content': f'Loaded repository context ({len(repo_context)} bytes)...', 'timestamp': (datetime.now() - start_time).total_seconds()})}\n\n"
 
             # 3. Select model
-            model = request.model or os.environ.get("OLLAMA_MODEL", "qwen3:4b-instruct")
-            if model not in VALID_MODELS:
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Invalid model: {model}'})}\n\n"
+            valid_models = get_valid_models()
+            configured_default = settings.model_prod_default if settings.deployment_type == "PROD" else settings.model_local_default
+            default_model = configured_default if configured_default in valid_models else (next(iter(valid_models.keys())) if valid_models else configured_default)
+            model = request.model or os.environ.get("OLLAMA_MODEL") or default_model
+            if model not in valid_models:
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Invalid model: {model}. Available options: {list(valid_models.keys())}'})}\n\n"
                 return
 
             if request.model:
@@ -383,7 +401,7 @@ async def analyze_repository_stream(
                 primary_provider = OllamaProvider(base_url=ollama_url, model=model, timeout=ollama_timeout, num_ctx=planner_ctx)
 
                 # Add fallback provider if different model configured
-                fallback_model = os.environ.get("OLLAMA_FALLBACK_MODEL", "qwen2.5-coder:7b")
+                fallback_model = os.environ.get("OLLAMA_FALLBACK_MODEL", settings.model_local_quality)
                 if fallback_model and fallback_model != model:
                     fallback_provider = OllamaProvider(base_url=ollama_url, model=fallback_model, timeout=ollama_timeout, num_ctx=planner_ctx)
                     llm_service = LLMService(providers=[primary_provider, fallback_provider])
