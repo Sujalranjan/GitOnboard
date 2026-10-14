@@ -978,28 +978,6 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
                 </div>
               )}
             </div>
-
-            {/* Final Answer Banner if available */}
-            {finalAnswer && (
-              <div className="p-3 border-t border-emerald-900/60 bg-emerald-950/20 text-xs space-y-1.5 flex-shrink-0 max-h-40 overflow-y-auto">
-                <div className="flex items-center justify-between text-emerald-400 font-bold">
-                  <span className="flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4" />
-                    Final Grounded Synthesis
-                  </span>
-                  <button
-                    onClick={handleCopy}
-                    className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-emerald-900/40 border border-emerald-700/50 hover:bg-emerald-800/40 text-emerald-300 transition-colors"
-                  >
-                    {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    <span>{copied ? 'Copied' : 'Copy Answer'}</span>
-                  </button>
-                </div>
-                <div className="prose prose-invert max-w-none text-slate-200 text-xs leading-relaxed">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{finalAnswer}</ReactMarkdown>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Right Agent Inspector Panel */}
