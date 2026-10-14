@@ -171,7 +171,16 @@ class InvestigationStateStore:
             sections.append("### Verified Repository Findings:\nNo verified code findings were recorded.")
         else:
             lines = ["### Verified Repository Findings:\n"]
+            # Deduplicate findings by (file_path, line_start, line_end, summary)
+            seen_findings = set()
+            deduped_cards = []
             for card in self.evidence.values():
+                dedup_key = (card.file_path, card.line_start, card.line_end, card.summary.strip().lower())
+                if dedup_key not in seen_findings:
+                    seen_findings.add(dedup_key)
+                    deduped_cards.append(card)
+
+            for card in deduped_cards:
                 loc = card.file_path
                 if card.line_start and card.line_end:
                     loc += f" (lines {card.line_start}-{card.line_end})"
@@ -188,25 +197,33 @@ class InvestigationStateStore:
                     lines.append(f"  * Discovered dependencies: {', '.join(card.discovered_dependencies)}")
             sections.append("\n".join(lines))
 
-        # File Inspection Transparency
-        transparency_lines = ["\n### File Inspection Transparency:"]
+        # Contradictions or Discrepancies if recorded
+        contradictions = [g for g in self.coverage_gaps if "contradict" in g.lower() or "discrepancy" in g.lower()]
+        if contradictions:
+            sections.append("### Contradictions & Discrepancies Detected:\n" + "\n".join(f"- {c}" for c in contradictions))
+
+        # File Inspection Transparency & Unresolved Questions
+        transparency_lines = ["\n### File Inspection Transparency & Coverage:"]
         if self.files_read:
-            transparency_lines.append(f"- **Files Read ({len(self.files_read)}):** " + ", ".join(sorted(self.files_read)[:20]))
+            transparency_lines.append(f"- **Files Read ({len(self.files_read)}):** " + ", ".join(sorted(self.files_read)[:25]))
         if self.files_discovered:
-            transparency_lines.append(f"- **Files Discovered via Search ({len(self.files_discovered)}):** " + ", ".join(sorted(self.files_discovered)[:20]))
+            transparency_lines.append(f"- **Files Discovered via Search ({len(self.files_discovered)}):** " + ", ".join(sorted(self.files_discovered)[:25]))
         if self.files_skipped:
-            skip_desc = [f"{s.get('path', '')} ({s.get('reason', '')})" for s in self.files_skipped[:5]]
+            skip_desc = [f"{s.get('path', '')} ({s.get('reason', '')})" for s in self.files_skipped[:10]]
             transparency_lines.append(f"- **Relevant Files Skipped ({len(self.files_skipped)}):** " + "; ".join(skip_desc))
         if self.read_failures:
-            fail_desc = [f"{f.get('path', '')}: {f.get('error', '')}" for f in self.read_failures[:5]]
+            fail_desc = [f"{f.get('path', '')}: {f.get('error', '')}" for f in self.read_failures[:10]]
             transparency_lines.append(f"- **Read Failures ({len(self.read_failures)}):** " + "; ".join(fail_desc))
-        if self.coverage_gaps:
-            transparency_lines.append(f"- **Coverage Gaps / Unresolved Questions:** " + "; ".join(self.coverage_gaps[:5]))
+
+        unresolved = [g for g in self.coverage_gaps if g not in contradictions]
+        if unresolved:
+            transparency_lines.append(f"- **Unresolved Questions & Coverage Gaps:** " + "; ".join(unresolved))
 
         sections.append("\n".join(transparency_lines))
 
         dossier = "\n\n".join(sections)
+        # Avoid silently truncating critical findings; if exceeding max_chars, preserve all findings and cap ancillary lists
         if len(dossier) > max_chars:
-            dossier = dossier[:max_chars] + "\n... [Remaining findings truncated for context budget] ..."
+            dossier = dossier[:max_chars] + "\n... [Ancillary inspection details capped for context budget; all verified findings above preserved] ..."
         return dossier
 

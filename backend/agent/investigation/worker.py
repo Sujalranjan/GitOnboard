@@ -137,18 +137,19 @@ When the task is sufficiently supported, call `final_answer` using the required 
 
 Include:
 
-- A concise technical summary.
-- Evidence-backed findings.
-- Relevant files skipped and reasons.
-- Remaining coverage gaps.
-- Useful next investigation steps, if any.
-- Limitations and unverified claims.
+- A concise technical summary with verified conclusions and unresolved questions.
+- Evidence-backed findings with file paths, relevant code excerpts, summaries, and verified conclusions.
+- Files and areas inspected, files skipped with explicit reasons, and read failures.
+- Specific unresolved questions and coverage gaps that could not be evaluated.
+- Discovered dependencies and next investigation steps.
+- Explicit limitations; never claim an investigation is complete when required checks were not performed.
 
-If the investigation is incomplete, explicitly say so. Return partial findings when useful, and identify what remains unknown.
+If the investigation is incomplete or required checks could not be performed, explicitly declare the status as incomplete or partial. Return partial findings when useful, and identify what remains unknown.
 
 If no facts were established, return an empty findings list with explicit limitations and coverage gaps.
 
-Never fabricate evidence or confidence scores. Never mark an investigation successful merely because the model reached the end of its turn budget.
+Never fabricate evidence or confidence scores. Never mark an investigation successful or complete merely because the model reached the end of its turn budget or stopped reading.
+Do not silently truncate findings or omit areas that were skipped or unevaluated.
 
 ## 7. Tool budget and stopping
 
@@ -171,7 +172,7 @@ class LocalInvestigationWorker:
         self,
         tool_dispatch: ToolDispatchTable,
         llm_service: Optional[LLMService] = None,
-        model: str = "qwen3:4b-instruct",
+        model: str = "qwen2.5-coder:3b",
         provider: str = "ollama",
         max_turns: Optional[int] = None,
         max_observation_chars: Optional[int] = None,
@@ -212,8 +213,13 @@ class LocalInvestigationWorker:
         logger.info(f"[LocalWorker] Starting subtask '{subtask.id}': {subtask.title}")
         start_time = time.perf_counter()
 
-        # Build prompt with tool specs
+        # Build prompt with tool specs and convert to schemas for native tool calling
         tool_specs = self.tool_dispatch.specs(include_rim=getattr(self.tool_dispatch, "include_rim", False))
+        from backend.ai.schemas import Tool
+        schema_tools = [
+            Tool(name=spec.name, description=spec.description, parameters=spec.parameters)
+            for spec in tool_specs
+        ]
         prompt_parts = self.protocol_adapter.build_system_prompt(
             tool_specs=tool_specs,
             rim_metadata_block=repo_context or None,
@@ -258,6 +264,7 @@ class LocalInvestigationWorker:
         discovered_next: List[str] = []
         recorded_turns: List[QALoopTurn] = []
         read_contents_cache: List[Dict[str, Any]] = []
+        is_malformed_failure: bool = False
 
         # Keep synchronized on self so orchestrator can harvest progress even if timeout/crash occurs
         self._active_files_read = files_read
@@ -273,6 +280,7 @@ class LocalInvestigationWorker:
         call_history: Dict[Tuple[str, str], int] = {}
         unproductive_streak = 0
         recovery_sent = False
+        consecutive_malformed = 0
 
         for turn_idx in range(self.max_turns):
             turn_count += 1
@@ -283,13 +291,16 @@ class LocalInvestigationWorker:
             ]
             for m in messages:
                 role = MessageRole(m.get("role", "user"))
-                llm_messages.append(Message(role=role, content=m.get("content", "")))
+                content = m.get("content", "")
+                tool_calls_payload = m.get("tool_calls")
+                llm_messages.append(Message(role=role, content=content, tool_calls=tool_calls_payload))
 
             request = LLMRequest(
                 messages=llm_messages,
                 model=self.model,
                 temperature=0.1,
                 max_tokens=self.max_tokens_per_turn,
+                tools=schema_tools,
             )
 
             try:
@@ -317,6 +328,7 @@ class LocalInvestigationWorker:
             logger.info(f"[LocalWorker:Turn {turn_idx}] parsed_action={action}, raw_preview={resp.content[:150]}")
 
             if action == "tool_call":
+                consecutive_malformed = 0
                 tool_calls = parsed.get("tool_calls", [])
                 if not tool_calls:
                     messages.append({"role": "assistant", "content": resp.content})
@@ -460,7 +472,27 @@ class LocalInvestigationWorker:
                 recorded_turns.append(turn_obj)
 
                 obs_text = self._format_tool_obs(tool_name, obs)
-                messages.append({"role": "assistant", "content": resp.content})
+                
+                # Append assistant tool call and tool result in conversation history
+                assistant_tool_calls = [
+                    {
+                        "id": tool_call_id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "arguments": args,
+                        },
+                    }
+                ]
+                messages.append({
+                    "role": "assistant",
+                    "content": resp.content or "",
+                    "tool_calls": assistant_tool_calls,
+                })
+
+                # Format tool output for next turn
+                raw_tool_data = obs_data if obs_success else getattr(obs, "error", "Tool execution error")
+                tool_msg_content = json.dumps(raw_tool_data) if isinstance(raw_tool_data, (dict, list)) else str(raw_tool_data)
 
                 # Fix B: Track repeated tool calls and searches that produce no new useful information
                 call_signature = (tool_name, json.dumps(args, sort_keys=True))
@@ -488,6 +520,13 @@ class LocalInvestigationWorker:
                 else:
                     unproductive_streak = 0
 
+                # Append tool observation message
+                messages.append({
+                    "role": "tool",
+                    "content": tool_msg_content,
+                    "tool_call_id": tool_call_id,
+                })
+
                 # Circuit Breaker: If get_code_relationships returns empty after code has already been read,
                 # immediately redirect the worker to finalize rather than looping
                 if tool_name == "get_code_relationships" and len(read_contents_cache) > 0:
@@ -495,7 +534,6 @@ class LocalInvestigationWorker:
                     if not graph_data.get("found", True) or not obs_success:
                         read_files_list = ", ".join(f['path'] for f in read_contents_cache[:2])
                         circuit_breaker_prompt = (
-                            f"{obs_text}\n\n"
                             f"CIRCUIT BREAKER: Symbol graph traversal returned no static edges. "
                             f"However, you have already inspected the source code in {read_files_list}. "
                             "You do NOT need graph relationships to complete this task. "
@@ -511,7 +549,6 @@ class LocalInvestigationWorker:
                     read_files_list = ", ".join(dict.fromkeys(f['path'] for f in read_contents_cache))
                     if turn_idx >= self.max_turns - 3 or prior_call_count >= 1 or len(read_contents_cache) >= 1:
                         search_breaker_prompt = (
-                            f"{obs_text}\n\n"
                             f"STOP SEARCHING: You have already read the source code in {read_files_list}. "
                             "Do not run further repository searches. Synthesize your findings immediately and call final_answer with your structured JSON."
                         )
@@ -525,15 +562,12 @@ class LocalInvestigationWorker:
                 )
                 if should_prompt_finalize:
                     recovery_prompt = (
-                        f"{obs_text}\n\n"
                         "Note: You have inspected the primary source code. "
                         "You now have sufficient code evidence to describe the implementation. "
                         "Please call final_answer with your structured JSON findings and identify any uninspected downstream steps under coverage_gaps."
                     )
                     messages.append({"role": "user", "content": recovery_prompt})
                     recovery_sent = True
-                else:
-                    messages.append({"role": "user", "content": obs_text})
                 continue
 
             elif action == "final_answer":
@@ -601,7 +635,13 @@ class LocalInvestigationWorker:
 
             else:
                 # Check if the model emitted final JSON findings directly without XML/JSON envelope
-                direct_json = self._extract_json(resp.content)
+                # (Ensure we never mistake a tool invocation attempt for final findings)
+                from backend.services.qa_protocol_parsers import is_tool_call_attempt
+                if not is_tool_call_attempt(resp.content):
+                    direct_json = self._extract_json(resp.content)
+                else:
+                    direct_json = None
+
                 if direct_json and isinstance(direct_json, dict) and ("summary" in direct_json or "findings" in direct_json):
                     raw_findings = direct_json.get("findings", [])
                     for rf in raw_findings:
@@ -661,10 +701,15 @@ class LocalInvestigationWorker:
                         duration_ms=duration_ms,
                     ), recorded_turns
 
+                consecutive_malformed += 1
                 messages.append({"role": "assistant", "content": resp.content})
+                if consecutive_malformed >= 3:
+                    logger.warning(f"[LocalWorker] Subtask '{subtask.id}' failed after {consecutive_malformed} consecutive malformed responses.")
+                    is_malformed_failure = True
+                    break
                 messages.append({
                     "role": "user",
-                    "content": "Please proceed with a valid tool call or provide your final_answer JSON findings.",
+                    "content": "Your previous response was malformed. Please execute a valid tool call or provide your final_answer JSON findings.",
                 })
 
         # Exceeded turn limit: Report as incomplete or failed, NEVER fabricate synthetic findings
@@ -679,7 +724,8 @@ class LocalInvestigationWorker:
 
         # If model exhausted turn budget before formatting final_answer, but DID read source code,
         # extract real code findings from the read contents cache so grounded facts are not discarded.
-        if len(findings) == 0 and read_contents_cache:
+        # (Never perform fallback extraction if task aborted due to malformed response attempts)
+        if not is_malformed_failure and len(findings) == 0 and read_contents_cache:
             for item in read_contents_cache[:3]:
                 c_lines = item["content"].strip().split("\n")
                 first_lines = "\n".join(c_lines[:15]) if len(c_lines) > 15 else item["content"]
@@ -699,11 +745,16 @@ class LocalInvestigationWorker:
                     )
                 )
 
-        # Only mark COMPLETED if real verified findings were actually produced
-        is_completed = len(findings) > 0
-        status = SubtaskStatus.COMPLETED if is_completed else SubtaskStatus.FAILED
-        err_msg = None if is_completed else f"Exhausted turn budget ({self.max_turns} turns) without verifying required facts"
-        coverage_gaps.append(f"Task timed out after {self.max_turns} turns.")
+        # Only mark COMPLETED if real verified findings were actually produced and not terminated by malformed responses
+        if is_malformed_failure:
+            is_completed = False
+            status = SubtaskStatus.FAILED
+            err_msg = f"Task terminated due to repeated malformed model responses ({consecutive_malformed} attempts)"
+        else:
+            is_completed = len(findings) > 0
+            status = SubtaskStatus.COMPLETED if is_completed else SubtaskStatus.FAILED
+            err_msg = None if is_completed else f"Exhausted turn budget ({self.max_turns} turns) without verifying required facts"
+        coverage_gaps.append(f"Task ended after {turn_count} turns (status={status.value}).")
 
         return WorkerTaskResult(
             task_id=subtask.id,

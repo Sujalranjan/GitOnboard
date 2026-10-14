@@ -263,36 +263,33 @@ If get_code_relationships returns NO_STATIC_EDGE_FOUND, dynamic code may be pres
         Only for local Ollama models:
           - Uses Hermes XML (for local Qwen) or JSON action protocol parsing on llm_response.content.
         """
-        is_native = self.is_native or self.is_cloud_model(llm_response.model, llm_response.provider)
+        # 1. PRIMARY: Prioritize structured tool calls returned by provider (Ollama, Gemini, Groq, etc.)
+        if llm_response.tool_calls:
+            first_call = llm_response.tool_calls[0]
+            first_args = first_call.parameters if isinstance(first_call.parameters, dict) else {}
+            return {
+                "action": "tool_call",
+                "tool_calls": [
+                    {
+                        "tool_name": first_call.tool_name,
+                        "arguments": first_args,
+                        "id": first_call.tool_call_id,
+                    }
+                ],
+                "tool_name": first_call.tool_name,
+                "arguments": first_args,
+                "tool_call_id": first_call.tool_call_id,
+            }
 
+        is_native = self.is_native or self.is_cloud_model(llm_response.model, llm_response.provider)
         if is_native:
-            if llm_response.tool_calls:
-                tc = llm_response.tool_calls[0]  # Take only first tool call
-                return {
-                    "action": "tool_call",
-                    "tool_calls": [
-                        {"tool_name": tc.tool_name, "arguments": tc.parameters}
-                    ],
-                    "tool_name": tc.tool_name,
-                    "arguments": tc.parameters,
-                }
-            # No tool call made -> This is a final answer directly (NO FALLBACK)
+            # Native model returned no tool calls -> Treat as direct final answer
             return {
                 "action": "final_answer",
                 "answer": llm_response.content,
             }
 
-        # Local Ollama model behavior (Hermes XML / JSON text protocol):
-        if llm_response.tool_calls:
-            tc = llm_response.tool_calls[0]  # Take only first tool call
-            return {
-                "action": "tool_call",
-                "tool_calls": [
-                    {"tool_name": tc.tool_name, "arguments": tc.parameters}
-                ],
-                "tool_name": tc.tool_name,
-                "arguments": tc.parameters,
-            }
+        # 2. FALLBACK: Controlled text parsing only when native structured tool calls are absent
         result = self.parse_response(llm_response.content)
         if result.get("action") == "tool_call":
             return {

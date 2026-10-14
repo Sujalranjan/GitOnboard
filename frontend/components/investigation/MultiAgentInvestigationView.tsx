@@ -561,6 +561,42 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
         agent_id: 'planner-main',
         title: 'Synthesized final verified response',
       });
+    } else if (data.type === 'completed') {
+      setStatus('completed');
+      setRunning(false);
+      appendTimelineEvent({
+        type: 'completed',
+        agent_id: 'planner-main',
+        title: 'Investigation completed',
+        description: `Executed ${data.tool_calls_count || 0} tool calls in ${(data.elapsed_seconds || 0).toFixed(1)}s`,
+      });
+    } else if (data.type === 'error') {
+      setStatus('failed');
+      setRunning(false);
+      const errContent = data.content || data.message || 'Investigation error occurred.';
+      setMessages((prev) => {
+        if (currentBotMsgId && prev.some((m) => m.id === currentBotMsgId)) {
+          return prev.map((m) =>
+            m.id === currentBotMsgId ? { ...m, content: errContent } : m
+          );
+        }
+        return [
+          ...prev,
+          {
+            id: `err_${Date.now()}`,
+            role: 'assistant',
+            content: errContent,
+            timestamp: formatTimestamp(),
+          },
+        ];
+      });
+      appendTimelineEvent({
+        type: 'error',
+        agent_id: 'planner-main',
+        title: 'Investigation failed',
+        description: errContent,
+        status: 'failed',
+      });
     }
   };
 

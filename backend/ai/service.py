@@ -80,12 +80,14 @@ def build_default_service() -> "LLMService":
         # Fallback: Qwen 2.5 coder (7B - more capable, better reasoning if 4B hits limits)
         ollama_fallback_model = os.environ.get("OLLAMA_FALLBACK_MODEL", "qwen2.5-coder:7b")
         ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
+        from backend.config import settings
+        planner_ctx = int(os.environ.get("INVESTIGATION_PLANNER_CONTEXT", str(settings.investigation_planner_context)))
         from .providers.ollama import OllamaProvider
-        providers.append(OllamaProvider(base_url=ollama_url, model=ollama_model, timeout=ollama_timeout))
-        logger.info(f"LLMService: LOCAL mode - OllamaProvider registered ({ollama_url}, model={ollama_model}, timeout={ollama_timeout}s).")
+        providers.append(OllamaProvider(base_url=ollama_url, model=ollama_model, timeout=ollama_timeout, num_ctx=planner_ctx))
+        logger.info(f"LLMService: LOCAL mode - OllamaProvider registered ({ollama_url}, model={ollama_model}, timeout={ollama_timeout}s, num_ctx={planner_ctx}).")
         # Register fallback provider only if different from primary
         if ollama_fallback_model and ollama_fallback_model != ollama_model:
-            providers.append(OllamaProvider(base_url=ollama_url, model=ollama_fallback_model, timeout=ollama_timeout))
+            providers.append(OllamaProvider(base_url=ollama_url, model=ollama_fallback_model, timeout=ollama_timeout, num_ctx=planner_ctx))
             logger.info(f"LLMService: LOCAL mode - OllamaProvider fallback registered (model={ollama_fallback_model}).")
 
     return LLMService(providers=providers)

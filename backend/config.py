@@ -126,9 +126,9 @@ class Settings(BaseSettings):
 
     # Investigation Agent Configuration (LOCAL vs PROD)
     # Output tokens
-    investigation_synthesis_max_tokens_local: int = 4096
+    investigation_synthesis_max_tokens_local: int = 2048
     investigation_synthesis_max_tokens_prod: int = 16384
-    investigation_turn_max_tokens_local: int = 2048
+    investigation_turn_max_tokens_local: int = 1536
     investigation_turn_max_tokens_prod: int = 8192
 
     # Concurrency and subtask counts
@@ -144,6 +144,15 @@ class Settings(BaseSettings):
     investigation_subtask_timeout_prod: float = 1200.0   # 20 min
     investigation_max_observation_chars_local: int = 24000
     investigation_max_observation_chars_prod: int = 120000
+
+    # Investigation Models & Context Windows (LOCAL vs PROD)
+    investigation_worker_model_local: str = "qwen2.5-coder:3b"
+    investigation_worker_model_prod: str = "nemotron-3-ultra:cloud"
+    investigation_worker_context_local: int = 16384
+    investigation_worker_context_prod: int = 262144  # 256K tokens (256 * 1024)
+
+    investigation_planner_context_local: int = 16384
+    investigation_planner_context_prod: int = 1048576  # 1M tokens for frontier planner models
 
     # Tool limits
     investigation_read_file_max_lines_local: int = 600
@@ -245,5 +254,17 @@ class Settings(BaseSettings):
     @property
     def investigation_search_limit(self) -> int:
         return self.investigation_search_limit_prod if self.is_prod else self.investigation_search_limit_local
+
+    @property
+    def investigation_worker_model(self) -> str:
+        return self.investigation_worker_model_prod if self.is_prod else self.investigation_worker_model_local
+
+    @property
+    def investigation_worker_context(self) -> int:
+        return self.investigation_worker_context_prod if self.is_prod else self.investigation_worker_context_local
+
+    @property
+    def investigation_planner_context(self) -> int:
+        return self.investigation_planner_context_prod if self.is_prod else self.investigation_planner_context_local
 
 settings = Settings()

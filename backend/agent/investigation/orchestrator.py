@@ -71,7 +71,7 @@ class InvestigationOrchestrator:
             "investigation_id": inv_id,
             "query": question,
             "main_model": getattr(self.planner, "model", "default"),
-            "worker_model": getattr(self.worker, "model", "qwen3:4b-instruct"),
+            "worker_model": getattr(self.worker, "model", "qwen2.5-coder:3b"),
             "message": "Starting multi-agent repository investigation...",
         })
 
@@ -138,7 +138,7 @@ class InvestigationOrchestrator:
                 "type": "agent-spawn",
                 "agent_id": worker_id,
                 "role": "Local Repository Explorer",
-                "model": getattr(self.worker, "model", "qwen3:4b-instruct"),
+                "model": getattr(self.worker, "model", "qwen2.5-coder:3b"),
                 "provider": getattr(self.worker, "provider", "ollama"),
                 "is_local": True,
                 "status": "running",
@@ -191,22 +191,31 @@ class InvestigationOrchestrator:
 
                 worker_result = WorkerTaskResult(
                     task_id=current_task.id,
-                    status=SubtaskStatus.COMPLETED if p_findings else SubtaskStatus.FAILED,
+                    status=SubtaskStatus.TIMED_OUT,
                     findings=p_findings,
                     files_read=p_read,
                     files_inspected=p_inspected,
-                    error=None if p_findings else f"Worker execution timed out after {int(self.subtask_timeout)} seconds without completing.",
-                    coverage_gaps=["Task execution reached absolute timeout."],
-                    limitations=["Subtask timed out before completing downstream traces, but recorded inspected files."],
+                    error=f"Worker execution timed out after {int(self.subtask_timeout)} seconds without completing.",
+                    coverage_gaps=["Task execution reached absolute timeout before completing all verification checks."],
+                    limitations=["Subtask timed out before completing downstream traces; recorded inspected files preserved."],
                 )
             except Exception as e:
                 logger.exception(f"[InvestigationOrchestrator] Subtask '{current_task.id}' raised unexpected error: {e}")
+                p_read = list(getattr(self.worker, "_active_files_read", []))
+                p_inspected = list(getattr(self.worker, "_active_files_inspected", []))
+                p_findings = list(getattr(self.worker, "_active_findings", []))
+                p_turns = list(getattr(self.worker, "_active_turns", []))
+                turns = p_turns
+
                 worker_result = WorkerTaskResult(
                     task_id=current_task.id,
                     status=SubtaskStatus.FAILED,
+                    findings=p_findings,
+                    files_read=p_read,
+                    files_inspected=p_inspected,
                     error=f"Worker crashed: {str(e)}",
                     coverage_gaps=[f"Worker error: {str(e)}"],
-                    limitations=["Execution halted due to unhandled exception."],
+                    limitations=["Execution halted due to unhandled exception; recorded findings preserved."],
                 )
             finally:
                 # Cleanly clear worker active state so timer or partial findings from this task cannot bleed into next task
@@ -348,7 +357,29 @@ class InvestigationOrchestrator:
             "current_task": "Synthesizing final verified response from evidence dossier",
         })
 
-        raw_answer = await self.planner.synthesize_answer(question, store)
+        # Bounded synthesis timeout matching configured subtask timeout; stop waiting if expired without fallback
+        synth_timeout = float(getattr(self, "subtask_timeout", 600.0))
+        try:
+            raw_answer = await asyncio.wait_for(
+                self.planner.synthesize_answer(question, store),
+                timeout=synth_timeout,
+            )
+        except asyncio.TimeoutError:
+            await self._emit_event({
+                "type": "agent-update",
+                "agent_id": "planner-main",
+                "status": "failed",
+                "summary": f"Planner synthesis timed out after {int(synth_timeout)}s. Synthesis halted.",
+            })
+            raise RuntimeError(f"Planner synthesis timed out after {int(synth_timeout)}s.")
+        except Exception as e:
+            await self._emit_event({
+                "type": "agent-update",
+                "agent_id": "planner-main",
+                "status": "failed",
+                "summary": f"Planner synthesis failed: {str(e)}",
+            })
+            raise
 
         await self._emit_event({
             "type": "agent-update",

@@ -13,7 +13,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from backend.agent.investigation.schemas import InvestigationSubtask
+from backend.agent.investigation.schemas import InvestigationSubtask, SubtaskStatus
 from backend.agent.investigation.state_store import InvestigationStateStore
 from backend.ai.service import LLMService
 from backend.ai.schemas import LLMRequest, Message, MessageRole
@@ -75,8 +75,9 @@ Presentation & Formatting Rules:
    - "Inspected but unverified/partially traced" means code was read (e.g. function calls seen), but deeper downstream implementation files were not yet inspected.
    - NEVER claim that code or an implementation "was not inspected" or "could not be found" if that file appears in the Files Read list or in the code excerpts.
    - If a file was read (e.g., authController.js or authHelpers.js), accurately state what functions and statements WERE observed, and identify specifically what remaining downstream calls (e.g., createSession) were not yet read.
-7. Limitations & Gaps:
-   - Place any unverified claims or remaining gaps in a dedicated `## Limitations & Unverified Code Paths` section at the end.
+7. Limitations, Partial Coverage & Gaps:
+   - If the investigation is partial or any tasks timed out/failed, explicitly disclose which areas could not be evaluated and how those gaps limit your conclusions.
+   - Place all unverified claims, missing files, or remaining gaps in a dedicated `## Limitations, Partial Coverage & Unverified Code Paths` section at the end.
    - Do NOT speculate or invent repository details that are not in the findings dossier.
 """
 
@@ -206,6 +207,25 @@ class MainInvestigationPlanner:
         Synthesize the final comprehensive answer using only the verified evidence dossier.
         Consumes bounded prompt tokens while preserving all findings and transparency reports.
         """
+        # Check if investigation completely failed to produce evidence or if all executed tasks failed
+        all_tasks = list(store.tasks.values())
+        executed_tasks = [t for t in all_tasks if t.status != SubtaskStatus.PENDING]
+        all_failed = len(executed_tasks) > 0 and all(t.status in (SubtaskStatus.FAILED, SubtaskStatus.BLOCKED) for t in executed_tasks)
+        has_evidence = len(store.evidence) > 0 or len(store.files_read) > 0
+
+        if all_failed and not has_evidence:
+            logger.warning("[MainInvestigationPlanner] All investigation subtasks failed and no evidence was collected. Returning explicit unverified failure answer.")
+            failure_reasons = "\n".join(f"- **{t.title}**: {t.error or 'Failed without verified findings'}" for t in executed_tasks)
+            return (
+                f"# Investigation Unsuccessful\n\n"
+                f"The investigation was unable to verify any implementation details for the query: **{question}**.\n\n"
+                f"### Execution Failures:\n"
+                f"{failure_reasons}\n\n"
+                f"## Limitations & Coverage Gaps\n"
+                f"No verified code evidence could be collected due to tool execution failures or unverified subtasks. "
+                f"No verified answer can be generated."
+            )
+
         dossier = store.format_evidence_dossier(max_chars=settings.investigation_max_observation_chars)
         user_prompt = (
             f"ORIGINAL QUESTION:\n{question}\n\n"

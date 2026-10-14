@@ -74,6 +74,10 @@ export const InvestigationAgentCards: React.FC<AgentOverviewProps> = ({
                       ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800/50'
                       : isRunning
                       ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-800/50 animate-pulse'
+                      : agent.status === 'failed' || agent.status === 'timed_out'
+                      ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-800/50'
+                      : agent.status === 'blocked' || agent.status === 'skipped'
+                      ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800/50'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
                   }`}
                 >
