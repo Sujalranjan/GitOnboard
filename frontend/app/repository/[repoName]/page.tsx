@@ -9,7 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 export default function RepositoryOverviewPage() {
   const params = useParams();
   const repoName = params.repoName;
-  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const { isLoading: authLoading, isAuthenticated, authStatus } = useAuth();
   
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -18,8 +18,8 @@ export default function RepositoryOverviewPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (authLoading) return;
-    if (!isAuthenticated) {
+    if (authLoading || authStatus === 'backend-unavailable') return;
+    if (authStatus === 'unauthenticated') {
       router.replace("/");
       return;
     }
@@ -56,7 +56,7 @@ export default function RepositoryOverviewPage() {
       cancelled = true;
       if (pollInterval) clearTimeout(pollInterval);
     };
-  }, [repoName, authLoading, isAuthenticated, router]);
+  }, [repoName, authLoading, isAuthenticated, authStatus, router]);
 
   if (isLoading && !data) {
     return <div className="p-8 text-center text-slate-500">Loading overview...</div>;

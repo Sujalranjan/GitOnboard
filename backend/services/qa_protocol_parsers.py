@@ -16,19 +16,39 @@ KNOWN_TOOLS = {
     "get_code_relationships", "read_file", "get_tree"
 }
 
+TOOL_CALL_MARKERS = ["<tool_call>", "<function_call>", "<invoke", "</invoke>", "</tool_call>"]
+
+
+def is_tool_call_attempt(text: str) -> bool:
+    """Return True if the text appears to be an attempted tool call in XML or JSON format."""
+    stripped_text = text.strip()
+    if not stripped_text:
+        return False
+    if any(tag in stripped_text for tag in TOOL_CALL_MARKERS):
+        return True
+    return any(
+        stripped_text.startswith(f"{t}(") or f'"{t}"' in stripped_text for t in KNOWN_TOOLS
+    )
+
+
 
 def parse_hermes_response(text: str) -> Dict[str, Any]:
     """Parse Hermes XML tool calling format (for Qwen models)."""
-    # Look for <tool_call> ... </tool_call> blocks
+    # Look for <tool_call> ... </tool_call> blocks or standalone <invoke ...> ... </invoke>
     tool_call_match = re.search(r'<tool_call>(.*?)</tool_call>', text, re.DOTALL)
-    if not tool_call_match:
-        logger.debug(f"[parse_hermes] No <tool_call> block found in response: {text[:100]}")
-        return {"action": "malformed", "error": "no <tool_call> block found"}
-
-    tool_call_content = tool_call_match.group(1)
+    if tool_call_match:
+        tool_call_content = tool_call_match.group(1)
+    else:
+        # Fallback for models that emit <invoke ...> without outer <tool_call> tags
+        invoke_fallback = re.search(r'(<invoke\s+name=["\'][^"\']+["\'].*?</invoke>)', text, re.DOTALL)
+        if invoke_fallback:
+            tool_call_content = invoke_fallback.group(1)
+        else:
+            logger.debug(f"[parse_hermes] No <tool_call> or <invoke> block found in response: {text[:100]}")
+            return {"action": "malformed", "error": "no <tool_call> block found"}
 
     # Extract invoke name: <invoke name="tool_name">
-    invoke_match = re.search(r'<invoke name="([^"]+)">', tool_call_content)
+    invoke_match = re.search(r'<invoke\s+name=["\']([^"\']+)["\']', tool_call_content)
     if not invoke_match:
         logger.debug(f"[parse_hermes] No <invoke> with name attribute found")
         return {"action": "malformed", "error": "no <invoke name=...> found"}
@@ -38,7 +58,7 @@ def parse_hermes_response(text: str) -> Dict[str, Any]:
     # Special case: final_answer
     if invoke_name == "final_answer":
         # Extract answer from <parameter name="answer">...</parameter>
-        param_match = re.search(r'<parameter name="answer">(.*?)</parameter>', tool_call_content, re.DOTALL)
+        param_match = re.search(r'<parameter\s+name=["\']answer["\']>(.*?)</parameter>', tool_call_content, re.DOTALL)
         answer = param_match.group(1).strip() if param_match else text
         return {
             "action": "final_answer",
@@ -46,7 +66,7 @@ def parse_hermes_response(text: str) -> Dict[str, Any]:
         }
 
     if invoke_name not in KNOWN_TOOLS:
-        logger.debug(f"[parse_hermes] Unknown tool: {invoke_name}")
+        logger.warning(f"[parse_hermes] Unknown tool requested: {invoke_name}")
         return {"action": "malformed", "error": f"unknown tool: {invoke_name}"}
 
     # Extract all parameters: <parameter name="key">value</parameter>
@@ -99,7 +119,8 @@ def parse_json_response(text: str) -> Dict[str, Any]:
                 obj = json.loads(json_str)
                 if isinstance(obj, dict):
                     action = obj.get("action", "").lower()
-                    if action in ["tool_call", "final_answer"]:
+                    cand_name = obj.get("name") or obj.get("tool_name")
+                    if action in ["tool_call", "final_answer"] or cand_name in KNOWN_TOOLS:
                         break
             except json.JSONDecodeError:
                 obj = None
@@ -107,7 +128,8 @@ def parse_json_response(text: str) -> Dict[str, Any]:
 
     if obj is None or not isinstance(obj, dict):
         stripped_text = text.strip()
-        if stripped_text and not any(tag in stripped_text for tag in ["<tool_call>", "<function_call>"]):
+        # Ensure text resembling tool calls is never treated as a final_answer
+        if stripped_text and not is_tool_call_attempt(stripped_text):
             if not re.search(r'^\s*\{\s*"', stripped_text):
                 logger.info(f"[_parse_json_response] Plain text / Markdown answer detected without JSON envelope. Wrapping as final_answer.")
                 return {
@@ -123,9 +145,18 @@ def parse_json_response(text: str) -> Dict[str, Any]:
 
     action = obj.get("action", "").lower()
 
-    if action in KNOWN_TOOLS and obj.get("arguments"):
+    if not action and ("name" in obj or "tool_name" in obj) and ("arguments" in obj or "parameters" in obj):
+        candidate_name = (obj.get("name") or obj.get("tool_name", "")).strip()
+        if candidate_name in KNOWN_TOOLS:
+            obj["tool_name"] = candidate_name
+            obj["arguments"] = obj.get("arguments", obj.get("parameters", {}))
+            obj["action"] = "tool_call"
+            action = "tool_call"
+
+    if action in KNOWN_TOOLS and (obj.get("arguments") or obj.get("parameters")):
         logger.warning(f"[parse_response] Correcting malformed response: action={action} (should be tool_call)")
         obj["tool_name"] = action
+        obj["arguments"] = obj.get("arguments", obj.get("parameters", {}))
         obj["action"] = "tool_call"
         action = "tool_call"
 

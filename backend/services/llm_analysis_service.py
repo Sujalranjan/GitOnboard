@@ -76,20 +76,25 @@ class LLMAnalysisService:
             # Main Planner uses the selected model (cloud or local depending on user choice)
             planner = MainInvestigationPlanner(self.llm_service, model=self.model)
 
-            # Worker ALWAYS uses the local model (e.g., qwen3:4b-instruct via Ollama)
-            # If the main service is using cloud (e.g., Gemini, Groq, OpenRouter), create a dedicated local Ollama LLMService for the worker
-            worker_model = os.environ.get("INVESTIGATION_WORKER_MODEL", settings.model_local_default)
+            # Worker model resolution:
+            # - In PROD: uses settings.investigation_worker_model_prod ("nemotron-3-ultra:cloud") with 256K context
+            # - In LOCAL: uses settings.investigation_worker_model_local ("qwen2.5-coder:3b") with 32K context
+            worker_model = os.environ.get("INVESTIGATION_WORKER_MODEL", settings.investigation_worker_model)
+            worker_ctx = int(os.environ.get("INVESTIGATION_WORKER_CONTEXT", str(settings.investigation_worker_context)))
             worker_provider = "ollama"
 
-            if self.provider and self.provider != "ollama":
-                from backend.ai.service import LLMService
-                from backend.ai.providers.ollama import OllamaProvider
-                ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-                ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
-                worker_llm_provider = OllamaProvider(base_url=ollama_url, model=worker_model, timeout=ollama_timeout)
-                worker_llm_service = LLMService(providers=[worker_llm_provider])
-            else:
-                worker_llm_service = self.llm_service
+            # Always configure dedicated Ollama provider for worker with the required context window (e.g. 256K in PROD)
+            from backend.ai.service import LLMService
+            from backend.ai.providers.ollama import OllamaProvider
+            ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+            ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
+            worker_llm_provider = OllamaProvider(
+                base_url=ollama_url,
+                model=worker_model,
+                timeout=ollama_timeout,
+                num_ctx=worker_ctx,
+            )
+            worker_llm_service = LLMService(providers=[worker_llm_provider])
 
             worker_turns = int(os.environ.get("INVESTIGATION_WORKER_MAX_TURNS", str(settings.investigation_max_turns)))
             worker_max_obs = int(os.environ.get("INVESTIGATION_MAX_OBS_CHARS", str(settings.investigation_max_observation_chars)))

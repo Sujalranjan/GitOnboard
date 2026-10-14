@@ -98,16 +98,22 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
         console.warn('Failed to load LLM models:', err);
       }
 
-      try {
-        const resHash = await fetch(`/api/repos/lookup-hash?name=${encodeURIComponent(repoName)}`);
-        if (resHash.ok) {
-          const hData = await resHash.json();
-          if (hData.repository_hash) {
-            setRepoHash(hData.repository_hash);
+      // If repoName is already a 36-character UUID repository_hash, use it directly
+      const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(repoName);
+      if (isUuid) {
+        setRepoHash(repoName);
+      } else {
+        try {
+          const resHash = await fetch(`/api/repos/lookup-hash?name=${encodeURIComponent(repoName)}`);
+          if (resHash.ok) {
+            const hData = await resHash.json();
+            if (hData.repository_hash) {
+              setRepoHash(hData.repository_hash);
+            }
           }
+        } catch (err) {
+          console.warn('Failed to lookup repo hash:', err);
         }
-      } catch (err) {
-        console.warn('Failed to lookup repo hash:', err);
       }
     }
 
@@ -561,6 +567,42 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
         agent_id: 'planner-main',
         title: 'Synthesized final verified response',
       });
+    } else if (data.type === 'completed') {
+      setStatus('completed');
+      setRunning(false);
+      appendTimelineEvent({
+        type: 'completed',
+        agent_id: 'planner-main',
+        title: 'Investigation completed',
+        description: `Executed ${data.tool_calls_count || 0} tool calls in ${(data.elapsed_seconds || 0).toFixed(1)}s`,
+      });
+    } else if (data.type === 'error') {
+      setStatus('failed');
+      setRunning(false);
+      const errContent = data.content || data.message || 'Investigation error occurred.';
+      setMessages((prev) => {
+        if (currentBotMsgId && prev.some((m) => m.id === currentBotMsgId)) {
+          return prev.map((m) =>
+            m.id === currentBotMsgId ? { ...m, content: errContent } : m
+          );
+        }
+        return [
+          ...prev,
+          {
+            id: `err_${Date.now()}`,
+            role: 'assistant',
+            content: errContent,
+            timestamp: formatTimestamp(),
+          },
+        ];
+      });
+      appendTimelineEvent({
+        type: 'error',
+        agent_id: 'planner-main',
+        title: 'Investigation failed',
+        description: errContent,
+        status: 'failed',
+      });
     }
   };
 
@@ -942,28 +984,6 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
                 </div>
               )}
             </div>
-
-            {/* Final Answer Banner if available */}
-            {finalAnswer && (
-              <div className="p-3 border-t border-emerald-900/60 bg-emerald-950/20 text-xs space-y-1.5 flex-shrink-0 max-h-40 overflow-y-auto">
-                <div className="flex items-center justify-between text-emerald-400 font-bold">
-                  <span className="flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4" />
-                    Final Grounded Synthesis
-                  </span>
-                  <button
-                    onClick={handleCopy}
-                    className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-emerald-900/40 border border-emerald-700/50 hover:bg-emerald-800/40 text-emerald-300 transition-colors"
-                  >
-                    {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    <span>{copied ? 'Copied' : 'Copy Answer'}</span>
-                  </button>
-                </div>
-                <div className="prose prose-invert max-w-none text-slate-200 text-xs leading-relaxed">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{finalAnswer}</ReactMarkdown>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Right Agent Inspector Panel */}

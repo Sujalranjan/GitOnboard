@@ -4,7 +4,7 @@ export interface AgentInfo {
   model: string;
   provider: string;
   is_local: boolean;
-  status: 'pending' | 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'blocked' | 'cancelled';
+  status: 'pending' | 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'timed_out' | 'blocked' | 'skipped' | 'cancelled';
   current_task?: string;
   task_id?: string;
   acceptance_criteria?: string;
@@ -22,7 +22,7 @@ export interface TaskItem {
   description: string;
   target_entities?: string[];
   expected_output?: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'BLOCKED';
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'TIMED_OUT' | 'BLOCKED' | 'SKIPPED';
   dependencies?: string[];
   assigned_agent?: string;
   findings_count?: number;

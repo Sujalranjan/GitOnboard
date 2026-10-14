@@ -73,19 +73,21 @@ def build_default_service() -> "LLMService":
         if not providers:
             logger.warning("LLMService: PROD mode specified but no cloud API keys (GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY) found.")
     else:
-        # LOCAL Mode (Default): primary Qwen instruct (faster) with Qwen coder fallback (more capable)
+        # LOCAL Mode (Default): primary Qwen 3.5 2B (fast, native tools) with Qwen 2.5 Coder 3B fallback
+        from backend.config import settings
         ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-        # Primary: Qwen 3 instruct (4B - fast, fits in memory, good for JSON protocol)
-        ollama_model = os.environ.get("OLLAMA_MODEL", "qwen3:4b-instruct")
-        # Fallback: Qwen 2.5 coder (7B - more capable, better reasoning if 4B hits limits)
-        ollama_fallback_model = os.environ.get("OLLAMA_FALLBACK_MODEL", "qwen2.5-coder:7b")
+        # Primary: Qwen 3.5 2B (fast, fits in memory, native tool calling)
+        ollama_model = os.environ.get("OLLAMA_MODEL", settings.model_local_default)
+        # Fallback: Qwen 2.5 coder (3B)
+        ollama_fallback_model = os.environ.get("OLLAMA_FALLBACK_MODEL", settings.model_local_quality)
         ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
+        planner_ctx = int(os.environ.get("INVESTIGATION_PLANNER_CONTEXT", str(settings.investigation_planner_context)))
         from .providers.ollama import OllamaProvider
-        providers.append(OllamaProvider(base_url=ollama_url, model=ollama_model, timeout=ollama_timeout))
-        logger.info(f"LLMService: LOCAL mode - OllamaProvider registered ({ollama_url}, model={ollama_model}, timeout={ollama_timeout}s).")
+        providers.append(OllamaProvider(base_url=ollama_url, model=ollama_model, timeout=ollama_timeout, num_ctx=planner_ctx))
+        logger.info(f"LLMService: LOCAL mode - OllamaProvider registered ({ollama_url}, model={ollama_model}, timeout={ollama_timeout}s, num_ctx={planner_ctx}).")
         # Register fallback provider only if different from primary
         if ollama_fallback_model and ollama_fallback_model != ollama_model:
-            providers.append(OllamaProvider(base_url=ollama_url, model=ollama_fallback_model, timeout=ollama_timeout))
+            providers.append(OllamaProvider(base_url=ollama_url, model=ollama_fallback_model, timeout=ollama_timeout, num_ctx=planner_ctx))
             logger.info(f"LLMService: LOCAL mode - OllamaProvider fallback registered (model={ollama_fallback_model}).")
 
     return LLMService(providers=providers)

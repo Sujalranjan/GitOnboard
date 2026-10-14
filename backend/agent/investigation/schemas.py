@@ -13,7 +13,10 @@ class SubtaskStatus(str, Enum):
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+    TIMED_OUT = "TIMED_OUT"
     BLOCKED = "BLOCKED"
+    SKIPPED = "SKIPPED"
+
 
 
 class FindingType(str, Enum):

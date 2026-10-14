@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, Type, TypeVar
+from typing import Any, Dict, Optional, Type, TypeVar
 
 import httpx
 
@@ -23,18 +23,36 @@ class OllamaProvider:
 
     provider_name = "ollama"
 
-    def __init__(self, base_url: str = "http://127.0.0.1:11434", model: str = DEFAULT_MODEL, timeout: float = 600.0):
+    def __init__(
+        self,
+        base_url: str = "http://127.0.0.1:11434",
+        model: str = DEFAULT_MODEL,
+        timeout: float = 600.0,
+        num_ctx: Optional[int] = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.default_model = model
         self.timeout = timeout
+        self.num_ctx = num_ctx
 
     def _build_body(self, request: LLMRequest, force_json: bool = False) -> Dict[str, Any]:
         # Respect request.model if provided, otherwise use provider's assigned default
         model_name = request.model or self.default_model
-        num_ctx = int(os.environ.get("OLLAMA_NUM_CTX") or os.environ.get("MODEL_LOCAL_MAX_TOKENS") or DEFAULT_NUM_CTX)
+        num_ctx = (
+            self.num_ctx
+            if self.num_ctx is not None
+            else int(os.environ.get("OLLAMA_NUM_CTX") or os.environ.get("MODEL_LOCAL_MAX_TOKENS") or DEFAULT_NUM_CTX)
+        )
         body: Dict[str, Any] = {
             "model": model_name,
-            "messages": [{"role": m.role.value, "content": m.content} for m in request.messages],
+            "messages": [
+                {
+                    "role": m.role.value,
+                    "content": m.content,
+                    **({"tool_calls": m.tool_calls} if m.tool_calls else {}),
+                }
+                for m in request.messages
+            ],
             "stream": False,
             "options": {
                 "temperature": request.temperature,
@@ -91,7 +109,8 @@ class OllamaProvider:
         if resp.status_code == 400:
             raise NonRetriableError(f"Ollama bad request: {resp.text}", resp.status_code)
         if resp.status_code >= 500:
-            raise RetriableError(f"Ollama server error {resp.status_code}", resp.status_code)
+            logger.error(f"[OllamaProvider] Server error {resp.status_code} from {self.base_url}/api/chat: {resp.text}")
+            raise RetriableError(f"Ollama server error {resp.status_code}: {resp.text}", resp.status_code)
         if resp.status_code != 200:
             raise NonRetriableError(f"Ollama unexpected {resp.status_code}: {resp.text}", resp.status_code)
 
@@ -118,14 +137,27 @@ class OllamaProvider:
         tool_calls = None
         msg_data = data.get("message", {})
         if msg_data.get("tool_calls"):
-            tool_calls = [
-                ToolCall(
-                    tool_name=tc["function"]["name"],
-                    parameters=tc["function"].get("arguments", {}),
-                    tool_call_id=tc.get("id", f"ollama-{i}"),
+            tool_calls = []
+            for i, tc in enumerate(msg_data["tool_calls"]):
+                func = tc.get("function", {})
+                raw_args = func.get("arguments", {})
+                if isinstance(raw_args, str):
+                    try:
+                        parsed_args = json.loads(raw_args)
+                    except Exception:
+                        parsed_args = {"raw": raw_args}
+                elif isinstance(raw_args, dict):
+                    parsed_args = raw_args
+                else:
+                    parsed_args = {}
+
+                tool_calls.append(
+                    ToolCall(
+                        tool_name=func.get("name", ""),
+                        parameters=parsed_args,
+                        tool_call_id=tc.get("id", f"ollama-{i}"),
+                    )
                 )
-                for i, tc in enumerate(msg_data["tool_calls"])
-            ]
 
         return LLMResponse(
             content=content,

@@ -274,11 +274,22 @@ async def test_groq_server_error_500(groq_provider):
 
 
 def test_router_models_in_prod_mode(monkeypatch):
-    """Verify get_valid_models and get_models return Groq in PROD mode."""
+    """Verify get_valid_models and get_models return Groq in PROD mode when key is present, and omit when absent."""
     from backend.config import settings
     from backend.routers.llm import get_valid_models, get_models
 
     monkeypatch.setattr(settings, "deployment_type", "PROD")
+    
+    # 1. When no cloud API keys are set, cloud models are omitted and local fallback is returned
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    models_empty = get_valid_models()
+    assert settings.groq_model not in models_empty
+    assert settings.model_local_fast in models_empty
+
+    # 2. When GROQ_API_KEY is configured, Groq is available in PROD mode
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
     models = get_valid_models()
     assert settings.groq_model in models
     assert models[settings.groq_model] == f"Groq ({settings.groq_model})"

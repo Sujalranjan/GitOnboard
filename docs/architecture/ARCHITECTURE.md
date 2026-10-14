@@ -61,8 +61,8 @@ flowchart TD
     UI -- REST API --> API
     ChatUI -- REST / Stream --> API
     TraceUI -- REST --> API
-    IDE_Terminal <-- WebSocket --> API
-    SSE_Client <-- SSE Stream (`/tasks/stream`, `/agent/stream`) -- TM
+    IDE_Terminal <--> |WebSocket| API
+    TM -- "SSE Stream (/tasks/stream, /agent/stream)" --> SSE_Client
     
     API --> Queue
     Queue --> Worker

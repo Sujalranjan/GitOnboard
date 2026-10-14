@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { MermaidViewer } from '@/components/common/MermaidViewer';
 import { ChatMessage, TaskItem, FindingItem } from '@/types/investigation';
 
 interface ChatPanelProps {
@@ -177,16 +178,88 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                 {/* User message */}
                 {msg.role === 'user' ? (
                   <div className="flex justify-end">
-                    <div className="max-w-2xl px-4 py-3 rounded-xl shadow-sm bg-blue-600 dark:bg-[#1E40AF] text-white rounded-br-none text-sm leading-relaxed whitespace-pre-wrap border border-blue-500/30 dark:border-[#3B82F6]/30">
+                    <div className="max-w-2xl min-w-0 px-4 py-3 rounded-xl shadow-sm bg-blue-600 dark:bg-[#1E40AF] text-white rounded-br-none text-sm leading-relaxed whitespace-pre-wrap break-words border border-blue-500/30 dark:border-[#3B82F6]/30">
                       {msg.content}
                     </div>
                   </div>
                 ) : (
                   /* Assistant message */
                   <div className="flex justify-start">
-                    <div className="max-w-2xl px-4 py-3 rounded-xl shadow-sm bg-white dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] text-slate-900 dark:text-slate-100 rounded-bl-none text-sm leading-relaxed space-y-3">
-                      <div className="prose dark:prose-invert max-w-none text-sm leading-relaxed text-slate-800 dark:text-slate-200">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <div className="w-full max-w-2xl min-w-0 px-4 py-3 rounded-xl shadow-sm bg-white dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] text-slate-900 dark:text-slate-100 rounded-bl-none text-sm leading-relaxed space-y-3 break-words overflow-hidden">
+                      <div className="prose dark:prose-invert max-w-none min-w-0 text-sm leading-relaxed text-slate-800 dark:text-slate-200 break-words">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            pre: ({ children }: any) => {
+                              // If children contains a Mermaid block, avoid wrapping in styled <pre> box
+                              const childProps = (children as any)?.props;
+                              const className = childProps?.className || '';
+                              const rawCode = String(childProps?.children || '').trim();
+                              const isMermaid =
+                                className.includes('language-mermaid') ||
+                                /^graph\s+/i.test(rawCode) ||
+                                /^flowchart\s+/i.test(rawCode) ||
+                                /^sequenceDiagram/i.test(rawCode) ||
+                                /^classDiagram/i.test(rawCode) ||
+                                /^erDiagram/i.test(rawCode) ||
+                                /^stateDiagram/i.test(rawCode);
+
+                              if (isMermaid) {
+                                return <>{children}</>;
+                              }
+                              return (
+                                <pre className="overflow-x-auto max-w-full p-3 rounded-lg bg-slate-900/90 text-slate-100 font-mono text-xs my-2 border border-slate-700/60">
+                                  {children}
+                                </pre>
+                              );
+                            },
+                            code: ({ className, children, ...props }: any) => {
+                              const match = /language-(\w+)/.exec(className || '');
+                              const codeString = String(children).replace(/\n$/, '').trim();
+                              const isMermaid =
+                                (match && match[1]?.toLowerCase() === 'mermaid') ||
+                                /^graph\s+/i.test(codeString) ||
+                                /^flowchart\s+/i.test(codeString) ||
+                                /^sequenceDiagram/i.test(codeString) ||
+                                /^classDiagram/i.test(codeString) ||
+                                /^erDiagram/i.test(codeString) ||
+                                /^stateDiagram/i.test(codeString);
+
+                              if (isMermaid) {
+                                return <MermaidViewer chart={codeString} />;
+                              }
+
+                              const isMultiline = String(children).includes('\n');
+                              if (!isMultiline) {
+                                return (
+                                  <code
+                                    className="break-all font-mono text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-pink-600 dark:text-pink-400 border border-slate-200 dark:border-slate-700"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </code>
+                                );
+                              }
+                              return (
+                                <code className="block whitespace-pre font-mono text-xs" {...props}>
+                                  {children}
+                                </code>
+                              );
+                            },
+                            table: ({ children }) => (
+                              <div className="overflow-x-auto max-w-full my-2 border border-slate-200 dark:border-slate-700 rounded-lg">
+                                <table className="w-full text-xs font-mono border-collapse">
+                                  {children}
+                                </table>
+                              </div>
+                            ),
+                            blockquote: ({ children }) => (
+                              <blockquote className="border-l-4 border-amber-500/80 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-1.5 my-2 rounded-r text-xs text-slate-700 dark:text-slate-300 break-words overflow-hidden">
+                                {children}
+                              </blockquote>
+                            ),
+                          }}
+                        >
                           {msg.content}
                         </ReactMarkdown>
                       </div>
