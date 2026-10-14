@@ -194,8 +194,16 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                               // If children contains a Mermaid block, avoid wrapping in styled <pre> box
                               const childProps = (children as any)?.props;
                               const className = childProps?.className || '';
-                              const codeString = String(childProps?.children || '');
-                              const isMermaid = className.includes('language-mermaid') || codeString.startsWith('graph ') || codeString.startsWith('flowchart ');
+                              const rawCode = String(childProps?.children || '').trim();
+                              const isMermaid =
+                                className.includes('language-mermaid') ||
+                                /^graph\s+/i.test(rawCode) ||
+                                /^flowchart\s+/i.test(rawCode) ||
+                                /^sequenceDiagram/i.test(rawCode) ||
+                                /^classDiagram/i.test(rawCode) ||
+                                /^erDiagram/i.test(rawCode) ||
+                                /^stateDiagram/i.test(rawCode);
+
                               if (isMermaid) {
                                 return <>{children}</>;
                               }
@@ -207,8 +215,15 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                             },
                             code: ({ className, children, ...props }: any) => {
                               const match = /language-(\w+)/.exec(className || '');
-                              const codeString = String(children).replace(/\n$/, '');
-                              const isMermaid = match && match[1] === 'mermaid' || (!match && (codeString.startsWith('graph ') || codeString.startsWith('flowchart ') || codeString.startsWith('sequenceDiagram') || codeString.startsWith('classDiagram') || codeString.startsWith('erDiagram')));
+                              const codeString = String(children).replace(/\n$/, '').trim();
+                              const isMermaid =
+                                (match && match[1]?.toLowerCase() === 'mermaid') ||
+                                /^graph\s+/i.test(codeString) ||
+                                /^flowchart\s+/i.test(codeString) ||
+                                /^sequenceDiagram/i.test(codeString) ||
+                                /^classDiagram/i.test(codeString) ||
+                                /^erDiagram/i.test(codeString) ||
+                                /^stateDiagram/i.test(codeString);
 
                               if (isMermaid) {
                                 return <MermaidViewer chart={codeString} />;
