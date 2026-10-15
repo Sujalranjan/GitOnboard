@@ -239,7 +239,7 @@ export default function SemanticSearch({ repoName }) {
 
   if (indexState === 'checking' || indexState === 'building' || indexState === 'updating') {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-gray-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-8">
+      <div className="h-full flex flex-col items-center justify-center glass-panel rounded-xl p-8 text-slate-900 dark:text-slate-100">
         <svg className="animate-spin h-10 w-10 text-purple-500 dark:text-purple-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -255,7 +255,7 @@ export default function SemanticSearch({ repoName }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-purple-50/30 dark:bg-slate-950 rounded-lg shadow-sm border border-purple-100 dark:border-slate-800 overflow-hidden relative text-slate-900 dark:text-slate-100">
+    <div className="h-full flex flex-col glass-panel rounded-xl overflow-hidden relative text-slate-900 dark:text-slate-100">
       
       {/* Status Toast */}
       {indexMessage && (
@@ -268,29 +268,29 @@ export default function SemanticSearch({ repoName }) {
       )}
       
       {/* Search Header */}
-      <div className="p-6 bg-white dark:bg-slate-900 border-b border-purple-100 dark:border-slate-800 shadow-sm z-10">
-        <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100 mb-2 flex items-center gap-2">
+      <div className="p-6 glass-nav border-b border-slate-200/60 dark:border-slate-800/60 shadow-sm z-10">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2 flex items-center gap-2">
           <span className="text-2xl">✨</span> Semantic Search
         </h2>
-        <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">Search by concepts and natural language. Click any result to view how it works.</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">Search by concepts and natural language. Click any result to view how it works.</p>
         
         <form onSubmit={handleSearch} className="flex gap-3">
           <div className="relative flex-grow">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="text-purple-400 dark:text-purple-400 font-bold font-mono">?</span>
+              <span className="text-purple-500 dark:text-purple-400 font-bold font-mono">?</span>
             </div>
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="block w-full pl-10 pr-3 py-3 border border-purple-200 dark:border-slate-700 rounded-md leading-5 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:placeholder-gray-300 focus:ring-1 focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition duration-150 ease-in-out shadow-inner"
+              className="block w-full pl-10 pr-3 py-3 glass-input rounded-lg leading-5 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 sm:text-sm transition duration-150 ease-in-out"
               placeholder="e.g. 'handle user login', 'JWT authentication', or 'database transaction'"
             />
           </div>
           <button
             type="submit"
             disabled={isSearching || !query.trim()}
-            className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 dark:bg-purple-600 hover:bg-purple-700 dark:hover:bg-purple-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:bg-purple-400 transition duration-150 ease-in-out cursor-pointer"
+            className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 transition duration-150 ease-in-out cursor-pointer"
           >
             {isSearching ? 'Searching...' : 'Ask AI'}
           </button>
@@ -303,27 +303,21 @@ export default function SemanticSearch({ repoName }) {
         
         {/* Results List */}
         <div className={`flex-grow overflow-y-auto p-6 transition-all duration-200 ${selectedItem ? 'w-full lg:w-1/2 pr-3' : 'w-full'}`}>
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] dark:opacity-[0.05]">
-            <svg className="w-96 h-96" viewBox="0 0 100 100" fill="currentColor">
-              <path d="M50 0L60.9789 39.0211L100 50L60.9789 60.9789L50 100L39.0211 60.9789L0 50L39.0211 39.0211L50 0Z" />
-            </svg>
-          </div>
-
           {!hasSearched ? (
             <div className="text-center py-12 relative z-10">
-              <div className="mx-auto h-12 w-12 text-purple-200 dark:text-purple-400 text-5xl mb-4">🧠</div>
-              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-slate-200">Semantic AI Search</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Enter a concept to discover related code using hybrid AST & vector embeddings.</p>
+              <div className="mx-auto h-12 w-12 text-purple-400 dark:text-purple-400 text-5xl mb-4">🧠</div>
+              <h3 className="mt-2 text-sm font-medium text-slate-900 dark:text-slate-200">Semantic AI Search</h3>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Enter a concept to discover related code using hybrid AST & vector embeddings.</p>
             </div>
           ) : results.length === 0 ? (
-            <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-800 relative z-10">
-              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-slate-200">No results found</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Try rephrasing your concept or searching for a general topic.</p>
+            <div className="text-center py-12 glass-panel rounded-lg border border-slate-200/60 dark:border-slate-800/60 relative z-10">
+              <h3 className="mt-2 text-sm font-medium text-slate-900 dark:text-slate-200">No results found</h3>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Try rephrasing your concept or searching for a general topic.</p>
             </div>
           ) : (
             <div className="space-y-4 relative z-10">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-slate-400">
+                <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400">
                   Found {results.length} semantic matche{results.length === 1 ? '' : 's'}
                 </h3>
                 <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">
@@ -340,14 +334,14 @@ export default function SemanticSearch({ repoName }) {
                     <li
                       key={result.symbol_id || idx}
                       onClick={() => handleSelectSymbol(result)}
-                      className={`px-4 py-4 sm:px-6 rounded-lg shadow-sm border transition-all duration-150 relative overflow-hidden group cursor-pointer ${
+                      className={`px-4 py-4 sm:px-6 rounded-lg border transition-all duration-150 relative overflow-hidden group cursor-pointer ${
                         isSelected
-                          ? 'bg-purple-50/80 dark:bg-purple-950/40 border-purple-500 dark:border-purple-400 ring-2 ring-purple-500/20'
-                          : 'bg-white dark:bg-slate-900 border-purple-100 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-500 hover:shadow-md'
+                          ? 'bg-purple-500/15 border-purple-500 dark:border-purple-400 ring-2 ring-purple-500/30'
+                          : 'glass-panel hover:border-purple-400/50 hover:shadow-md'
                       }`}
                     >
                       <div
-                        className="absolute bottom-0 left-0 h-1 bg-purple-500 transition-all duration-300"
+                        className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-300"
                         style={{ width: `${Math.max(15, 100 - ((result.distance || 0) * 50))}%` }}
                       ></div>
                       
@@ -365,7 +359,7 @@ export default function SemanticSearch({ repoName }) {
                       </div>
                       
                       <div className="mt-2 flex items-center justify-between">
-                        <p className="text-base text-gray-900 dark:text-slate-100 font-bold font-mono group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                        <p className="text-base text-slate-900 dark:text-slate-100 font-bold font-mono group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
                           {result.match_name}
                           {!result.match_name?.includes('(') && !result.match_name?.includes(' ') && (result.match_type === 'function' || result.match_type === 'method') ? '()' : ''}
                         </p>
@@ -391,10 +385,10 @@ export default function SemanticSearch({ repoName }) {
 
         {/* Explanation Side Panel / Drawer */}
         {selectedItem && (
-          <div className="w-full lg:w-1/2 border-l border-purple-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col h-full z-20 shadow-xl overflow-hidden animate-fade-in">
+          <div className="w-full lg:w-1/2 border-l border-slate-200/60 dark:border-slate-800/60 glass-panel flex flex-col h-full z-20 shadow-2xl overflow-hidden animate-fade-in">
             
             {/* Drawer Header */}
-            <div className="p-5 border-b border-purple-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/90 flex items-start justify-between gap-3">
+            <div className="p-5 border-b border-slate-200/60 dark:border-slate-800/60 glass-nav flex items-start justify-between gap-3">
               <div className="flex-grow min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider border ${getTypeBadgeColor(selectedItem.match_type)}`}>
@@ -412,7 +406,7 @@ export default function SemanticSearch({ repoName }) {
                     </span>
                   )}
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100 font-mono truncate">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 font-mono truncate">
                   {selectedItem.match_name}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate mt-0.5">
@@ -427,7 +421,7 @@ export default function SemanticSearch({ repoName }) {
                   type="button"
                   onClick={() => fetchExplanation(selectedItem, true)}
                   disabled={isExplaining}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-purple-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-slate-700 focus:outline-none transition-colors disabled:opacity-50 cursor-pointer shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-purple-300 dark:border-purple-800/60 glass-panel-subtle text-purple-700 dark:text-purple-300 hover:border-purple-500 focus:outline-none transition-colors disabled:opacity-50 cursor-pointer shadow-sm"
                   title="Force re-generation with LLM"
                 >
                   <svg className={`h-3.5 w-3.5 ${isExplaining ? 'animate-spin' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -439,7 +433,7 @@ export default function SemanticSearch({ repoName }) {
                 <button
                   type="button"
                   onClick={handleCloseDrawer}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
                   title="Close (Esc)"
                 >
                   <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">

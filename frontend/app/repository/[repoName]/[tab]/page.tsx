@@ -28,29 +28,23 @@ export default function TabPage() {
       case 'architecture':
       case 'graph':
         return (
-          <div className="p-6 h-full">
-            <div className="h-full bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-              <ArchitectureExplorer repoName={repoName} />
-            </div>
+          <div className="p-6 h-full w-full">
+            <ArchitectureExplorer repoName={repoName} />
           </div>
         );
       case 'search':
       case 'semantic':
       case 'symbols':
         return (
-          <div className="p-6 h-full">
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 h-full p-6 overflow-y-auto">
-              <SemanticSearch repoName={repoName} />
-            </div>
+          <div className="p-6 h-full w-full overflow-hidden">
+            <SemanticSearch repoName={repoName} />
           </div>
         );
       case 'summary':
       case 'ask':
         return (
-          <div className="p-6 h-full">
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 h-full p-6 overflow-y-auto">
-              <RepositorySummary repoName={repoName} />
-            </div>
+          <div className="p-6 h-full w-full overflow-hidden">
+            <RepositorySummary repoName={repoName} />
           </div>
         );
       default:
@@ -63,7 +57,7 @@ export default function TabPage() {
   };
 
   return (
-    <div className="w-full h-full bg-slate-50 dark:bg-slate-950 relative">
+    <div className="w-full h-full relative">
       {renderContent()}
     </div>
   );
