@@ -44,9 +44,9 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
   const isPlanner = agent.agent_id === 'planner-main' || agent.role.toLowerCase().includes('planner');
 
   return (
-    <div className="w-[320px] flex-shrink-0 bg-white dark:bg-[#070D1D] border-l border-slate-200 dark:border-[#1D2B43] flex flex-col h-full text-slate-800 dark:text-slate-200 select-none">
+    <div className="w-[320px] flex-shrink-0 glass-panel border-l border-slate-200/70 dark:border-slate-800/70 flex flex-col h-full text-slate-800 dark:text-slate-200 select-none">
       {/* Header with Agent ID & Controls */}
-      <div className="h-14 px-4 border-b border-slate-200 dark:border-[#1D2B43] flex items-center justify-between flex-shrink-0">
+      <div className="h-14 px-4 border-b border-slate-200/70 dark:border-slate-800/70 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <Bot className="w-4 h-4 text-blue-600 dark:text-blue-400" />
           <span className="text-xs font-bold text-slate-900 dark:text-white tracking-wide">Agent Inspector</span>
@@ -64,7 +64,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
       </div>
 
       {/* Selected Agent identity card */}
-      <div className="p-3 border-b border-slate-200 dark:border-[#1D2B43]/80 bg-slate-50 dark:bg-[#0A1224] flex items-center justify-between">
+      <div className="p-3 border-b border-slate-200/60 dark:border-slate-800/60 glass-panel-subtle flex items-center justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
           <div
             className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
@@ -86,7 +86,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
             agent.status === 'completed'
               ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50'
               : agent.status === 'running'
-              ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 animate-pulse'
+              ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 animate-pulse'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
           }`}
         >
@@ -95,12 +95,12 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
       </div>
 
       {/* Tab navigation pills */}
-      <div className="flex items-center border-b border-slate-200 dark:border-[#1D2B43] px-2 pt-1.5 gap-1 bg-white dark:bg-[#070D1D] text-[11px] font-medium text-slate-500 dark:text-slate-400">
+      <div className="flex items-center border-b border-slate-200/60 dark:border-slate-800/60 px-2 pt-1.5 gap-1 glass-nav text-[11px] font-medium text-slate-500 dark:text-slate-400">
         <button
           onClick={() => setActiveTab('overview')}
           className={`px-2.5 py-1.5 border-b-2 transition-all ${
             activeTab === 'overview'
-              ? 'border-blue-600 dark:border-[#2165FF] text-blue-600 dark:text-white font-semibold'
+              ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 font-semibold'
               : 'border-transparent hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -110,7 +110,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
           onClick={() => setActiveTab('tools')}
           className={`px-2.5 py-1.5 border-b-2 transition-all ${
             activeTab === 'tools'
-              ? 'border-blue-600 dark:border-[#2165FF] text-blue-600 dark:text-white font-semibold'
+              ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 font-semibold'
               : 'border-transparent hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -120,7 +120,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
           onClick={() => setActiveTab('context')}
           className={`px-2.5 py-1.5 border-b-2 transition-all ${
             activeTab === 'context'
-              ? 'border-blue-600 dark:border-[#2165FF] text-blue-600 dark:text-white font-semibold'
+              ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 font-semibold'
               : 'border-transparent hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -130,7 +130,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
           onClick={() => setActiveTab('findings')}
           className={`px-2.5 py-1.5 border-b-2 transition-all ${
             activeTab === 'findings'
-              ? 'border-blue-600 dark:border-[#2165FF] text-blue-600 dark:text-white font-semibold'
+              ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 font-semibold'
               : 'border-transparent hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
