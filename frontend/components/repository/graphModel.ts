@@ -18,31 +18,31 @@ export const NODE_TYPE_COLORS: Record<string, string> = {
 };
 
 export const EDGE_COLORS_DARK: Record<string, string> = {
-  CALLS: 'rgba(16, 185, 129, 0.45)',
-  IMPORTS: 'rgba(99, 102, 241, 0.45)',
-  INHERITS: 'rgba(139, 92, 246, 0.45)',
-  ROUTE_HANDLER: 'rgba(245, 158, 11, 0.50)',
-  DATABASE_ACCESS: 'rgba(6, 182, 212, 0.50)',
-  CAPABILITY_MEMBER: 'rgba(236, 72, 153, 0.50)',
-  DECLARES: 'rgba(148, 163, 184, 0.25)',
-  CONTAINS: 'rgba(249, 115, 22, 0.30)',
-  USES: 'rgba(148, 163, 184, 0.25)',
-  REFERENCES: 'rgba(56, 189, 248, 0.40)',
-  GENERIC: 'rgba(148, 163, 184, 0.25)',
+  CALLS: '#10b981',
+  IMPORTS: '#818cf8',
+  INHERITS: '#c084fc',
+  ROUTE_HANDLER: '#fbbf24',
+  DATABASE_ACCESS: '#22d3ee',
+  CAPABILITY_MEMBER: '#f472b6',
+  DECLARES: 'rgba(148, 163, 184, 0.45)',
+  CONTAINS: '#fb923c',
+  USES: 'rgba(148, 163, 184, 0.45)',
+  REFERENCES: '#38bdf8',
+  GENERIC: 'rgba(148, 163, 184, 0.45)',
 };
 
 export const EDGE_COLORS_LIGHT: Record<string, string> = {
-  CALLS: 'rgba(5, 150, 105, 0.55)',
-  IMPORTS: 'rgba(79, 70, 229, 0.55)',
-  INHERITS: 'rgba(124, 58, 237, 0.55)',
-  ROUTE_HANDLER: 'rgba(217, 119, 6, 0.60)',
-  DATABASE_ACCESS: 'rgba(8, 145, 178, 0.60)',
-  CAPABILITY_MEMBER: 'rgba(219, 39, 119, 0.60)',
-  DECLARES: 'rgba(100, 116, 139, 0.35)',
-  CONTAINS: 'rgba(234, 88, 12, 0.35)',
-  USES: 'rgba(100, 116, 139, 0.35)',
-  REFERENCES: 'rgba(2, 132, 199, 0.45)',
-  GENERIC: 'rgba(100, 116, 139, 0.35)',
+  CALLS: '#059669',            // Rich emerald green
+  IMPORTS: '#4338ca',          // Deep indigo
+  INHERITS: '#7e22ce',         // Vivid purple
+  ROUTE_HANDLER: '#d97706',    // Dark amber
+  DATABASE_ACCESS: '#0891b2',  // Deep cyan
+  CAPABILITY_MEMBER: '#db2777',// Deep pink
+  DECLARES: '#475569',         // High-contrast slate-600 (clearly visible against light canvas)
+  CONTAINS: '#ea580c',         // Deep orange
+  USES: '#475569',             // Slate-600
+  REFERENCES: '#0284c7',       // Sky blue
+  GENERIC: '#64748b',          // Slate-500
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ export function buildEdgeAttributes(e: any, isDark: boolean) {
   const weight = SEMANTIC_EDGE_WEIGHTS[relType] ?? SEMANTIC_EDGE_WEIGHTS.GENERIC;
   return {
     color: edgeColorPalette[relType] || edgeColorPalette.GENERIC,
-    size: relType === 'CONTAINS' ? 0.8 : 1.0,
+    size: relType === 'CONTAINS' ? 1.2 : 1.5,
     weight,
     type: 'arrow',
     relType,

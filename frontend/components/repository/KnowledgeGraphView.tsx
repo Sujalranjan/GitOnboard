@@ -16,7 +16,7 @@ import {
   FolderOpen,
   ChevronRight,
 } from 'lucide-react';
-import { buildInitialGraph, injectExpansionData } from './graphModel';
+import { buildInitialGraph, injectExpansionData, EDGE_COLORS_DARK, EDGE_COLORS_LIGHT } from './graphModel';
 
 // Dynamic import for WebGL Sigma canvas to prevent SSR window/WebGL errors
 const SigmaKnowledgeGraphCanvas = dynamic(
@@ -145,8 +145,21 @@ export default function KnowledgeGraphView({ repoName }: KnowledgeGraphViewProps
   const [isDark, setIsDark] = useState(true);
   useEffect(() => {
     const checkTheme = () => {
-      setIsDark(document.documentElement.classList.contains('dark') ||
-        window.matchMedia('(prefers-color-scheme: dark)').matches);
+      const dark = document.documentElement.classList.contains('dark') ||
+        window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setIsDark(dark);
+
+      // Dynamically update existing edge colors in live graph when theme switches
+      if (graphRef.current) {
+        const edgePalette = dark ? EDGE_COLORS_DARK : EDGE_COLORS_LIGHT;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        graphRef.current.forEachEdge((edgeId: string, attr: any) => {
+          const relType = attr.relType || 'GENERIC';
+          const newColor = edgePalette[relType] || edgePalette.GENERIC;
+          graphRef.current.setEdgeAttribute(edgeId, 'color', newColor);
+        });
+        setGraphVersion((v) => v + 1);
+      }
     };
     checkTheme();
     const observer = new MutationObserver(checkTheme);
