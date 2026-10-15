@@ -32,7 +32,7 @@ export function Sidebar({ repoName }) {
   const pathname = usePathname();
   
   return (
-    <div className="w-64 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col h-full hidden md:flex transition-colors">
+    <div className="w-64 border-r border-slate-200/80 dark:border-slate-800/80 glass-nav flex flex-col h-full hidden md:flex transition-colors">
       <div className="flex-grow py-6 overflow-y-auto overflow-x-hidden">
         <nav className="space-y-1 px-3">
           {navItems.map((item) => {
@@ -55,12 +55,12 @@ export function Sidebar({ repoName }) {
                 className={`
                   flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors group
                   ${isActive 
-                    ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'}
+                    ? 'bg-gradient-to-r from-violet-600/15 to-blue-600/15 text-violet-700 dark:text-violet-300 font-semibold border border-violet-500/30 dark:border-violet-400/30' 
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-100'}
                 `}
               >
                 <item.icon 
-                  className={`flex-shrink-0 mr-3 h-5 w-5 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-500 dark:group-hover:text-slate-300'}`} 
+                  className={`flex-shrink-0 mr-3 h-5 w-5 ${isActive ? 'text-violet-600 dark:text-violet-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-500 dark:group-hover:text-slate-300'}`} 
                 />
                 {item.label}
               </Link>

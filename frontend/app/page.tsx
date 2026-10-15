@@ -22,16 +22,16 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="w-full min-h-[calc(100vh-64px)] bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-8 text-center transition-colors">
-      <div className="max-w-2xl mx-auto space-y-8">
+    <div className="w-full min-h-[calc(100vh-64px)] flex flex-col items-center justify-center p-8 text-center transition-colors">
+      <div className="max-w-2xl mx-auto space-y-8 glass-panel p-10 sm:p-14 rounded-2xl">
         <h1 className="text-5xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-          Repository Intelligence Platform
+          Repository Intelligence <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-violet-600 dark:from-cyan-400 dark:to-violet-400">Platform</span>
         </h1>
         <p className="text-xl text-slate-600 dark:text-slate-400">
           Understand, analyze, and visualize your entire codebase architecture with just a few clicks.
         </p>
 
-        <div className="pt-8 flex items-center justify-center gap-4">
+        <div className="pt-4 flex items-center justify-center gap-4">
           {isAuthenticated ? (
             <Button
               variant="primary"

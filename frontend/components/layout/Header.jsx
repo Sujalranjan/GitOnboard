@@ -65,7 +65,7 @@ export function Header() {
   };
 
   return (
-    <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between px-4 sm:px-6 z-10 flex-shrink-0 transition-colors">
+    <header className="h-16 border-b border-slate-200/80 dark:border-slate-800/80 glass-nav flex items-center justify-between px-4 sm:px-6 z-10 flex-shrink-0 transition-colors">
       <div className="flex items-center gap-4">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">

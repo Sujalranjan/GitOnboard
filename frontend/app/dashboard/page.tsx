@@ -263,7 +263,7 @@ function DashboardContent() {
   };
 
   return (
-    <div className="w-full h-[calc(100vh-64px)] overflow-y-auto bg-slate-50 dark:bg-slate-950 transition-colors">
+    <div className="w-full h-[calc(100vh-64px)] overflow-y-auto transition-colors">
       <div className="p-8 w-full max-w-7xl mx-auto flex flex-col">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Dashboard</h1>
@@ -307,7 +307,7 @@ function DashboardContent() {
             const repoSlug = repo.repository_hash || encodeURIComponent(repo.project_name);
             return (
               <Link key={idx} href={`/repository/${repoSlug}/investigation`}>
-                <Card className="h-full hover:shadow-md transition-shadow cursor-pointer group flex flex-col">
+                <Card variant="glass" className="h-full hover:shadow-lg transition-all cursor-pointer group flex flex-col">
                   <div className="flex justify-between items-start mb-4">
                     <h3 className="font-bold text-lg text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors line-clamp-1">{repo.project_name}</h3>
                   <div className="flex gap-2 flex-wrap justify-end">
@@ -323,14 +323,14 @@ function DashboardContent() {
                 <div className="space-y-4 flex-grow">
                   <div>
                     <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Repository</span>
-                    <p className="text-sm text-slate-600 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/80 p-2 rounded line-clamp-1">{getRepositoryPath(repo)}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 font-mono glass-panel-subtle p-2 rounded-lg line-clamp-1">{getRepositoryPath(repo)}</p>
                   </div>
 
                   {(repo.branch || repo.commit) && (
                     <div>
                       <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Branch</span>
-                      <p className="text-sm text-slate-700 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-800/80 p-2 rounded line-clamp-1">
-                        {repo.branch ? <span className="text-blue-600 dark:text-blue-400 font-medium">{repo.branch}</span> : ''}
+                      <p className="text-sm text-slate-700 dark:text-slate-300 font-mono glass-panel-subtle p-2 rounded-lg line-clamp-1">
+                        {repo.branch ? <span className="text-violet-600 dark:text-cyan-400 font-medium">{repo.branch}</span> : ''}
                         {repo.branch && repo.commit ? ' @ ' : ''}
                         {repo.commit ? <span className="text-slate-500 dark:text-slate-400">{repo.commit.substring(0, 7)}</span> : ''}
                       </p>
