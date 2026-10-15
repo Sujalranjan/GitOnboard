@@ -26,7 +26,7 @@ export function ThemeToggle() {
 
   return (
     <div 
-      className="flex items-center p-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
+      className="flex items-center p-1 rounded-lg glass-panel-subtle border border-slate-200/80 dark:border-slate-700/80 transition-colors"
       role="group"
       aria-label="Theme selection"
     >

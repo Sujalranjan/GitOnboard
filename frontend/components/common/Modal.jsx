@@ -31,8 +31,8 @@ export function Modal({ isOpen, onClose, title, children }) {
         aria-hidden="true"
       />
       
-      <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl shadow-xl w-full max-w-md z-10 overflow-hidden border border-slate-200 dark:border-slate-800 m-4 flex flex-col transform transition-all">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+      <div className="glass-panel text-slate-900 dark:text-slate-100 rounded-xl shadow-2xl w-full max-w-md z-10 overflow-hidden border m-4 flex flex-col transform transition-all">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100/60 dark:border-slate-800/60 bg-slate-50/40 dark:bg-slate-800/40">
           <h3 id="modal-title" className="font-semibold text-slate-800 dark:text-slate-100 text-lg">{title}</h3>
           <button 
             onClick={onClose}
