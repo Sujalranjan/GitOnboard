@@ -21,7 +21,7 @@ export const InvestigationAgentCards: React.FC<AgentOverviewProps> = ({
 }) => {
   if (agents.length === 0) {
     return (
-      <div className="p-4 rounded-xl bg-white dark:bg-[#0D162A]/60 border border-slate-200 dark:border-[#1D2B43] flex items-center justify-center text-xs text-slate-500 font-mono">
+      <div className="p-4 rounded-xl glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 flex items-center justify-center text-xs text-slate-500 font-mono">
         Agents will appear here as the planner spawns them...
       </div>
     );
@@ -41,8 +41,8 @@ export const InvestigationAgentCards: React.FC<AgentOverviewProps> = ({
               onClick={() => onSelectAgent(agent.agent_id)}
               className={`flex-1 min-w-[210px] max-w-[260px] p-3 rounded-xl border text-left transition-all relative ${
                 isSelected
-                  ? 'bg-blue-50 dark:bg-[#0E1A33] border-blue-500 dark:border-[#2165FF] ring-1 ring-blue-500 dark:ring-[#2165FF] shadow-lg shadow-blue-500/10'
-                  : 'bg-white dark:bg-[#0D162A] border-slate-200 dark:border-[#1D2B43] hover:border-blue-400 dark:hover:border-[#2165FF]/50 hover:bg-slate-50 dark:hover:bg-[#111C31]'
+                  ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-500 dark:border-indigo-500 ring-1 ring-indigo-500 shadow-md shadow-indigo-500/10'
+                  : 'glass-panel-subtle border-slate-200/80 dark:border-slate-800/80 hover:border-indigo-400/60 dark:hover:border-indigo-400/60 hover:bg-slate-100/60 dark:hover:bg-slate-800/50'
               }`}
             >
               {/* Header: Icon + Name + Status badge */}
@@ -104,11 +104,11 @@ export const InvestigationAgentCards: React.FC<AgentOverviewProps> = ({
               </div>
 
               {/* Bottom Progress track */}
-              <div className="mt-3 pt-2 border-t border-slate-200 dark:border-[#1D2B43]/60 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                <div className="flex-1 mr-2 bg-slate-200 dark:bg-[#15233E] rounded-full h-1 overflow-hidden">
+              <div className="mt-3 pt-2 border-t border-slate-200/70 dark:border-slate-800/70 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                <div className="flex-1 mr-2 bg-slate-200/80 dark:bg-slate-800 rounded-full h-1 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      isCompleted ? 'bg-emerald-500' : 'bg-blue-600 dark:bg-[#2165FF]'
+                      isCompleted ? 'bg-emerald-500' : 'bg-indigo-600 dark:bg-indigo-400'
                     }`}
                     style={{
                       width: isCompleted ? '100%' : isRunning ? '65%' : '15%',

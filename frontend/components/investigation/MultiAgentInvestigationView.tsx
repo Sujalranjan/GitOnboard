@@ -717,7 +717,7 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
                 <button
                   onClick={() => setIsBrainVisible(false)}
                   title="Hide visualizer and return to full chatbot"
-                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] hover:text-slate-900 dark:hover:text-white text-slate-500 dark:text-slate-400 transition-colors"
+                  className="p-1.5 rounded-lg glass-panel-subtle border border-slate-200/70 dark:border-slate-700/60 hover:text-slate-900 dark:hover:text-white text-slate-500 dark:text-slate-400 transition-colors shadow-sm"
                 >
                   <EyeOff className="w-3.5 h-3.5" />
                 </button>
@@ -792,14 +792,14 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
                   </button>
 
                   {filterDropdownOpen && (
-                    <div className="absolute right-0 top-full mt-1 w-36 rounded-lg bg-white dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] shadow-xl py-1 z-30 font-mono text-xs">
+                    <div className="absolute right-0 top-full mt-1 w-36 rounded-lg glass-panel border border-slate-200/80 dark:border-slate-800/80 shadow-xl py-1 z-30 font-mono text-xs">
                       <button
                         onClick={() => {
                           setAgentFilter('all');
                           setFilterDropdownOpen(false);
                         }}
-                        className={`w-full px-2.5 py-1 text-left hover:bg-slate-100 dark:hover:bg-[#15233E] ${
-                          agentFilter === 'all' ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-slate-700 dark:text-slate-300'
+                        className={`w-full px-2.5 py-1 text-left hover:bg-slate-100/60 dark:hover:bg-slate-800/60 ${
+                          agentFilter === 'all' ? 'text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-slate-700 dark:text-slate-300'
                         }`}
                       >
                         All Agents
@@ -811,8 +811,8 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
                             setAgentFilter(a.agent_id);
                             setFilterDropdownOpen(false);
                           }}
-                          className={`w-full px-2.5 py-1 text-left hover:bg-slate-100 dark:hover:bg-[#15233E] truncate ${
-                            agentFilter === a.agent_id ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-slate-700 dark:text-slate-300'
+                          className={`w-full px-2.5 py-1 text-left hover:bg-slate-100/60 dark:hover:bg-slate-800/60 truncate ${
+                            agentFilter === a.agent_id ? 'text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-slate-700 dark:text-slate-300'
                           }`}
                         >
                           {a.agent_id}
@@ -917,10 +917,10 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
                     uniqueFiles.map((file) => (
                       <div
                         key={file}
-                        className="p-2.5 rounded-lg bg-white dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] flex items-center justify-between text-xs font-mono text-slate-700 dark:text-slate-300 shadow-sm"
+                        className="p-2.5 rounded-lg glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between text-xs font-mono text-slate-700 dark:text-slate-300 shadow-sm"
                       >
                         <div className="flex items-center gap-2 truncate">
-                          <FileCode2 className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
+                          <FileCode2 className="w-4 h-4 text-indigo-500 dark:text-indigo-400 flex-shrink-0" />
                           <span className="truncate">{file}</span>
                         </div>
                         <span className="text-[10px] text-slate-400 dark:text-slate-500">Verified</span>
@@ -932,7 +932,7 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
             </div>
 
             {/* Bottom Verified Findings Banner */}
-            <div className="p-2.5 border-t border-slate-200 dark:border-[#1D2B43] bg-white dark:bg-[#0A1224] flex-shrink-0 text-xs transition-all">
+            <div className="p-2.5 border-t border-slate-200/70 dark:border-slate-800/70 glass-nav flex-shrink-0 text-xs transition-all">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
                   <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -943,13 +943,13 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setActiveCenterTab('evidence')}
-                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-mono"
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-mono"
                   >
                     View all ({findings.length})
                   </button>
                   <button
                     onClick={() => setIsFindingsMinimized((prev) => !prev)}
-                    className="p-1 rounded hover:bg-slate-100 dark:hover:bg-[#15233E] text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                    className="p-1 rounded hover:bg-slate-100/60 dark:hover:bg-slate-800/60 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
                     title={isFindingsMinimized ? 'Expand Verified Findings' : 'Minimize Verified Findings'}
                   >
                     {isFindingsMinimized ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -964,13 +964,13 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
                       {findings.slice(0, 2).map((f, idx) => (
                         <div
                           key={f.id}
-                          className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-slate-50 dark:bg-[#070D1D] border border-slate-200 dark:border-[#1D2B43]/70 text-[11px]"
+                          className="flex items-center justify-between gap-2 p-1.5 rounded-lg glass-panel-subtle border border-slate-200/60 dark:border-slate-800/60 text-[11px]"
                         >
                           <div className="flex items-center gap-1.5 truncate">
                             <span className="text-slate-400 dark:text-slate-500 font-mono">{idx + 1}</span>
                             <span className="text-slate-700 dark:text-slate-300 truncate">{f.summary}</span>
                           </div>
-                          <span className="text-blue-600 dark:text-blue-400 px-1 py-0.5 rounded bg-blue-50 dark:bg-[#111C31] border border-blue-200 dark:border-[#1D2B43] font-mono text-[10px] flex-shrink-0">
+                          <span className="text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-200/50 dark:border-indigo-800/50 font-mono text-[10px] flex-shrink-0">
                             {f.file_path} {f.line_start && `L${f.line_start}`}
                           </span>
                         </div>
@@ -999,8 +999,8 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
               }}
             />
           ) : (
-            <div className="w-[300px] bg-[#070D1D] border-l border-[#1D2B43] flex flex-col items-center justify-center p-6 text-center text-slate-500 text-xs space-y-2">
-              <Bot className="w-8 h-8 text-slate-600" />
+            <div className="w-[300px] glass-nav border-l border-slate-200/70 dark:border-slate-800/70 flex flex-col items-center justify-center p-6 text-center text-slate-500 text-xs space-y-2">
+              <Bot className="w-8 h-8 text-slate-400 dark:text-slate-600" />
               <span>Select any agent to inspect its tools and context</span>
             </div>
           )}

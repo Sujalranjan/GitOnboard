@@ -45,7 +45,7 @@ export const InvestigationSidebar: React.FC<SidebarProps> = ({ repoName }) => {
         <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-violet-600 to-blue-600 flex items-center justify-center text-white shadow-sm shadow-violet-500/30">
           <Sparkles className="w-4 h-4 fill-white" />
         </div>
-        <span className="text-base font-bold text-white tracking-tight">GitOnboard</span>
+        <span className="text-base font-bold text-slate-900 dark:text-white tracking-tight">GitOnboard</span>
       </div>
 
       {/* Nav items list */}
@@ -82,10 +82,10 @@ export const InvestigationSidebar: React.FC<SidebarProps> = ({ repoName }) => {
       </div>
 
       {/* Bottom Settings footer */}
-      <div className="p-2 border-t border-[#1D2B43]/60 flex-shrink-0">
+      <div className="p-2 border-t border-slate-200/60 dark:border-slate-800/60 flex-shrink-0">
         <Link
           href={`/repository/${repoName}/settings`}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-[#0D162A] transition-colors"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors"
         >
           <Settings className="w-4 h-4 text-slate-500" />
           <span>Settings</span>
