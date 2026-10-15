@@ -16,7 +16,7 @@ import {
   FolderOpen,
   ChevronRight,
 } from 'lucide-react';
-import { buildInitialGraph, injectExpansionData } from './graphModel';
+import { buildInitialGraph, injectExpansionData, EDGE_COLORS_DARK, EDGE_COLORS_LIGHT } from './graphModel';
 
 // Dynamic import for WebGL Sigma canvas to prevent SSR window/WebGL errors
 const SigmaKnowledgeGraphCanvas = dynamic(
@@ -145,8 +145,21 @@ export default function KnowledgeGraphView({ repoName }: KnowledgeGraphViewProps
   const [isDark, setIsDark] = useState(true);
   useEffect(() => {
     const checkTheme = () => {
-      setIsDark(document.documentElement.classList.contains('dark') ||
-        window.matchMedia('(prefers-color-scheme: dark)').matches);
+      const dark = document.documentElement.classList.contains('dark') ||
+        window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setIsDark(dark);
+
+      // Dynamically update existing edge colors in live graph when theme switches
+      if (graphRef.current) {
+        const edgePalette = dark ? EDGE_COLORS_DARK : EDGE_COLORS_LIGHT;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        graphRef.current.forEachEdge((edgeId: string, attr: any) => {
+          const relType = attr.relType || 'GENERIC';
+          const newColor = edgePalette[relType] || edgePalette.GENERIC;
+          graphRef.current.setEdgeAttribute(edgeId, 'color', newColor);
+        });
+        setGraphVersion((v) => v + 1);
+      }
     };
     checkTheme();
     const observer = new MutationObserver(checkTheme);
@@ -337,9 +350,9 @@ export default function KnowledgeGraphView({ repoName }: KnowledgeGraphViewProps
     graphRef.current?.getNodeAttribute(selectedNode.id, 'expandable');
 
   return (
-    <div className="w-full h-full flex flex-col bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 overflow-hidden font-sans transition-colors duration-200">
+    <div className="w-full h-full flex flex-col glass-panel rounded-xl text-slate-800 dark:text-slate-100 overflow-hidden font-sans transition-colors duration-200">
       {/* ── TOP CONTROLS & HEADER BAR ── */}
-      <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/80 backdrop-blur-md px-5 py-3.5 z-10 transition-colors">
+      <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-800/60 glass-nav px-5 py-3.5 z-10 transition-colors">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Title & Stats Summary */}
           <div className="flex items-center gap-3">
@@ -362,7 +375,7 @@ export default function KnowledgeGraphView({ repoName }: KnowledgeGraphViewProps
           {/* View mode tabs & Search */}
           <div className="flex items-center gap-3">
             {/* View filter tabs */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-1 text-xs">
+            <div className="flex items-center glass-panel-subtle border border-slate-200/60 dark:border-slate-800/60 rounded-lg p-1 text-xs">
               {[
                 { id: 'all', label: 'All', icon: Globe },
                 { id: 'calls', label: 'Calls', icon: Zap },
@@ -495,9 +508,9 @@ export default function KnowledgeGraphView({ repoName }: KnowledgeGraphViewProps
       {/* ── CANVAS & INSPECTOR CONTAINER ── */}
       <div className="flex-grow flex relative overflow-hidden">
         {/* Sigma WebGL Canvas Area */}
-        <div className="flex-grow h-full w-full relative bg-slate-50 dark:bg-slate-950 transition-colors">
+        <div className="flex-grow h-full w-full relative bg-slate-900/10 dark:bg-slate-950/40 transition-colors">
           {isLoading && (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-sm gap-3">
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center glass-panel gap-3">
               <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                 Extracting Fact Store Knowledge Graph...
@@ -536,7 +549,7 @@ export default function KnowledgeGraphView({ repoName }: KnowledgeGraphViewProps
 
         {/* ── NODE INSPECTION SIDEBAR DRAWER ── */}
         {selectedNode && (
-          <div className="w-80 md:w-96 flex-shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md flex flex-col h-full shadow-2xl z-20 transition-colors">
+          <div className="w-80 md:w-96 flex-shrink-0 border-l border-slate-200/60 dark:border-slate-800/60 glass-panel flex flex-col h-full shadow-2xl z-20 transition-colors">
             {/* Header */}
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">

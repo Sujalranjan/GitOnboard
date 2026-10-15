@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useTheme } from "next-themes";
 
 interface MermaidProps {
   chart: string;
@@ -9,6 +10,7 @@ interface MermaidProps {
 export const MermaidViewer: React.FC<MermaidProps> = ({ chart }) => {
   const [svgContent, setSvgContent] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     let isMounted = true;
@@ -22,22 +24,34 @@ export const MermaidViewer: React.FC<MermaidProps> = ({ chart }) => {
         // Dynamically import mermaid in browser client only
         const mermaidModule = await import("mermaid");
         const mermaid = mermaidModule.default || mermaidModule;
+        const isDark = resolvedTheme === "dark";
 
         mermaid.initialize({
           startOnLoad: false,
-          theme: "dark",
+          theme: isDark ? "dark" : "default",
           securityLevel: "loose",
           suppressErrorRendering: true,
-          themeVariables: {
-            darkMode: true,
-            background: "#0D162A",
-            primaryColor: "#1E40AF",
-            primaryTextColor: "#F8FAFC",
-            primaryBorderColor: "#3B82F6",
-            lineColor: "#60A5FA",
-            secondaryColor: "#1E293B",
-            tertiaryColor: "#0F172A",
-          },
+          themeVariables: isDark
+            ? {
+                darkMode: true,
+                background: "#090d16",
+                primaryColor: "#1e1b4b",
+                primaryTextColor: "#f8fafc",
+                primaryBorderColor: "#6366f1",
+                lineColor: "#818cf8",
+                secondaryColor: "#1e293b",
+                tertiaryColor: "#0f172a",
+              }
+            : {
+                darkMode: false,
+                background: "#ffffff",
+                primaryColor: "#eef2ff",
+                primaryTextColor: "#0f172a",
+                primaryBorderColor: "#818cf8",
+                lineColor: "#6366f1",
+                secondaryColor: "#f1f5f9",
+                tertiaryColor: "#f8fafc",
+              },
         });
 
         // Clean unique ID without special characters
@@ -60,20 +74,20 @@ export const MermaidViewer: React.FC<MermaidProps> = ({ chart }) => {
     return () => {
       isMounted = false;
     };
-  }, [chart]);
+  }, [chart, resolvedTheme]);
 
   if (error) {
     return (
-      <div className="my-2 rounded-lg border border-slate-700/60 bg-slate-900/90 p-3 font-mono text-xs text-slate-100 overflow-x-auto">
-        <div className="text-amber-400 text-[11px] mb-1 font-sans">Mermaid syntax error (fallback display):</div>
-        <pre className="whitespace-pre font-mono text-xs text-slate-300">{chart}</pre>
+      <div className="my-2 rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/20 p-3 font-mono text-xs text-slate-800 dark:text-slate-200 overflow-x-auto shadow-sm">
+        <div className="text-amber-700 dark:text-amber-400 text-[11px] mb-1 font-sans font-semibold">Mermaid syntax error (fallback display):</div>
+        <pre className="whitespace-pre font-mono text-xs text-slate-700 dark:text-slate-300">{chart}</pre>
       </div>
     );
   }
 
   if (!svgContent) {
     return (
-      <div className="my-3 flex items-center justify-center p-6 bg-slate-900/40 rounded-xl border border-slate-800 text-xs text-slate-400 font-mono animate-pulse">
+      <div className="my-3 flex items-center justify-center p-6 glass-panel-subtle rounded-xl border border-slate-200/60 dark:border-slate-800/60 text-xs text-slate-400 font-mono animate-pulse">
         Rendering diagram...
       </div>
     );
@@ -81,7 +95,7 @@ export const MermaidViewer: React.FC<MermaidProps> = ({ chart }) => {
 
   return (
     <div
-      className="my-3 overflow-x-auto rounded-xl border border-slate-700/60 bg-[#0D162A]/90 p-4 shadow-md flex justify-center [&_svg]:max-w-full [&_svg]:h-auto"
+      className="my-3 overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-800/80 glass-panel-subtle p-4 shadow-sm flex justify-center [&_svg]:max-w-full [&_svg]:h-auto"
       dangerouslySetInnerHTML={{ __html: svgContent }}
     />
   );

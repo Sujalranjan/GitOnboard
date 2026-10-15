@@ -101,8 +101,8 @@ export default function RepositorySummary({ repoName }) {
   // 1. Initial component loading state
   if (initialLoading && !summary) {
     return (
-      <div className="h-full flex flex-col items-center justify-center bg-white dark:bg-slate-900 rounded-lg p-12 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800">
-        <svg className="animate-spin h-10 w-10 text-blue-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <div className="h-full flex flex-col items-center justify-center glass-panel rounded-xl p-12 text-slate-900 dark:text-slate-100">
+        <svg className="animate-spin h-10 w-10 text-violet-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
@@ -114,13 +114,13 @@ export default function RepositorySummary({ repoName }) {
   // 2. Generating state when no summary exists yet
   if (isGenerating && !summary) {
     return (
-      <div className="h-full flex flex-col items-center justify-center bg-white dark:bg-slate-900 rounded-lg p-12 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800">
-        <svg className="animate-spin h-12 w-12 text-blue-500 dark:text-blue-400 mb-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <div className="h-full flex flex-col items-center justify-center glass-panel rounded-xl p-12 text-slate-900 dark:text-slate-100">
+        <svg className="animate-spin h-12 w-12 text-violet-500 dark:text-violet-400 mb-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        <h3 className="text-xl font-semibold text-gray-800 dark:text-slate-100">Generating AI Summary...</h3>
-        <p className="text-gray-500 dark:text-slate-400 mt-2 text-center max-w-md">
+        <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Generating AI Summary...</h3>
+        <p className="text-slate-500 dark:text-slate-400 mt-2 text-center max-w-md">
           The local LLM is analyzing the repository metadata and documentation. This process runs locally and will update automatically once complete.
         </p>
         <button
@@ -136,15 +136,15 @@ export default function RepositorySummary({ repoName }) {
   // 3. No summary available yet
   if (!summary) {
     return (
-      <div className="h-full flex flex-col items-center justify-center bg-white dark:bg-slate-900 rounded-lg p-12 border border-gray-100 dark:border-slate-800 text-slate-900 dark:text-slate-100">
+      <div className="h-full flex flex-col items-center justify-center glass-panel rounded-xl p-12 text-slate-900 dark:text-slate-100">
         <div className="text-6xl mb-4">🤖</div>
-        <h3 className="text-xl font-semibold text-gray-800 dark:text-slate-100 mb-2">No Summary Available</h3>
-        <p className="text-gray-500 dark:text-slate-400 mb-6 text-center max-w-md">
+        <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">No Summary Available</h3>
+        <p className="text-slate-500 dark:text-slate-400 mb-6 text-center max-w-md">
           Generate an AI-powered grounded summary of the repository structure, languages, modules, and dependencies using local Ollama.
         </p>
         <button
           onClick={generateSummary}
-          className="px-6 py-3 bg-blue-600 dark:bg-blue-600 hover:bg-blue-700 dark:hover:bg-blue-500 text-white font-medium rounded-md shadow-sm transition-colors flex items-center gap-2"
+          className="px-6 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-medium rounded-lg shadow-md shadow-violet-500/25 transition-all flex items-center gap-2"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
           Generate Summary
@@ -156,12 +156,12 @@ export default function RepositorySummary({ repoName }) {
 
   // 4. Summary is available and rendered
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 relative overflow-hidden text-slate-900 dark:text-slate-100">
+    <div className="h-full flex flex-col glass-panel rounded-xl relative overflow-hidden text-slate-900 dark:text-slate-100">
       {/* Header bar */}
-      <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800/50">
+      <div className="flex justify-between items-center p-6 border-b border-slate-200/60 dark:border-slate-800/60 glass-nav">
         <div className="flex items-center gap-3">
           <span className="text-2xl">📝</span>
-          <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100">Repository Overview</h2>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Repository Overview</h2>
           {isOutdated && (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-950/80 text-yellow-800 dark:text-yellow-300">
               Outdated

@@ -39,13 +39,13 @@ export const InvestigationSidebar: React.FC<SidebarProps> = ({ repoName }) => {
   const pathname = usePathname();
 
   return (
-    <div className="w-[220px] flex-shrink-0 bg-[#070D1D] border-r border-[#1D2B43] flex flex-col h-full select-none text-slate-300">
+    <div className="w-[220px] flex-shrink-0 glass-nav border-r border-slate-200/70 dark:border-slate-800/70 flex flex-col h-full select-none text-slate-700 dark:text-slate-300">
       {/* Brand logo header */}
-      <div className="h-14 px-4 flex items-center gap-2.5 border-b border-[#1D2B43]/60 flex-shrink-0">
-        <div className="w-7 h-7 rounded-lg bg-[#2165FF] flex items-center justify-center text-white shadow-sm shadow-[#2165FF]/30">
+      <div className="h-14 px-4 flex items-center gap-2.5 border-b border-slate-200/60 dark:border-slate-800/60 flex-shrink-0">
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-violet-600 to-blue-600 flex items-center justify-center text-white shadow-sm shadow-violet-500/30">
           <Sparkles className="w-4 h-4 fill-white" />
         </div>
-        <span className="text-base font-bold text-white tracking-tight">GitOnboard</span>
+        <span className="text-base font-bold text-slate-900 dark:text-white tracking-tight">GitOnboard</span>
       </div>
 
       {/* Nav items list */}
@@ -66,13 +66,13 @@ export const InvestigationSidebar: React.FC<SidebarProps> = ({ repoName }) => {
               href={itemPath}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                 isActive
-                  ? 'bg-[#15233E] text-[#3B82F6] font-semibold shadow-inner'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#0D162A]'
+                  ? 'bg-gradient-to-r from-violet-600/15 to-blue-600/15 text-violet-700 dark:text-violet-300 font-semibold border border-violet-500/30 dark:border-violet-400/30 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
               }`}
             >
               <item.icon
                 className={`w-4 h-4 flex-shrink-0 ${
-                  isActive ? 'text-[#3B82F6]' : 'text-slate-500'
+                  isActive ? 'text-violet-600 dark:text-violet-400' : 'text-slate-400 dark:text-slate-500'
                 }`}
               />
               <span className="truncate">{item.label}</span>
@@ -82,10 +82,10 @@ export const InvestigationSidebar: React.FC<SidebarProps> = ({ repoName }) => {
       </div>
 
       {/* Bottom Settings footer */}
-      <div className="p-2 border-t border-[#1D2B43]/60 flex-shrink-0">
+      <div className="p-2 border-t border-slate-200/60 dark:border-slate-800/60 flex-shrink-0">
         <Link
           href={`/repository/${repoName}/settings`}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-[#0D162A] transition-colors"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors"
         >
           <Settings className="w-4 h-4 text-slate-500" />
           <span>Settings</span>

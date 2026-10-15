@@ -45,7 +45,7 @@ export const InvestigationTimeline: React.FC<TimelineProps> = ({
   }
 
   return (
-    <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-px before:bg-slate-200 dark:before:bg-[#1D2B43]">
+    <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-px before:bg-slate-200/80 dark:before:bg-slate-800/80">
       {events.map((ev) => {
         const isToolCall = ev.type === 'tool-call';
         const isFinding = ev.type === 'finding-saved';
@@ -122,16 +122,16 @@ export const InvestigationTimeline: React.FC<TimelineProps> = ({
 
               {/* Tool call box or Tool response box (expandable code / JSON / query viewer) */}
               {(isToolCall || ev.type === 'tool-response') && (
-                <div className="rounded-xl bg-white dark:bg-[#0B1426] border border-slate-200 dark:border-[#1D2B43] overflow-hidden text-xs font-mono shadow-sm">
+                <div className="rounded-xl glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 overflow-hidden text-xs font-mono shadow-sm">
                   <div
                     onClick={() => toggleExpand(ev.id)}
-                    className="px-3 py-2 bg-slate-50 dark:bg-[#0D162A] flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-[#111C31] transition-colors"
+                    className="px-3 py-2 bg-slate-100/50 dark:bg-slate-900/50 flex items-center justify-between cursor-pointer hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition-colors"
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-slate-500 dark:text-slate-400 text-[11px]">
                         Tool Invocation
                       </span>
-                      <span className="text-blue-600 dark:text-blue-400 font-semibold">{ev.tool_name}</span>
+                      <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{ev.tool_name}</span>
                       {ev.result_summary && !isExpanded && (
                         <span className="text-slate-400 dark:text-slate-500 text-[10px] font-normal truncate max-w-[200px]">
                           ({typeof ev.result_summary === 'string' ? ev.result_summary : Array.isArray(ev.result_summary) ? `${ev.result_summary.length} items` : 'Object'})
@@ -150,23 +150,23 @@ export const InvestigationTimeline: React.FC<TimelineProps> = ({
 
                   {/* Arguments and output preview */}
                   {isExpanded && (
-                    <div className="p-3 space-y-2.5 border-t border-slate-200 dark:border-[#1D2B43]/80 bg-slate-50 dark:bg-[#070D1D] text-[11px]">
+                    <div className="p-3 space-y-2.5 border-t border-slate-200/70 dark:border-slate-800/70 bg-white/40 dark:bg-slate-950/40 text-[11px]">
                       {/* Tool Call Parameters: Show clean file name, start/end lines, query */}
                       {ev.arguments && Object.keys(ev.arguments).length > 0 && (
                         <div>
                           <div className="text-[10px] text-slate-500 uppercase font-bold mb-1.5 flex items-center justify-between">
                             <span>Requested Parameters:</span>
                             {ev.arguments.path || ev.arguments.file || ev.arguments.file_path ? (
-                              <span className="font-mono text-blue-600 dark:text-blue-400 normal-case">
+                              <span className="font-mono text-indigo-600 dark:text-indigo-400 normal-case">
                                 {ev.arguments.path || ev.arguments.file || ev.arguments.file_path}
                               </span>
                             ) : null}
                           </div>
-                          <div className="p-2.5 rounded-lg bg-white dark:bg-[#091124] border border-slate-200 dark:border-[#1D2B43]/60 space-y-1 text-slate-700 dark:text-slate-300 font-mono text-[11px]">
+                          <div className="p-2.5 rounded-lg glass-panel-subtle border border-slate-200/70 dark:border-slate-800/70 space-y-1 text-slate-700 dark:text-slate-300 font-mono text-[11px]">
                             {(ev.arguments.path || ev.arguments.file || ev.arguments.file_path) && (
                               <div className="flex items-center gap-2">
                                 <span className="text-slate-400 text-[10px] uppercase font-sans">File Name:</span>
-                                <span className="text-blue-600 dark:text-blue-400 font-semibold">{ev.arguments.path || ev.arguments.file || ev.arguments.file_path}</span>
+                                <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{ev.arguments.path || ev.arguments.file || ev.arguments.file_path}</span>
                               </div>
                             )}
                             {ev.arguments.start_line !== undefined && (
@@ -233,7 +233,7 @@ export const InvestigationTimeline: React.FC<TimelineProps> = ({
                               <span>Lines {ev.line_start || ev.arguments?.start_line}-{ev.line_end || ev.arguments?.end_line}</span>
                             )}
                           </div>
-                          <pre className="p-2.5 rounded-lg bg-white dark:bg-[#091124] border border-slate-200 dark:border-[#1D2B43]/60 text-emerald-700 dark:text-emerald-300 overflow-x-auto text-[11px] leading-relaxed font-mono max-h-72">
+                          <pre className="p-2.5 rounded-lg bg-slate-900/90 dark:bg-slate-950/80 border border-slate-700/60 dark:border-slate-800/80 text-emerald-400 dark:text-emerald-300 overflow-x-auto text-[11px] leading-relaxed font-mono max-h-72 shadow-sm">
                             {ev.code_excerpt}
                           </pre>
                         </div>
@@ -245,7 +245,7 @@ export const InvestigationTimeline: React.FC<TimelineProps> = ({
                           <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">
                             Response:
                           </div>
-                          <div className="p-2.5 rounded-lg bg-white dark:bg-[#091124] border border-slate-200 dark:border-[#1D2B43]/60 text-slate-800 dark:text-slate-300 text-[11px] leading-relaxed max-h-72 overflow-y-auto">
+                          <div className="p-2.5 rounded-lg glass-panel-subtle border border-slate-200/70 dark:border-slate-800/70 text-slate-800 dark:text-slate-300 text-[11px] leading-relaxed max-h-72 overflow-y-auto">
                             {(() => {
                               const res = ev.result_summary;
                               // If string with code or message
@@ -267,8 +267,8 @@ export const InvestigationTimeline: React.FC<TimelineProps> = ({
                                       const l = match.line || match.start_line;
                                       const snip = match.snippet || match.text || match.summary || match.name || '';
                                       return (
-                                        <div key={idx} className="p-1.5 rounded bg-slate-50 dark:bg-[#070D1D] border border-slate-200/60 dark:border-[#1D2B43]/40 flex flex-col gap-0.5 font-mono text-[10px]">
-                                          <div className="flex items-center justify-between text-blue-600 dark:text-blue-400 font-semibold">
+                                        <div key={idx} className="p-1.5 rounded-lg glass-panel-subtle border border-slate-200/60 dark:border-slate-800/60 flex flex-col gap-0.5 font-mono text-[10px]">
+                                          <div className="flex items-center justify-between text-indigo-600 dark:text-indigo-400 font-semibold">
                                             <span>{p}</span>
                                             {l !== undefined && <span>Line {l}</span>}
                                           </div>

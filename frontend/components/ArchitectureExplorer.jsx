@@ -317,7 +317,7 @@ export default function ArchitectureExplorer({ repoName }) {
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950">
+      <div className="h-full flex items-center justify-center text-slate-500 dark:text-slate-400 glass-panel rounded-xl">
         <div className="flex flex-col items-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400 mb-2"></div>
           <span>Building Architecture Hierarchy...</span>
@@ -328,7 +328,7 @@ export default function ArchitectureExplorer({ repoName }) {
 
   if (error) {
     return (
-      <div className="h-full flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-950">
+      <div className="h-full flex items-center justify-center p-8 glass-panel rounded-xl">
         <div className="bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 p-4 rounded-lg max-w-md text-center">
           <h3 className="font-bold mb-1">Architecture Error</h3>
           <p className="text-sm">{error}</p>
@@ -344,17 +344,17 @@ export default function ArchitectureExplorer({ repoName }) {
   }
 
   return (
-    <div className="flex h-full w-full bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
+    <div className="flex h-full w-full glass-panel rounded-xl overflow-hidden text-slate-900 dark:text-slate-100 transition-colors">
       {/* Sidebar Details Panel */}
-      <div className="w-80 border-r border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shadow-sm z-10 transition-colors">
-        <div className="p-4 border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex justify-between items-start">
+      <div className="w-80 border-r border-slate-200/60 dark:border-slate-800/60 glass-panel-subtle flex flex-col shadow-sm z-10 transition-colors">
+        <div className="p-4 border-b border-slate-200/60 dark:border-slate-800/60 glass-nav flex justify-between items-start">
           <div>
-            <h2 className="text-lg font-bold text-gray-800 dark:text-slate-100">Architecture</h2>
-            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Hierarchical Repository View</p>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Architecture</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Hierarchical Repository View</p>
           </div>
           <button 
             onClick={fetchRoot}
-            className="text-xs bg-gray-200 dark:bg-slate-800 hover:bg-gray-300 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 px-2 py-1 rounded transition-colors"
+            className="text-xs bg-slate-200/70 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-2.5 py-1 rounded-md transition-colors"
             title="Reset to root view"
           >
             Reset
@@ -363,35 +363,35 @@ export default function ArchitectureExplorer({ repoName }) {
         
         <div className="flex-grow overflow-y-auto p-4">
           {!selectedNodeData ? (
-            <div className="text-gray-500 dark:text-slate-400 text-sm italic text-center mt-10">
+            <div className="text-slate-500 dark:text-slate-400 text-sm italic text-center mt-10">
               Select a node to view its details.
             </div>
           ) : (
             <div className="space-y-4">
               <div>
-                <h3 className="text-xs font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider mb-1">Name</h3>
-                <div className="font-mono text-sm font-bold text-gray-900 dark:text-slate-100 break-all bg-white dark:bg-slate-800 p-2 border border-gray-200 dark:border-slate-700 rounded">
+                <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Name</h3>
+                <div className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100 break-all glass-panel-subtle p-2 border border-slate-200/60 dark:border-slate-700/60 rounded">
                   {selectedNodeData.name}
                 </div>
               </div>
               
               <div>
-                <h3 className="text-xs font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider mb-1">Type</h3>
-                <div className="text-sm text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 p-2 border border-gray-200 dark:border-slate-700 rounded uppercase font-semibold">
+                <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Type</h3>
+                <div className="text-sm text-slate-800 dark:text-slate-200 glass-panel-subtle p-2 border border-slate-200/60 dark:border-slate-700/60 rounded uppercase font-semibold">
                   {selectedNodeData.type}
                 </div>
               </div>
               
               <div>
-                <h3 className="text-xs font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider mb-1">Path / ID</h3>
-                <div className="text-sm text-gray-600 dark:text-slate-300 font-mono bg-gray-100 dark:bg-slate-800 p-2 rounded break-all border border-gray-200 dark:border-slate-700">
+                <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Path / ID</h3>
+                <div className="text-sm text-slate-600 dark:text-slate-300 font-mono glass-panel-subtle p-2 rounded break-all border border-slate-200/60 dark:border-slate-700/60">
                   {selectedNodeData.id}
                 </div>
               </div>
               
               <div>
-                <h3 className="text-xs font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider mb-1">Children</h3>
-                <div className="text-sm text-gray-700 dark:text-slate-300">
+                <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Children</h3>
+                <div className="text-sm text-slate-700 dark:text-slate-300">
                   {selectedNodeData.has_children ? 'Has children (can expand)' : 'Leaf node'}
                 </div>
               </div>
@@ -401,7 +401,7 @@ export default function ArchitectureExplorer({ repoName }) {
       </div>
       
       {/* Graph Area */}
-      <div className="flex-grow relative h-full bg-slate-50 dark:bg-slate-950">
+      <div className="flex-grow relative h-full bg-slate-900/10 dark:bg-slate-950/40">
         <ReactFlow
           nodes={nodes}
           edges={edges}

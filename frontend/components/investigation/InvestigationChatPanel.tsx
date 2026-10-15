@@ -95,19 +95,19 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
 
   return (
     <div
-      className={`flex flex-col h-full bg-slate-50 dark:bg-[#070D1D] text-slate-900 dark:text-slate-100 transition-all duration-300 min-w-0 ${
+      className={`flex flex-col h-full text-slate-900 dark:text-slate-100 transition-all duration-300 min-w-0 ${
         isFullScreenChat
           ? 'flex-1 w-full'
-          : 'w-[420px] flex-shrink-0 border-r border-slate-200 dark:border-[#1D2B43]'
+          : 'w-[420px] flex-shrink-0 border-r border-slate-200/70 dark:border-slate-800/70'
       }`}
     >
       {/* Top action header: New Conversation + Toggle Brain button */}
-      <div className="px-6 py-3 border-b border-slate-200 dark:border-[#1D2B43] flex items-center justify-between gap-2 flex-shrink-0 bg-white/80 dark:bg-[#0A1224]/80 backdrop-blur-sm">
+      <div className="px-6 py-3 border-b border-slate-200/70 dark:border-slate-800/70 flex items-center justify-between gap-2 flex-shrink-0 glass-nav">
         <button
           onClick={onNewInvestigation}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] hover:bg-slate-100 dark:hover:bg-[#15233E] text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-panel-subtle hover:bg-slate-200/60 dark:hover:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
         >
-          <Plus className="w-3.5 h-3.5 text-blue-600 dark:text-[#2165FF]" />
+          <Plus className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
           <span>New Conversation</span>
         </button>
 
@@ -119,23 +119,23 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
               title={isBrainVisible ? 'Hide Agent Brain & Visualizer' : 'Show Agent Brain & Visualizer'}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                 isBrainVisible
-                  ? 'bg-blue-50 dark:bg-[#0E1A33] border-blue-300 dark:border-[#2165FF] text-blue-700 dark:text-[#5B8DFF] hover:bg-blue-100 dark:hover:bg-[#132347]'
-                  : 'bg-white dark:bg-[#0D162A] border-slate-200 dark:border-[#1D2B43] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#15233E]'
+                  ? 'bg-indigo-50/70 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-950/60'
+                  : 'glass-panel-subtle border-slate-200/70 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
               }`}
             >
-              <Bot className="w-3.5 h-3.5 text-blue-600 dark:text-[#2165FF]" />
+              <Bot className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
               <span>{isBrainVisible ? 'Hide Brain' : 'Show Brain'}</span>
               {isBrainVisible ? (
                 <EyeOff className="w-3 h-3 text-slate-400 ml-0.5" />
               ) : (
-                <Eye className="w-3 h-3 text-blue-600 dark:text-[#2165FF] ml-0.5" />
+                <Eye className="w-3 h-3 text-indigo-600 dark:text-indigo-400 ml-0.5" />
               )}
             </button>
           )}
 
           <button
             title="Share / Export"
-            className="p-1.5 rounded-lg bg-white dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] hover:bg-slate-100 dark:hover:bg-[#15233E] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors shadow-sm"
+            className="p-1.5 rounded-lg glass-panel-subtle border border-slate-200/70 dark:border-slate-700/60 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors shadow-sm"
           >
             <Share2 className="w-3.5 h-3.5" />
           </button>
@@ -164,7 +164,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                       onClick={() => {
                         onSendMessage(q);
                       }}
-                      className="text-left px-4 py-3 rounded-xl bg-white dark:bg-[#0D162A] hover:bg-slate-100 dark:hover:bg-[#15233E] text-slate-700 dark:text-slate-200 text-sm transition-colors border border-slate-200 dark:border-[#1D2B43] hover:border-blue-400 dark:hover:border-[#2165FF]/40 shadow-sm"
+                      className="text-left px-4 py-3 rounded-xl glass-panel-subtle hover:border-violet-500/50 dark:hover:border-violet-400/50 text-slate-700 dark:text-slate-200 text-sm transition-all shadow-sm hover:shadow-md"
                     >
                       → {q}
                     </button>
@@ -185,7 +185,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                 ) : (
                   /* Assistant message */
                   <div className="flex justify-start">
-                    <div className="w-full max-w-2xl min-w-0 px-4 py-3 rounded-xl shadow-sm bg-white dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] text-slate-900 dark:text-slate-100 rounded-bl-none text-sm leading-relaxed space-y-3 break-words overflow-hidden">
+                    <div className="w-full max-w-2xl min-w-0 px-4 py-3 rounded-xl shadow-sm glass-panel text-slate-900 dark:text-slate-100 rounded-bl-none text-sm leading-relaxed space-y-3 break-words overflow-hidden border border-slate-200/60 dark:border-slate-800/60">
                       <div className="prose dark:prose-invert max-w-none min-w-0 text-sm leading-relaxed text-slate-800 dark:text-slate-200 break-words">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
@@ -208,7 +208,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                                 return <>{children}</>;
                               }
                               return (
-                                <pre className="overflow-x-auto max-w-full p-3 rounded-lg bg-slate-900/90 text-slate-100 font-mono text-xs my-2 border border-slate-700/60">
+                                <pre className="overflow-x-auto max-w-full p-3.5 rounded-xl bg-slate-900/90 dark:bg-slate-950/80 text-slate-100 dark:text-slate-200 font-mono text-xs my-2.5 border border-slate-700/50 dark:border-slate-800/80 shadow-md">
                                   {children}
                                 </pre>
                               );
@@ -233,7 +233,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                               if (!isMultiline) {
                                 return (
                                   <code
-                                    className="break-all font-mono text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-pink-600 dark:text-pink-400 border border-slate-200 dark:border-slate-700"
+                                    className="break-all font-mono text-xs px-1.5 py-0.5 rounded-md bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 font-medium"
                                     {...props}
                                   >
                                     {children}
@@ -247,7 +247,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                               );
                             },
                             table: ({ children }) => (
-                              <div className="overflow-x-auto max-w-full my-2 border border-slate-200 dark:border-slate-700 rounded-lg">
+                              <div className="overflow-x-auto max-w-full my-2.5 border border-slate-200/80 dark:border-slate-700/80 rounded-xl overflow-hidden glass-panel-subtle shadow-sm">
                                 <table className="w-full text-xs font-mono border-collapse">
                                   {children}
                                 </table>
@@ -266,14 +266,14 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
 
                       {/* Notice if agents were spawned for this query */}
                       {hasTriggeredBrain && !isBrainVisible && onToggleBrain && (
-                        <div className="pt-2 border-t border-slate-200 dark:border-[#1D2B43] flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-medium">
+                        <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-medium">
                             <Bot className="w-3.5 h-3.5" />
                             <span>Multi-agent brain investigated this query</span>
                           </div>
                           <button
                             onClick={onToggleBrain}
-                            className="text-blue-600 dark:text-blue-400 hover:underline font-mono"
+                            className="text-indigo-600 dark:text-indigo-400 hover:underline font-mono"
                           >
                             Show Agent Brain &rarr;
                           </button>
@@ -282,13 +282,13 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
 
                       {/* Collapsible Multi-agent investigation plan card if present */}
                       {tasks.length > 0 && isBrainVisible && (
-                        <div className="rounded-xl bg-slate-50 dark:bg-[#070D1D] border border-slate-200 dark:border-[#1D2B43] overflow-hidden shadow-sm">
+                        <div className="rounded-xl glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 overflow-hidden shadow-sm">
                           <button
                             onClick={() => setPlanExpanded(!planExpanded)}
-                            className="w-full px-3 py-2 flex items-center justify-between text-left text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#0D162A] transition-colors"
+                            className="w-full px-3 py-2 flex items-center justify-between text-left text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/50 transition-colors"
                           >
                             <div className="flex items-center gap-2">
-                              <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-[#2165FF]" />
+                              <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                               <span>Multi-agent investigation plan</span>
                             </div>
                             <ChevronDown
@@ -299,7 +299,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                           </button>
 
                           {planExpanded && (
-                            <div className="px-3 pb-3 pt-1 space-y-2 text-xs border-t border-slate-200 dark:border-[#1D2B43]">
+                            <div className="px-3 pb-3 pt-1 space-y-2 text-xs border-t border-slate-200/60 dark:border-slate-800/60">
                               {tasks.map((t, idx) => {
                                 const isDone = t.status === 'COMPLETED';
                                 const isRun = t.status === 'RUNNING';
@@ -309,7 +309,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                                       {isDone ? (
                                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                                       ) : isRun ? (
-                                        <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-600 dark:border-[#2165FF] border-t-transparent animate-spin" />
+                                        <div className="w-3.5 h-3.5 rounded-full border-2 border-indigo-600 dark:border-indigo-400 border-t-transparent animate-spin" />
                                       ) : (
                                         <div className="w-3.5 h-3.5 rounded-full border border-slate-400 dark:border-slate-600" />
                                       )}
@@ -319,7 +319,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                                         {idx + 1}. {t.title}
                                       </span>
                                       {t.assigned_agent && (
-                                        <span className="ml-2 text-[10px] text-blue-600 dark:text-blue-400 font-mono px-1 rounded bg-slate-100 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43]">
+                                        <span className="ml-2 text-[10px] text-indigo-600 dark:text-indigo-400 font-mono px-1.5 py-0.5 rounded bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-200/50 dark:border-indigo-800/50">
                                           @{t.assigned_agent}
                                         </span>
                                       )}
@@ -340,11 +340,11 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
 
           {running && messages.length > 0 && (
             <div className="flex justify-start">
-              <div className="bg-white dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] shadow-sm px-4 py-3 rounded-lg rounded-bl-none">
+              <div className="glass-panel border border-slate-200/60 dark:border-slate-800/60 shadow-sm px-4 py-3 rounded-lg rounded-bl-none">
                 <div className="flex gap-2 items-center">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" />
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
                   <span className="text-xs text-slate-500 dark:text-slate-400 ml-2">Investigating codebase...</span>
                 </div>
               </div>
@@ -355,8 +355,8 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
         </div>
       </div>
 
-      {/* Footer - Input Area (Full width container with centered input pill matching LLMConversationFlow) */}
-      <div className="flex-shrink-0 bg-white dark:bg-[#070D1D] px-6 py-4 border-t border-slate-200 dark:border-[#1D2B43]">
+      {/* Footer - Input Area (Clean integrated composer) */}
+      <div className="flex-shrink-0 px-6 py-4 border-t border-slate-200/50 dark:border-slate-800/50 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md">
         <div className="max-w-3xl mx-auto">
           <form onSubmit={handleSubmit} className="relative flex gap-2 items-center">
             <input
@@ -366,7 +366,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
               onKeyDown={handleKeyDown}
               placeholder="Ask about your codebase..."
               disabled={running}
-              className="flex-1 px-4 py-3 rounded-full bg-slate-100 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 dark:focus:border-[#2165FF] transition-colors disabled:opacity-50 text-sm shadow-inner"
+              className="flex-1 px-4 py-2.5 rounded-full glass-input text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-transparent transition-all disabled:opacity-50 text-sm"
             />
 
             {/* Model Pill / Settings Dropdown */}
@@ -374,14 +374,14 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
-                className="p-2.5 rounded-full bg-slate-100 dark:bg-[#0D162A] hover:bg-slate-200 dark:hover:bg-[#15233E] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors border border-slate-200 dark:border-[#1D2B43]"
+                className="p-2 rounded-full glass-panel-subtle hover:bg-slate-200/60 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors border border-slate-200/70 dark:border-slate-700/60"
                 title="Model Settings"
               >
                 <Settings className="w-5 h-5" />
               </button>
 
               {modelDropdownOpen && (
-                <div className="absolute bottom-full right-0 mb-2 bg-white dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] rounded-xl shadow-2xl z-50 min-w-56 text-slate-800 dark:text-slate-200 py-2">
+                <div className="absolute bottom-full right-0 mb-2 glass-panel border border-slate-200/80 dark:border-slate-800/80 rounded-xl shadow-2xl z-50 min-w-56 text-slate-800 dark:text-slate-200 py-2">
                   <div className="px-3 py-1.5 text-xs font-semibold text-slate-400 dark:text-slate-400 uppercase tracking-wider">
                     Select Model
                   </div>
@@ -393,12 +393,12 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                         onSelectModel(key);
                         setModelDropdownOpen(false);
                       }}
-                      className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 dark:hover:bg-[#15233E] flex items-center justify-between ${
-                        selectedModel === key ? 'text-blue-600 dark:text-[#2165FF] font-semibold' : 'text-slate-700 dark:text-slate-300'
+                      className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100/60 dark:hover:bg-slate-800/60 flex items-center justify-between ${
+                        selectedModel === key ? 'text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-slate-700 dark:text-slate-300'
                       }`}
                     >
                       <span className="truncate">{name}</span>
-                      {selectedModel === key && <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-[#2165FF]" />}
+                      {selectedModel === key && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
                     </button>
                   ))}
                 </div>
@@ -409,7 +409,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
             <button
               type="submit"
               disabled={running || !input.trim()}
-              className="p-2.5 rounded-full bg-blue-600 dark:bg-[#2165FF] hover:bg-blue-700 dark:hover:bg-blue-600 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 shadow-md shadow-blue-500/20 dark:shadow-[#2165FF]/20"
+              className="p-2.5 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 shadow-md shadow-violet-500/25"
             >
                {running ? (
                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

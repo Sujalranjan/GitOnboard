@@ -63,14 +63,14 @@ export default function ExplorerView({ repoName }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 h-full">
-      <div className="lg:col-span-4 flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+      <div className="lg:col-span-4 flex flex-col overflow-hidden glass-panel rounded-xl">
         <FileExplorer 
           hierarchy={data?.hierarchy} 
           onFileClick={handleFileClick} 
           selectedFile={selectedFile} 
         />
       </div>
-      <div className="lg:col-span-8 flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+      <div className="lg:col-span-8 flex flex-col overflow-hidden glass-panel rounded-xl">
         <CodeDetailsViewer 
           selectedFile={selectedFile}
           isParsing={isParsing}

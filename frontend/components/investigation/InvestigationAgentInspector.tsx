@@ -44,18 +44,18 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
   const isPlanner = agent.agent_id === 'planner-main' || agent.role.toLowerCase().includes('planner');
 
   return (
-    <div className="w-[320px] flex-shrink-0 bg-white dark:bg-[#070D1D] border-l border-slate-200 dark:border-[#1D2B43] flex flex-col h-full text-slate-800 dark:text-slate-200 select-none">
+    <div className="w-[320px] flex-shrink-0 glass-panel border-l border-slate-200/70 dark:border-slate-800/70 flex flex-col h-full text-slate-800 dark:text-slate-200 select-none">
       {/* Header with Agent ID & Controls */}
-      <div className="h-14 px-4 border-b border-slate-200 dark:border-[#1D2B43] flex items-center justify-between flex-shrink-0">
+      <div className="h-14 px-4 border-b border-slate-200/70 dark:border-slate-800/70 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
-          <Bot className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <Bot className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
           <span className="text-xs font-bold text-slate-900 dark:text-white tracking-wide">Agent Inspector</span>
         </div>
         <div className="flex items-center gap-1.5 text-slate-400">
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 rounded hover:bg-slate-100 dark:hover:bg-[#0D162A] hover:text-slate-900 dark:hover:text-white transition-colors"
+              className="p-1 rounded hover:bg-slate-100/60 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white transition-colors"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -64,7 +64,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
       </div>
 
       {/* Selected Agent identity card */}
-      <div className="p-3 border-b border-slate-200 dark:border-[#1D2B43]/80 bg-slate-50 dark:bg-[#0A1224] flex items-center justify-between">
+      <div className="p-3 border-b border-slate-200/60 dark:border-slate-800/60 glass-panel-subtle flex items-center justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
           <div
             className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
@@ -86,7 +86,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
             agent.status === 'completed'
               ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50'
               : agent.status === 'running'
-              ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 animate-pulse'
+              ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 animate-pulse'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
           }`}
         >
@@ -95,12 +95,12 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
       </div>
 
       {/* Tab navigation pills */}
-      <div className="flex items-center border-b border-slate-200 dark:border-[#1D2B43] px-2 pt-1.5 gap-1 bg-white dark:bg-[#070D1D] text-[11px] font-medium text-slate-500 dark:text-slate-400">
+      <div className="flex items-center border-b border-slate-200/60 dark:border-slate-800/60 px-2 pt-1.5 gap-1 glass-nav text-[11px] font-medium text-slate-500 dark:text-slate-400">
         <button
           onClick={() => setActiveTab('overview')}
           className={`px-2.5 py-1.5 border-b-2 transition-all ${
             activeTab === 'overview'
-              ? 'border-blue-600 dark:border-[#2165FF] text-blue-600 dark:text-white font-semibold'
+              ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 font-semibold'
               : 'border-transparent hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -110,7 +110,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
           onClick={() => setActiveTab('tools')}
           className={`px-2.5 py-1.5 border-b-2 transition-all ${
             activeTab === 'tools'
-              ? 'border-blue-600 dark:border-[#2165FF] text-blue-600 dark:text-white font-semibold'
+              ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 font-semibold'
               : 'border-transparent hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -120,7 +120,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
           onClick={() => setActiveTab('context')}
           className={`px-2.5 py-1.5 border-b-2 transition-all ${
             activeTab === 'context'
-              ? 'border-blue-600 dark:border-[#2165FF] text-blue-600 dark:text-white font-semibold'
+              ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 font-semibold'
               : 'border-transparent hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -130,7 +130,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
           onClick={() => setActiveTab('findings')}
           className={`px-2.5 py-1.5 border-b-2 transition-all ${
             activeTab === 'findings'
-              ? 'border-blue-600 dark:border-[#2165FF] text-blue-600 dark:text-white font-semibold'
+              ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 font-semibold'
               : 'border-transparent hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -144,7 +144,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
         {activeTab === 'overview' && (
           <div className="space-y-4">
             {/* Model & Provider specs */}
-            <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] text-[11px] font-mono shadow-sm">
+            <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 text-[11px] font-mono shadow-sm">
               <div>
                 <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase block font-bold">Model</span>
                 <span className="text-slate-900 dark:text-white font-semibold">{agent.model}</span>
@@ -168,7 +168,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
               <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider block">
                 Current Task
               </span>
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans shadow-sm">
+              <div className="p-3 rounded-xl glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans shadow-sm">
                 {agent.current_task || agent.acceptance_criteria || 'Executing assigned repository investigation...'}
               </div>
             </div>
@@ -185,13 +185,13 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
                   return (
                     <div
                       key={t.id}
-                      className="p-2 rounded-lg bg-slate-50 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] flex items-center justify-between text-[11px] shadow-sm"
+                      className="p-2 rounded-lg glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between text-[11px] shadow-sm"
                     >
                       <div className="flex items-center gap-2 truncate mr-2">
                         {isDone ? (
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                         ) : isRun ? (
-                          <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-600 dark:border-blue-400 border-t-transparent animate-spin flex-shrink-0" />
+                          <div className="w-3.5 h-3.5 rounded-full border-2 border-indigo-600 dark:border-indigo-400 border-t-transparent animate-spin flex-shrink-0" />
                         ) : (
                           <div className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-600 flex-shrink-0" />
                         )}
@@ -210,7 +210,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider">
                 <span>Recent Tool Calls</span>
-                <button onClick={() => setActiveTab('tools')} className="text-blue-600 dark:text-blue-400 hover:underline">
+                <button onClick={() => setActiveTab('tools')} className="text-indigo-600 dark:text-indigo-400 hover:underline">
                   View all
                 </button>
               </div>
@@ -218,10 +218,10 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
               {agentTools.slice(0, 3).map((t, idx) => (
                 <div
                   key={idx}
-                  className="p-2 rounded-lg bg-slate-50 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] flex items-center justify-between text-[11px] font-mono shadow-sm"
+                  className="p-2 rounded-lg glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between text-[11px] font-mono shadow-sm"
                 >
                   <div className="flex items-center gap-2 truncate">
-                    <Wrench className="w-3 h-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                    <Wrench className="w-3 h-3 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
                     <span className="text-slate-800 dark:text-slate-200 truncate">{t.tool_name}</span>
                   </div>
                   <span className="text-emerald-600 dark:text-emerald-400 text-[10px]">✓</span>
@@ -244,14 +244,14 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
                 return (
                   <div
                     key={idx}
-                    className="rounded-xl bg-slate-50 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] overflow-hidden text-[11px] font-mono shadow-sm"
+                    className="rounded-xl glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 overflow-hidden text-[11px] font-mono shadow-sm"
                   >
                     <div
                       onClick={() => setExpandedToolIndex(isExp ? null : idx)}
-                      className="p-2.5 flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-[#111C31] transition-colors"
+                      className="p-2.5 flex items-center justify-between cursor-pointer hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors"
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <Wrench className="w-3 h-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                        <Wrench className="w-3 h-3 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
                         <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">{tc.tool_name}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -261,11 +261,11 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
                     </div>
 
                     {isExp && (
-                      <div className="p-2.5 border-t border-slate-200 dark:border-[#1D2B43] bg-white dark:bg-[#070D1D] space-y-2 text-[10px]">
+                      <div className="p-2.5 border-t border-slate-200/70 dark:border-slate-800/70 bg-white/40 dark:bg-slate-950/40 space-y-2 text-[10px]">
                         {tc.arguments && (
                           <div>
                             <span className="text-slate-400 dark:text-slate-500 font-bold uppercase block mb-1">Arguments:</span>
-                            <pre className="p-2 rounded bg-slate-50 dark:bg-[#091124] text-slate-800 dark:text-slate-300 overflow-x-auto border border-slate-200 dark:border-transparent">
+                            <pre className="p-2 rounded-lg bg-slate-100/80 dark:bg-slate-900/80 text-slate-800 dark:text-slate-300 overflow-x-auto border border-slate-200/70 dark:border-slate-800/70">
                               {JSON.stringify(tc.arguments, null, 2)}
                             </pre>
                           </div>
@@ -273,7 +273,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
                         {tc.result_summary && (
                           <div>
                             <span className="text-slate-400 dark:text-slate-500 font-bold uppercase block mb-1">Result Summary:</span>
-                            <pre className="p-2 rounded bg-slate-50 dark:bg-[#091124] text-slate-800 dark:text-slate-300 overflow-x-auto border border-slate-200 dark:border-transparent">
+                            <pre className="p-2 rounded-lg bg-slate-100/80 dark:bg-slate-900/80 text-slate-800 dark:text-slate-300 overflow-x-auto border border-slate-200/70 dark:border-slate-800/70">
                               {typeof tc.result_summary === 'string'
                                 ? tc.result_summary
                                 : JSON.stringify(tc.result_summary, null, 2)}
@@ -292,7 +292,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
         {/* 3. CONTEXT TAB */}
         {activeTab === 'context' && (
           <div className="space-y-3">
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] space-y-2 text-xs shadow-sm">
+            <div className="p-3 rounded-xl glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 space-y-2 text-xs shadow-sm">
               <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider block">
                 Assigned Scope & Instructions
               </span>
@@ -302,13 +302,13 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
               </p>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] space-y-2 text-xs shadow-sm">
+            <div className="p-3 rounded-xl glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 space-y-2 text-xs shadow-sm">
               <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider block">
                 Retrieved File Evidence ({agentFindings.length} files)
               </span>
               <div className="space-y-1">
                 {agentFindings.map((f) => (
-                  <div key={f.id} className="font-mono text-[11px] text-blue-600 dark:text-blue-400 flex items-center justify-between">
+                  <div key={f.id} className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 flex items-center justify-between">
                     <span className="truncate">{f.file_path}</span>
                     {f.line_start && <span className="text-slate-400 dark:text-slate-500">L{f.line_start}</span>}
                   </div>
@@ -329,7 +329,7 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
               agentFindings.map((f) => (
                 <div
                   key={f.id}
-                  className="p-3 rounded-xl bg-slate-50 dark:bg-[#0D162A] border border-slate-200 dark:border-[#1D2B43] space-y-2 text-xs shadow-sm"
+                  className="p-3 rounded-xl glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 space-y-2 text-xs shadow-sm"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
@@ -339,12 +339,12 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
                   </div>
 
                   <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                    <span className="text-blue-600 dark:text-blue-400 truncate">{f.file_path}</span>
+                    <span className="text-indigo-600 dark:text-indigo-400 truncate">{f.file_path}</span>
                     {f.line_start && <span>L{f.line_start}-{f.line_end}</span>}
                   </div>
 
                   {f.code_excerpt && (
-                    <pre className="p-2 rounded bg-white dark:bg-[#091124] border border-slate-200 dark:border-[#1D2B43]/50 text-emerald-800 dark:text-emerald-300 text-[10px] font-mono overflow-x-auto">
+                    <pre className="p-2 rounded-lg bg-slate-900/90 dark:bg-slate-950/80 border border-slate-700/60 dark:border-slate-800/80 text-emerald-400 dark:text-emerald-300 text-[10px] font-mono overflow-x-auto shadow-sm">
                       {f.code_excerpt}
                     </pre>
                   )}

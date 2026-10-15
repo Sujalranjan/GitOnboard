@@ -1,8 +1,12 @@
 import React from 'react';
 
-export function Card({ children, className = '', noPadding = false }) {
+export function Card({ children, className = '', noPadding = false, variant = 'default' }) {
+  const baseClasses = variant === 'glass'
+    ? 'glass-panel rounded-xl text-slate-900 dark:text-slate-100 transition-colors'
+    : 'bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 transition-colors';
+
   return (
-    <div className={`bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 transition-colors ${className}`}>
+    <div className={`${baseClasses} ${className}`}>
       {!noPadding ? <div className="p-6">{children}</div> : children}
     </div>
   );

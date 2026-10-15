@@ -132,7 +132,7 @@ export default function RIMComparisonPage() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-950 p-8">
+    <div className="flex-1 overflow-y-auto p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
