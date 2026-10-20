@@ -25,6 +25,9 @@ EVIDENCE TRUST HIERARCHY:
 DISCREPANCY DETECTION:
 If documentation claims something that contradicts verified code evidence (e.g. docs state 'Django' but code uses 'FastAPI', or docs list obsolete endpoints), prioritize the verified code evidence and explicitly list the contradiction in a 'Discrepancies & Notes' section.
 
+DIAGRAMS & VISUALIZATIONS:
+When architectural, workflow, or sequence relationships are present in the documentation (e.g. ARCHITECTURE.md, README.md, .mmd files) or obvious from static analysis, represent them using a valid ```mermaid code block (such as flowchart TD/LR, sequenceDiagram, or classDiagram). NEVER use raw ASCII art boxes or ASCII lines; always use ```mermaid diagrams or GitHub-flavored Markdown tables.
+
 REQUIRED OUTPUT STRUCTURE:
 # {repo_name} — Repository Summary
 
@@ -32,10 +35,10 @@ REQUIRED OUTPUT STRUCTURE:
 (High-level summary of what the software does, who it is for, and its primary capabilities)
 
 ## 2. Tech Stack & Architecture
-(Core languages, frameworks, architectural pattern, and structural layers confirmed by static analysis)
+(Core languages, frameworks, architectural pattern, and structural layers confirmed by static analysis. Include a ```mermaid flowchart/diagram here if an architectural flow is known or documented)
 
 ## 3. Key Components & Workflows
-(Main modules, entrypoints, database models, background tasks, API endpoints)
+(Main modules, entrypoints, database models, background tasks, API endpoints, formatted with clear markdown tables or lists)
 
 ## 4. Developer & Operational Context
 (Setup, testing practices, and guidelines found in project documentation)

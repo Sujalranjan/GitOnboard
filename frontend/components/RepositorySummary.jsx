@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTaskStatus } from '../hooks/useTaskStatus';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { MermaidViewer } from './common/MermaidViewer';
 
 export default function RepositorySummary({ repoName }) {
   const [summary, setSummary] = useState(null);
@@ -190,7 +192,95 @@ export default function RepositorySummary({ repoName }) {
       
       {/* Markdown Content */}
       <div className="flex-grow overflow-y-auto p-8 prose dark:prose-invert prose-blue max-w-none">
-        <ReactMarkdown>{summary}</ReactMarkdown>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            pre: ({ children }) => {
+              const childProps = children?.props;
+              const className = childProps?.className || '';
+              const rawCode = String(childProps?.children || '').trim();
+              const isMermaid =
+                className.includes('language-mermaid') ||
+                /^graph\s+/i.test(rawCode) ||
+                /^flowchart\s+/i.test(rawCode) ||
+                /^sequenceDiagram/i.test(rawCode) ||
+                /^classDiagram/i.test(rawCode) ||
+                /^erDiagram/i.test(rawCode) ||
+                /^stateDiagram/i.test(rawCode);
+
+              if (isMermaid) {
+                return <>{children}</>;
+              }
+              return (
+                <pre className="overflow-x-auto max-w-full p-4 rounded-xl bg-slate-900/90 dark:bg-slate-950/80 text-slate-100 dark:text-slate-200 font-mono text-xs my-4 border border-slate-700/50 dark:border-slate-800/80 shadow-md">
+                  {children}
+                </pre>
+              );
+            },
+            code: ({ className, children, ...props }) => {
+              const match = /language-(\w+)/.exec(className || '');
+              const codeString = String(children).replace(/\n$/, '').trim();
+              const isMermaid =
+                (match && match[1]?.toLowerCase() === 'mermaid') ||
+                /^graph\s+/i.test(codeString) ||
+                /^flowchart\s+/i.test(codeString) ||
+                /^sequenceDiagram/i.test(codeString) ||
+                /^classDiagram/i.test(codeString) ||
+                /^erDiagram/i.test(codeString) ||
+                /^stateDiagram/i.test(codeString);
+
+              if (isMermaid) {
+                return <MermaidViewer chart={codeString} />;
+              }
+
+              const isMultiline = String(children).includes('\n');
+              if (!isMultiline) {
+                return (
+                  <code
+                    className="break-all font-mono text-xs px-1.5 py-0.5 rounded-md bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 font-medium"
+                    {...props}
+                  >
+                    {children}
+                  </code>
+                );
+              }
+              return (
+                <code className="block whitespace-pre font-mono text-xs" {...props}>
+                  {children}
+                </code>
+              );
+            },
+            table: ({ children }) => (
+              <div className="overflow-x-auto max-w-full my-4 border border-slate-200/80 dark:border-slate-700/80 rounded-xl overflow-hidden glass-panel-subtle shadow-sm">
+                <table className="w-full text-xs font-mono border-collapse divide-y divide-slate-200 dark:divide-slate-700">
+                  {children}
+                </table>
+              </div>
+            ),
+            thead: ({ children }) => (
+              <thead className="bg-slate-100/70 dark:bg-slate-800/60 text-slate-800 dark:text-slate-200">
+                {children}
+              </thead>
+            ),
+            th: ({ children }) => (
+              <th className="px-4 py-2.5 text-left font-semibold border-b border-slate-200 dark:border-slate-700">
+                {children}
+              </th>
+            ),
+            td: ({ children }) => (
+              <td className="px-4 py-2 text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800/50">
+                {children}
+              </td>
+            ),
+            blockquote: ({ children }) => (
+              <blockquote className="border-l-4 border-amber-500/80 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-2 my-3 rounded-r text-sm text-slate-700 dark:text-slate-300 break-words">
+                {children}
+              </blockquote>
+            ),
+          }}
+        >
+          {summary}
+        </ReactMarkdown>
       </div>
     </div>
   );
