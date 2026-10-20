@@ -83,3 +83,22 @@ def get_latest_analysis(repo_name: str, db: Session, current_user: User):
     if not latest:
         raise HTTPException(status_code=404, detail=f"No analysis found for repository '{repo_name}'")
     return repo, latest
+
+
+def get_repo_display_name(repo: Repository, fallback: str = "") -> str:
+    """
+    Extract a clean, human-readable repository name from repo.url or fallback.
+    Prevents raw UUID hashes (e.g. 37b6d355-2e28-4e98-...) from leaking into prompts and summaries.
+    """
+    if repo and repo.url:
+        parts = repo.url.rstrip("/").split("/")
+        if parts:
+            name = parts[-1]
+            if name.endswith(".git"):
+                name = name[:-4]
+            if name:
+                return name
+    if fallback and len(fallback) != 36:
+        return fallback
+    return getattr(repo, "repository_hash", fallback) or "Repository"
+

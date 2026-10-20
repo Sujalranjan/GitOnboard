@@ -101,7 +101,9 @@ async def build_repository_context(db: Session, repo: Repository, analysis_id: O
         context_parts = []
 
         # 1. Repository basic info
-        context_parts.append(f"Repository: {repo.repository_hash}")
+        from backend.routers.repo.services.analysis import get_repo_display_name
+        friendly_name = get_repo_display_name(repo)
+        context_parts.append(f"Repository: {friendly_name}")
         if repo.url:
             context_parts.append(f"URL: {repo.url}")
         if repo.default_branch:

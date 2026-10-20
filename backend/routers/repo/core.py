@@ -400,6 +400,8 @@ def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Sess
         try:
             query_layer = get_or_build_model(repo_name, bg_db, current_user)
             repo, analysis = get_latest_analysis(repo_name, bg_db, current_user)
+            from backend.routers.repo.services.analysis import get_repo_display_name
+            friendly_repo_name = get_repo_display_name(repo, fallback=repo_name)
             
             em_art = bg_db.query(AnalysisArtifact).filter(
                 AnalysisArtifact.analysis_id == analysis.id,
@@ -414,12 +416,17 @@ def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Sess
             
             if em_art and em_art.data:
                 metadata = em_art.data
+                # Ensure repository name in metadata is friendly
+                if "repository" in metadata and isinstance(metadata["repository"], dict):
+                    curr_name = metadata["repository"].get("name", "")
+                    if not curr_name or len(curr_name) == 36:
+                        metadata["repository"]["name"] = friendly_repo_name
             else:
                 metadata = {
                     "schema_version": 1,
                     "note": "Basic metadata only. Re-analyze the repository to generate enriched metadata.",
                     "repository": {
-                        "name": repo_name,
+                        "name": friendly_repo_name,
                     },
                     "statistics": {
                         "files": metrics.get("total_files", "unknown"),
@@ -441,7 +448,7 @@ def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Sess
             pipeline = SummaryPipeline()
             result = asyncio.run(
                 pipeline.run(
-                    repo_name=repo_name,
+                    repo_name=friendly_repo_name,
                     metadata=metadata,
                     metrics=metrics,
                     repo_root=repo_root,

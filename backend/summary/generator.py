@@ -31,6 +31,9 @@ When architectural, workflow, or sequence relationships are present in the docum
 REQUIRED OUTPUT STRUCTURE:
 # {repo_name} — Repository Summary
 
+CRITICAL NAMING RULE:
+Use the human-readable project/repository name ({repo_name}) in the title and throughout the summary. NEVER use raw internal UUID hashes (e.g., 37b6d355-2e28-4e98-...) as the project title.
+
 ## 1. Overview & Purpose
 (High-level summary of what the software does, who it is for, and its primary capabilities)
 
