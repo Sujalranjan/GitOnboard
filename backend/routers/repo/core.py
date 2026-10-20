@@ -384,10 +384,38 @@ def get_summary(repo_name: str, db: Session = Depends(get_db), current_user: Use
     current_status = get_task_status(repo_name, "summary", current_user, db) or "idle"
     summary_art = db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == analysis.id, AnalysisArtifact.type == "summary").first()
     
+    from backend.routers.repo.services.analysis import get_repo_display_name
+    from backend.models.fact_store import FactRoute, FactCapability
+
+    # Gather enriched metadata if available to progressively enhance UI
+    metadata_art = db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == analysis.id, AnalysisArtifact.type == "enriched_metadata").first()
+    metrics_art = db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == analysis.id, AnalysisArtifact.type == "metrics").first()
+    routes_count = db.query(FactRoute).filter(FactRoute.analysis_id == analysis.id).count()
+    caps_count = db.query(FactCapability).filter(FactCapability.analysis_id == analysis.id).count()
+
+    repo_meta = (metadata_art.data or {}).get("repository", {}) if metadata_art else {}
+    langs = repo_meta.get("languages", {})
+    languages_list = list(langs.keys()) if isinstance(langs, dict) else (langs if isinstance(langs, list) else [])
+
+    meta_payload = {
+        "display_name": get_repo_display_name(repo, fallback=repo.repository_hash),
+        "primary_language": repo_meta.get("primary_language", "Unknown"),
+        "languages": languages_list,
+        "frameworks": repo_meta.get("frameworks", []),
+        "routes_count": routes_count,
+        "capabilities_count": caps_count,
+        "total_files": (metrics_art.data or {}).get("total_files", 0) if metrics_art else 0,
+    }
+
     if not summary_art:
-        return {"summary": None, "outdated": False, "status": current_status}
+        return {"summary": None, "outdated": False, "status": current_status, "metadata": meta_payload}
         
-    return {"summary": summary_art.data, "outdated": False, "status": current_status if current_status == "processing" else "completed"}
+    return {
+        "summary": summary_art.data,
+        "outdated": False,
+        "status": current_status if current_status == "processing" else "completed",
+        "metadata": meta_payload
+    }
 
 @core_router.post("/{repo_name}/summary/cancel")
 def cancel_summary_generation(

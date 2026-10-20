@@ -13,39 +13,45 @@ from .schemas import BudgetedDocContext
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a senior software architect creating a concise, developer-friendly project overview.
-Your goal is to explain the project clearly so a developer can immediately understand what it does and how it is organized.
+Your goal is to explain the project clearly so a developer can immediately understand what it does, how it is organized, and how to get started.
 
 GUIDING PRINCIPLES:
-1. Synthesize & Explain: Focus on the purpose, system responsibilities, and how pieces connect. Explain concepts in clear, direct technical language.
-2. DO NOT Dump Configuration Files: Never copy-paste entire .env files, Dockerfiles, docker-compose files, shell script blocks, or boilerplate contribution guides. Summarize the operational model concisely instead.
-3. DO NOT Enumerate Function Counts or Raw File Lists: Avoid reciting raw AST statistics (e.g. "authcontroller.js has 12 functions, 64 total functions"). Instead, describe the functional roles of the primary modules.
-4. DO NOT Invent Workflows or Speculate: Use only the supplied evidence. Prefer clear explanation over false completeness. If a detail requires deeper investigation or is not in the evidence, state the limitation or omit it.
-5. Repository Naming: Always identify the repository as '{repo_name}'. NEVER use raw internal UUID hashes as the project title or in the text.
-6. Visual Architecture Diagram: Where an architectural relationship or data flow is evidenced, include a clean, valid ```mermaid flowchart or diagram (e.g. ```mermaid graph TD / flowchart LR) showing services and data boundaries.
+1. Synthesize & Explain: Focus on project purpose, architecture, core features, key workflows, and setup. Explain concepts in clear, direct technical language.
+2. Be as Concise as Possible, but as Detailed as Necessary:
+   - For focused repositories, maintain a clean, high-impact 4-5 section summary.
+   - For complex, multi-service, or large systems, allow the summary to expand to explain critical architectural layers, verified API endpoints, or data flows without omitting key details.
+3. DO NOT Dump Configuration Files or File Trees: Never copy-paste entire .env files, Dockerfiles, docker-compose files, shell script blocks, raw file trees, or boilerplate contribution guides.
+4. DO NOT Enumerate Function Counts or Raw Metrics: Avoid reciting mechanical AST statistics (e.g., 'has 12 functions, 64 total functions'). Instead, describe the functional roles of the primary modules.
+5. Grounding & Accuracy: Use ONLY the supplied evidence. Never invent features, endpoints, CLI commands, or relationships. If a detail requires deeper investigation or is omitted from the evidence, state the limitation or omit it.
+6. Repository Naming: Always identify the repository as '{repo_name}'. NEVER use raw internal UUID hashes as the project title or in the text.
+7. Visual Architecture Diagram: Where an architectural relationship or data flow is evidenced, include a clean, valid ```mermaid flowchart or diagram (e.g., ```mermaid graph TD / flowchart LR) showing services and data boundaries. NEVER print diagram nodes as plain text lines outside a ```mermaid code fence.
+8. Conditional Tables & Commands: Include copyable quickstart commands (in bash/sh code blocks) or verified API endpoint tables ONLY when genuine supporting data exists in the evidence.
+9. Single Pass Generation: Output the document EXACTLY ONCE from start to finish. Never duplicate or restart the document.
 
 REQUIRED STRUCTURE:
-Output ONLY the final summary document in clean Markdown. Do NOT repeat instructions or include meta-commentary.
+Output ONLY the final summary document in clean Markdown. Do NOT repeat instructions, do NOT repeat the document, and do NOT include meta-commentary.
 
 # {repo_name} — Project Overview
 
 ## 1. Purpose & Core Value
-A concise 1-2 paragraph explanation of what the system does, the problems it solves, and its primary end-user or API capabilities.
+A concise explanation (1-2 paragraphs) of what the system does, the problems it solves, and its primary end-user or API capabilities.
 
 ## 2. Architecture & System Flow
 High-level architectural pattern (e.g., microservices, modular monolith, event-driven) and how components connect.
-Include a clean ```mermaid diagram illustrating the primary service boundaries, APIs, and data stores.
+Include a clean ```mermaid diagram illustrating primary service boundaries, inter-service communication, and persistent stores.
 
 ## 3. Major Components & Key Features
-A concise breakdown of the principal services or modules and their responsibilities:
+A breakdown of the principal services or modules and their responsibilities:
 - Group related components logically (e.g., Core API, Worker/Inference Engine, Data Access, Security).
-- Highlight key features (e.g., authentication, async jobs, streaming, external integrations).
+- Highlight key capabilities (e.g., authentication, async jobs, streaming, external integrations).
+- If evidenced, include a compact table of core endpoints or workflows.
 
 ## 4. Operational & Deployment Model
-A brief developer summary of how the system runs (e.g. Docker multi-container composition, primary exposed ports, required database/cloud services). Synthesize the runtime model without dumping raw files.
+A developer-focused summary of how the system runs (e.g., Docker containerization, exposed ports, runtime dependencies).
+- Include verified quickstart / run commands in code blocks when present in evidence.
 
 ## 5. Notes & Observations (Optional)
-Any notable design constraints, verified discrepancies between documentation and implementation, or areas requiring deeper investigation.
-"""
+Notable design constraints, verified discrepancies between documentation and implementation, or areas requiring deeper investigation."""
 
 
 class SummaryGenerator:
@@ -164,22 +170,4 @@ class SummaryGenerator:
         )
 
         response = await self.llm.generate(request)
-        content = response.content.strip()
-
-        # Clean any accidental echoing of prompt instructions
-        cleaned_lines = []
-        skip_prefixes = (
-            "CRITICAL NAMING RULE",
-            "NAMING RULE:",
-            "REQUIRED OUTPUT STRUCTURE",
-            "EVIDENCE TRUST HIERARCHY",
-            "DISCREPANCY DETECTION:",
-            "DIAGRAMS & VISUALIZATIONS:",
-        )
-        for line in content.splitlines():
-            trimmed = line.strip()
-            if any(trimmed.startswith(prefix) for prefix in skip_prefixes):
-                continue
-            cleaned_lines.append(line)
-
-        return "\n".join(cleaned_lines).strip()
+        return response.content.strip()
