@@ -56,8 +56,9 @@ class SummaryGenerator:
     Builds the source-delineated prompt and invokes LLMService to produce a grounded summary.
     """
 
-    def __init__(self, llm_service: LLMService):
+    def __init__(self, llm_service: LLMService, model: Optional[str] = None):
         self.llm = llm_service
+        self.model = model
 
     def build_prompt_context(
         self,
@@ -159,6 +160,7 @@ class SummaryGenerator:
                 Message(role=MessageRole.SYSTEM, content=system_msg),
                 Message(role=MessageRole.USER, content=user_msg),
             ],
+            model=self.model,
             temperature=0.3,
             max_tokens=2500,
         )

@@ -32,12 +32,15 @@ class SummaryPipeline:
         discovery: Optional[DocDiscovery] = None,
         classifier: Optional[DocClassifier] = None,
         budgeter: Optional[DocContextBudgeter] = None,
+        model: Optional[str] = None,
     ):
+        from backend.config import settings
         self.llm = llm_service or get_llm_service()
         self.classifier = classifier or DocClassifier()
         self.discovery = discovery or DocDiscovery(classifier=self.classifier)
         self.budgeter = budgeter or DocContextBudgeter()
-        self.generator = SummaryGenerator(llm_service=self.llm)
+        resolved_model = model or getattr(settings, "model_summary", "qwen2.5-coder:3b")
+        self.generator = SummaryGenerator(llm_service=self.llm, model=resolved_model)
 
     async def run(
         self,
