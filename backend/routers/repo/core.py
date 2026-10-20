@@ -31,7 +31,13 @@ def lookup_repo_hash(
 
     try:
         repo = resolve_repository(name, db, current_user)
-        return {"repository_hash": repo.repository_hash, "url": repo.url}
+        from backend.routers.repo.services.analysis import get_repo_display_name
+        project_name = get_repo_display_name(repo, fallback=name)
+        return {
+            "repository_hash": repo.repository_hash,
+            "url": repo.url,
+            "project_name": project_name,
+        }
     except HTTPException as e:
         raise e
 
