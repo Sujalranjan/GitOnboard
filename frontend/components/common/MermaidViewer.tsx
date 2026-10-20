@@ -7,16 +7,30 @@ interface MermaidProps {
   chart: string;
 }
 
-export const MermaidViewer: React.FC<MermaidProps> = ({ chart }) => {
-  const [svgContent, setSvgContent] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+// In-memory module cache keyed by `theme:chartContent` to ensure instantaneous renders without blinking
+const svgCache = new Map<string, string>();
+
+const MermaidViewerComponent: React.FC<MermaidProps> = ({ chart }) => {
   const { resolvedTheme } = useTheme();
+  const cleanChart = chart.trim();
+  const isDark = resolvedTheme === "dark";
+  const cacheKey = `${isDark ? "dark" : "light"}:${cleanChart}`;
+
+  const [svgContent, setSvgContent] = useState<string>(() => svgCache.get(cacheKey) || "");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-    const cleanChart = chart.trim();
-
     if (!cleanChart) return;
+
+    // If already in cache for this theme, ensure state has it and return immediately
+    const cached = svgCache.get(cacheKey);
+    if (cached) {
+      if (svgContent !== cached) {
+        setSvgContent(cached);
+      }
+      return;
+    }
 
     const renderChart = async () => {
       try {
@@ -24,7 +38,6 @@ export const MermaidViewer: React.FC<MermaidProps> = ({ chart }) => {
         // Dynamically import mermaid in browser client only
         const mermaidModule = await import("mermaid");
         const mermaid = mermaidModule.default || mermaidModule;
-        const isDark = resolvedTheme === "dark";
 
         mermaid.initialize({
           startOnLoad: false,
@@ -58,6 +71,8 @@ export const MermaidViewer: React.FC<MermaidProps> = ({ chart }) => {
         const safeId = `mermaid_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
         const { svg } = await mermaid.render(safeId, cleanChart);
 
+        svgCache.set(cacheKey, svg);
+
         if (isMounted) {
           setSvgContent(svg);
         }
@@ -74,7 +89,7 @@ export const MermaidViewer: React.FC<MermaidProps> = ({ chart }) => {
     return () => {
       isMounted = false;
     };
-  }, [chart, resolvedTheme]);
+  }, [cleanChart, isDark, cacheKey, svgContent]);
 
   if (error) {
     return (
@@ -100,3 +115,6 @@ export const MermaidViewer: React.FC<MermaidProps> = ({ chart }) => {
     />
   );
 };
+
+export const MermaidViewer = React.memo(MermaidViewerComponent, (prev, next) => prev.chart === next.chart);
+MermaidViewer.displayName = "MermaidViewer";

@@ -6,6 +6,91 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { MermaidViewer } from './common/MermaidViewer';
 
+const summaryMarkdownComponents = {
+  pre: ({ children }) => {
+    const childProps = children?.props;
+    const className = childProps?.className || '';
+    const rawCode = String(childProps?.children || '').trim();
+    const isMermaid =
+      className.includes('language-mermaid') ||
+      /^graph\s+/i.test(rawCode) ||
+      /^flowchart\s+/i.test(rawCode) ||
+      /^sequenceDiagram/i.test(rawCode) ||
+      /^classDiagram/i.test(rawCode) ||
+      /^erDiagram/i.test(rawCode) ||
+      /^stateDiagram/i.test(rawCode);
+
+    if (isMermaid) {
+      return <>{children}</>;
+    }
+    return (
+      <pre className="overflow-x-auto max-w-full p-4 rounded-xl bg-slate-900/90 dark:bg-slate-950/80 text-slate-100 dark:text-slate-200 font-mono text-xs my-4 border border-slate-700/50 dark:border-slate-800/80 shadow-md">
+        {children}
+      </pre>
+    );
+  },
+  code: ({ className, children, ...props }) => {
+    const match = /language-(\w+)/.exec(className || '');
+    const codeString = String(children).replace(/\n$/, '').trim();
+    const isMermaid =
+      (match && match[1]?.toLowerCase() === 'mermaid') ||
+      /^graph\s+/i.test(codeString) ||
+      /^flowchart\s+/i.test(codeString) ||
+      /^sequenceDiagram/i.test(codeString) ||
+      /^classDiagram/i.test(codeString) ||
+      /^erDiagram/i.test(codeString) ||
+      /^stateDiagram/i.test(codeString);
+
+    if (isMermaid) {
+      return <MermaidViewer chart={codeString} />;
+    }
+
+    const isMultiline = String(children).includes('\n');
+    if (!isMultiline) {
+      return (
+        <code
+          className="break-all font-mono text-xs px-1.5 py-0.5 rounded-md bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 font-medium"
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code className="block whitespace-pre font-mono text-xs" {...props}>
+        {children}
+      </code>
+    );
+  },
+  table: ({ children }) => (
+    <div className="overflow-x-auto max-w-full my-4 border border-slate-200/80 dark:border-slate-700/80 rounded-xl overflow-hidden glass-panel-subtle shadow-sm">
+      <table className="w-full text-xs font-mono border-collapse divide-y divide-slate-200 dark:divide-slate-700">
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead className="bg-slate-100/70 dark:bg-slate-800/60 text-slate-800 dark:text-slate-200">
+      {children}
+    </thead>
+  ),
+  th: ({ children }) => (
+    <th className="px-4 py-2.5 text-left font-semibold border-b border-slate-200 dark:border-slate-700">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="px-4 py-2 text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800/50">
+      {children}
+    </td>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-amber-500/80 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-2 my-3 rounded-r text-sm text-slate-700 dark:text-slate-300 break-words">
+      {children}
+    </blockquote>
+  ),
+};
+
 export default function RepositorySummary({ repoName }) {
   const [summary, setSummary] = useState(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -14,6 +99,7 @@ export default function RepositorySummary({ repoName }) {
   const isGenerating = taskStatus === 'processing' || localIsGenerating;
   const [isOutdated, setIsOutdated] = useState(false);
   const [error, setError] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const fetchSummary = useCallback(async () => {
     try {
@@ -31,9 +117,14 @@ export default function RepositorySummary({ repoName }) {
       }
       if (data.status === 'completed' || data.status === 'idle') {
         setLocalIsGenerating(false);
+        setIsCancelling(false);
+      } else if (data.status === 'cancelled') {
+        setLocalIsGenerating(false);
+        setIsCancelling(false);
       } else if (data.status === 'failed') {
         setLocalIsGenerating(false);
-        setError("Summary generation failed. Please try again.");
+        setIsCancelling(false);
+        setError("Summary generation failed to complete. You can try again or view the static summary.");
       }
     } catch (err) {
       if (!err.message?.includes("Failed to fetch summary")) {
@@ -55,10 +146,17 @@ export default function RepositorySummary({ repoName }) {
   useEffect(() => {
     if (taskStatus === 'completed') {
       setLocalIsGenerating(false);
+      setIsCancelling(false);
       fetchSummary();
     } else if (taskStatus === 'failed') {
       setLocalIsGenerating(false);
-      setError("Summary generation failed. Please try again.");
+      setIsCancelling(false);
+      fetchSummary();
+      setError("Summary generation failed. A static fallback has been provided if available.");
+    } else if (taskStatus === 'cancelled') {
+      setLocalIsGenerating(false);
+      setIsCancelling(false);
+      fetchSummary();
     } else if (taskStatus === 'processing') {
       setLocalIsGenerating(true);
     } else if (taskStatus === 'idle' || taskStatus === null) {
@@ -83,6 +181,7 @@ export default function RepositorySummary({ repoName }) {
   const generateSummary = async () => {
     setError(null);
     setLocalIsGenerating(true);
+    setIsCancelling(false);
     try {
       const res = await fetch(`/api/repos/${repoName}/summary/generate`, {
         method: 'POST'
@@ -97,6 +196,23 @@ export default function RepositorySummary({ repoName }) {
     } catch (err) {
       setError(err.message);
       setLocalIsGenerating(false);
+    }
+  };
+
+  const cancelSummary = async () => {
+    setIsCancelling(true);
+    try {
+      const res = await fetch(`/api/repos/${repoName}/summary/cancel`, {
+        method: 'POST'
+      });
+      if (!res.ok) throw new Error("Failed to cancel summary generation");
+      setLocalIsGenerating(false);
+      await fetchSummary();
+    } catch (err) {
+      console.error("Cancel summary error:", err);
+      setLocalIsGenerating(false);
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -125,12 +241,22 @@ export default function RepositorySummary({ repoName }) {
         <p className="text-slate-500 dark:text-slate-400 mt-2 text-center max-w-md">
           The local LLM is analyzing the repository metadata and documentation. This process runs locally and will update automatically once complete.
         </p>
-        <button
-          onClick={fetchSummary}
-          className="mt-6 px-4 py-2 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 underline"
-        >
-          Check status now
-        </button>
+        
+        <div className="flex items-center gap-3 mt-6">
+          <button
+            onClick={cancelSummary}
+            disabled={isCancelling}
+            className="px-4 py-2 text-xs font-medium rounded-lg border border-rose-300 dark:border-rose-800/60 bg-rose-50/80 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors shadow-sm disabled:opacity-50"
+          >
+            {isCancelling ? "Cancelling..." : "Cancel Generation"}
+          </button>
+          <button
+            onClick={fetchSummary}
+            className="px-4 py-2 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 underline"
+          >
+            Check status now
+          </button>
+        </div>
       </div>
     );
   }
@@ -151,7 +277,14 @@ export default function RepositorySummary({ repoName }) {
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
           Generate Summary
         </button>
-        {error && <p className="text-red-500 dark:text-red-400 mt-4 text-sm">{error}</p>}
+        {error && (
+          <div className="mt-4 p-3 max-w-md rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <span>{error}</span>
+          </div>
+        )}
       </div>
     );
   }
@@ -180,104 +313,50 @@ export default function RepositorySummary({ repoName }) {
           )}
         </div>
         
-        <button
-          onClick={generateSummary}
-          disabled={isGenerating}
-          className="px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 text-sm font-medium rounded-md shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <svg className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-          {isOutdated ? "Update Summary" : isGenerating ? "Regenerating..." : "Regenerate"}
-        </button>
+        <div className="flex items-center gap-2">
+          {isGenerating && (
+            <button
+              onClick={cancelSummary}
+              disabled={isCancelling}
+              className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-xs font-medium rounded-md shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              {isCancelling ? "Cancelling..." : "Cancel"}
+            </button>
+          )}
+
+          <button
+            onClick={generateSummary}
+            disabled={isGenerating}
+            className="px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 text-sm font-medium rounded-md shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            {isOutdated ? "Update Summary" : isGenerating ? "Regenerating..." : "Regenerate"}
+          </button>
+        </div>
       </div>
+
+      {error && (
+        <div className="mx-6 mt-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between gap-2 shadow-sm">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <span>{error}</span>
+          </div>
+          <button onClick={() => setError(null)} className="text-rose-500 hover:text-rose-700 dark:hover:text-rose-200 text-xs underline ml-2">
+            Dismiss
+          </button>
+        </div>
+      )}
       
       {/* Markdown Content */}
       <div className="flex-grow overflow-y-auto p-8 prose dark:prose-invert prose-blue max-w-none">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          components={{
-            pre: ({ children }) => {
-              const childProps = children?.props;
-              const className = childProps?.className || '';
-              const rawCode = String(childProps?.children || '').trim();
-              const isMermaid =
-                className.includes('language-mermaid') ||
-                /^graph\s+/i.test(rawCode) ||
-                /^flowchart\s+/i.test(rawCode) ||
-                /^sequenceDiagram/i.test(rawCode) ||
-                /^classDiagram/i.test(rawCode) ||
-                /^erDiagram/i.test(rawCode) ||
-                /^stateDiagram/i.test(rawCode);
-
-              if (isMermaid) {
-                return <>{children}</>;
-              }
-              return (
-                <pre className="overflow-x-auto max-w-full p-4 rounded-xl bg-slate-900/90 dark:bg-slate-950/80 text-slate-100 dark:text-slate-200 font-mono text-xs my-4 border border-slate-700/50 dark:border-slate-800/80 shadow-md">
-                  {children}
-                </pre>
-              );
-            },
-            code: ({ className, children, ...props }) => {
-              const match = /language-(\w+)/.exec(className || '');
-              const codeString = String(children).replace(/\n$/, '').trim();
-              const isMermaid =
-                (match && match[1]?.toLowerCase() === 'mermaid') ||
-                /^graph\s+/i.test(codeString) ||
-                /^flowchart\s+/i.test(codeString) ||
-                /^sequenceDiagram/i.test(codeString) ||
-                /^classDiagram/i.test(codeString) ||
-                /^erDiagram/i.test(codeString) ||
-                /^stateDiagram/i.test(codeString);
-
-              if (isMermaid) {
-                return <MermaidViewer chart={codeString} />;
-              }
-
-              const isMultiline = String(children).includes('\n');
-              if (!isMultiline) {
-                return (
-                  <code
-                    className="break-all font-mono text-xs px-1.5 py-0.5 rounded-md bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 font-medium"
-                    {...props}
-                  >
-                    {children}
-                  </code>
-                );
-              }
-              return (
-                <code className="block whitespace-pre font-mono text-xs" {...props}>
-                  {children}
-                </code>
-              );
-            },
-            table: ({ children }) => (
-              <div className="overflow-x-auto max-w-full my-4 border border-slate-200/80 dark:border-slate-700/80 rounded-xl overflow-hidden glass-panel-subtle shadow-sm">
-                <table className="w-full text-xs font-mono border-collapse divide-y divide-slate-200 dark:divide-slate-700">
-                  {children}
-                </table>
-              </div>
-            ),
-            thead: ({ children }) => (
-              <thead className="bg-slate-100/70 dark:bg-slate-800/60 text-slate-800 dark:text-slate-200">
-                {children}
-              </thead>
-            ),
-            th: ({ children }) => (
-              <th className="px-4 py-2.5 text-left font-semibold border-b border-slate-200 dark:border-slate-700">
-                {children}
-              </th>
-            ),
-            td: ({ children }) => (
-              <td className="px-4 py-2 text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800/50">
-                {children}
-              </td>
-            ),
-            blockquote: ({ children }) => (
-              <blockquote className="border-l-4 border-amber-500/80 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-2 my-3 rounded-r text-sm text-slate-700 dark:text-slate-300 break-words">
-                {children}
-              </blockquote>
-            ),
-          }}
+          components={summaryMarkdownComponents}
         >
           {summary}
         </ReactMarkdown>

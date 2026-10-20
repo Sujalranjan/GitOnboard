@@ -152,6 +152,76 @@ interface ChatMessageItemProps {
   onTogglePlanExpanded?: () => void;
 }
 
+const markdownComponents = {
+  pre: ({ children }: any) => {
+    const childProps = (children as any)?.props;
+    const className = childProps?.className || '';
+    const rawCode = String(childProps?.children || '').trim();
+    const isMermaid =
+      className.includes('language-mermaid') ||
+      /^graph\s+/i.test(rawCode) ||
+      /^flowchart\s+/i.test(rawCode) ||
+      /^sequenceDiagram/i.test(rawCode) ||
+      /^classDiagram/i.test(rawCode) ||
+      /^erDiagram/i.test(rawCode) ||
+      /^stateDiagram/i.test(rawCode);
+
+    if (isMermaid) {
+      return <>{children}</>;
+    }
+    return (
+      <pre className="overflow-x-auto max-w-full p-3.5 rounded-xl bg-slate-900/90 dark:bg-slate-950/80 text-slate-100 dark:text-slate-200 font-mono text-xs my-2.5 border border-slate-700/50 dark:border-slate-800/80 shadow-md">
+        {children}
+      </pre>
+    );
+  },
+  code: ({ className, children, ...props }: any) => {
+    const match = /language-(\w+)/.exec(className || '');
+    const codeString = String(children).replace(/\n$/, '').trim();
+    const isMermaid =
+      (match && match[1]?.toLowerCase() === 'mermaid') ||
+      /^graph\s+/i.test(codeString) ||
+      /^flowchart\s+/i.test(codeString) ||
+      /^sequenceDiagram/i.test(codeString) ||
+      /^classDiagram/i.test(codeString) ||
+      /^erDiagram/i.test(codeString) ||
+      /^stateDiagram/i.test(codeString);
+
+    if (isMermaid) {
+      return <MermaidViewer chart={codeString} />;
+    }
+
+    const isMultiline = String(children).includes('\n');
+    if (!isMultiline) {
+      return (
+        <code
+          className="break-all font-mono text-xs px-1.5 py-0.5 rounded-md bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 font-medium"
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code className="block whitespace-pre font-mono text-xs" {...props}>
+        {children}
+      </code>
+    );
+  },
+  table: ({ children }: any) => (
+    <div className="overflow-x-auto max-w-full my-2.5 border border-slate-200/80 dark:border-slate-700/80 rounded-xl overflow-hidden glass-panel-subtle shadow-sm">
+      <table className="w-full text-xs font-mono border-collapse">
+        {children}
+      </table>
+    </div>
+  ),
+  blockquote: ({ children }: any) => (
+    <blockquote className="border-l-4 border-amber-500/80 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-1.5 my-2 rounded-r text-xs text-slate-700 dark:text-slate-300 break-words overflow-hidden">
+      {children}
+    </blockquote>
+  ),
+};
+
 const ChatMessageItem: React.FC<ChatMessageItemProps> = React.memo(({
   msg,
   hasTriggeredBrain,
@@ -177,75 +247,7 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = React.memo(({
         <div className="prose dark:prose-invert max-w-none min-w-0 text-sm leading-relaxed text-slate-800 dark:text-slate-200 break-words">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
-            components={{
-              pre: ({ children }: any) => {
-                const childProps = (children as any)?.props;
-                const className = childProps?.className || '';
-                const rawCode = String(childProps?.children || '').trim();
-                const isMermaid =
-                  className.includes('language-mermaid') ||
-                  /^graph\s+/i.test(rawCode) ||
-                  /^flowchart\s+/i.test(rawCode) ||
-                  /^sequenceDiagram/i.test(rawCode) ||
-                  /^classDiagram/i.test(rawCode) ||
-                  /^erDiagram/i.test(rawCode) ||
-                  /^stateDiagram/i.test(rawCode);
-
-                if (isMermaid) {
-                  return <>{children}</>;
-                }
-                return (
-                  <pre className="overflow-x-auto max-w-full p-3.5 rounded-xl bg-slate-900/90 dark:bg-slate-950/80 text-slate-100 dark:text-slate-200 font-mono text-xs my-2.5 border border-slate-700/50 dark:border-slate-800/80 shadow-md">
-                    {children}
-                  </pre>
-                );
-              },
-              code: ({ className, children, ...props }: any) => {
-                const match = /language-(\w+)/.exec(className || '');
-                const codeString = String(children).replace(/\n$/, '').trim();
-                const isMermaid =
-                  (match && match[1]?.toLowerCase() === 'mermaid') ||
-                  /^graph\s+/i.test(codeString) ||
-                  /^flowchart\s+/i.test(codeString) ||
-                  /^sequenceDiagram/i.test(codeString) ||
-                  /^classDiagram/i.test(codeString) ||
-                  /^erDiagram/i.test(codeString) ||
-                  /^stateDiagram/i.test(codeString);
-
-                if (isMermaid) {
-                  return <MermaidViewer chart={codeString} />;
-                }
-
-                const isMultiline = String(children).includes('\n');
-                if (!isMultiline) {
-                  return (
-                    <code
-                      className="break-all font-mono text-xs px-1.5 py-0.5 rounded-md bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 font-medium"
-                      {...props}
-                    >
-                      {children}
-                    </code>
-                  );
-                }
-                return (
-                  <code className="block whitespace-pre font-mono text-xs" {...props}>
-                    {children}
-                  </code>
-                );
-              },
-              table: ({ children }) => (
-                <div className="overflow-x-auto max-w-full my-2.5 border border-slate-200/80 dark:border-slate-700/80 rounded-xl overflow-hidden glass-panel-subtle shadow-sm">
-                  <table className="w-full text-xs font-mono border-collapse">
-                    {children}
-                  </table>
-                </div>
-              ),
-              blockquote: ({ children }) => (
-                <blockquote className="border-l-4 border-amber-500/80 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-1.5 my-2 rounded-r text-xs text-slate-700 dark:text-slate-300 break-words overflow-hidden">
-                  {children}
-                </blockquote>
-              ),
-            }}
+            components={markdownComponents}
           >
             {msg.content}
           </ReactMarkdown>
@@ -324,7 +326,7 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = React.memo(({
 });
 ChatMessageItem.displayName = 'ChatMessageItem';
 
-export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
+const InvestigationChatPanelComponent: React.FC<ChatPanelProps> = ({
   messages,
   running,
   onSendMessage,
@@ -340,6 +342,10 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
 }) => {
   const [planExpanded, setPlanExpanded] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleTogglePlan = React.useCallback(() => {
+    setPlanExpanded((prev) => !prev);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -449,7 +455,7 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
                 onToggleBrain={onToggleBrain}
                 tasks={tasks}
                 planExpanded={planExpanded}
-                onTogglePlanExpanded={() => setPlanExpanded((prev) => !prev)}
+                onTogglePlanExpanded={handleTogglePlan}
               />
             ))
           )}
@@ -482,4 +488,8 @@ export const InvestigationChatPanel: React.FC<ChatPanelProps> = ({
     </div>
   );
 };
+
+export const InvestigationChatPanel = React.memo(InvestigationChatPanelComponent);
+InvestigationChatPanel.displayName = 'InvestigationChatPanel';
+
 

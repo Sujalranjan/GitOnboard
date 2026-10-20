@@ -25,14 +25,16 @@ EVIDENCE TRUST HIERARCHY:
 DISCREPANCY DETECTION:
 If documentation claims something that contradicts verified code evidence (e.g. docs state 'Django' but code uses 'FastAPI', or docs list obsolete endpoints), prioritize the verified code evidence and explicitly list the contradiction in a 'Discrepancies & Notes' section.
 
+NAMING RULE:
+Always identify the repository as '{repo_name}'. NEVER use raw internal UUID hashes (e.g. 37b6d355-2e28-4e98-...) as the project title or in the text.
+
 DIAGRAMS & VISUALIZATIONS:
 When architectural, workflow, or sequence relationships are present in the documentation (e.g. ARCHITECTURE.md, README.md, .mmd files) or obvious from static analysis, represent them using a valid ```mermaid code block (such as flowchart TD/LR, sequenceDiagram, or classDiagram). NEVER use raw ASCII art boxes or ASCII lines; always use ```mermaid diagrams or GitHub-flavored Markdown tables.
 
 REQUIRED OUTPUT STRUCTURE:
-# {repo_name} — Repository Summary
+Output ONLY the final summary document in Markdown format. Do NOT repeat or include any prompt instructions, rules, or meta-comments in your output.
 
-CRITICAL NAMING RULE:
-Use the human-readable project/repository name ({repo_name}) in the title and throughout the summary. NEVER use raw internal UUID hashes (e.g., 37b6d355-2e28-4e98-...) as the project title.
+# {repo_name} — Repository Summary
 
 ## 1. Overview & Purpose
 (High-level summary of what the software does, who it is for, and its primary capabilities)
@@ -166,4 +168,22 @@ class SummaryGenerator:
         )
 
         response = await self.llm.generate(request)
-        return response.content.strip()
+        content = response.content.strip()
+
+        # Clean any accidental echoing of prompt instructions
+        cleaned_lines = []
+        skip_prefixes = (
+            "CRITICAL NAMING RULE",
+            "NAMING RULE:",
+            "REQUIRED OUTPUT STRUCTURE",
+            "EVIDENCE TRUST HIERARCHY",
+            "DISCREPANCY DETECTION:",
+            "DIAGRAMS & VISUALIZATIONS:",
+        )
+        for line in content.splitlines():
+            trimmed = line.strip()
+            if any(trimmed.startswith(prefix) for prefix in skip_prefixes):
+                continue
+            cleaned_lines.append(line)
+
+        return "\n".join(cleaned_lines).strip()

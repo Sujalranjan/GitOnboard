@@ -14,21 +14,25 @@ from .schemas import (
 
 def generate_deterministic_fallback(
     repo_name: str,
-    deployable_units: List[DeployableUnit],
-    verified_claims: List[RepositoryClaim],
+    deployable_units: Optional[List[DeployableUnit]] = None,
+    verified_claims: Optional[List[RepositoryClaim]] = None,
     metrics: Optional[Dict[str, Any]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Produces an authoritative, fact-grounded Markdown summary strictly from verified facts.
     Does not invent qualitative assertions or unsupported architectural claims.
     """
     metrics = metrics or {}
+    metadata = metadata or {}
+    deployable_units = deployable_units or []
+    verified_claims = verified_claims or []
     sections = []
 
     # 1. Title & Overview
     sections.append(f"# {repo_name} — Repository Summary (Deterministic Verification)")
     
-    total_files = metrics.get("total_files", "Unknown")
+    total_files = metrics.get("total_files", metadata.get("statistics", {}).get("files", "Unknown"))
     lines_of_code = metrics.get("lines_of_code", "Unknown")
     
     sections.append(
@@ -38,7 +42,7 @@ def generate_deterministic_fallback(
         f"- **Analysis Mode**: Deterministic static analysis and dependency verification."
     )
 
-    # 2. Deployable Units
+    # 2. Deployable Units & Projects
     if deployable_units:
         unit_lines = ["## 2. Deployable Units & Projects"]
         for u in deployable_units:
@@ -48,6 +52,11 @@ def generate_deterministic_fallback(
                 f"  - Root Path: {u.root_path}\n"
                 f"  - Entrypoints: {ep_str}"
             )
+        sections.append("\n".join(unit_lines))
+    elif metadata.get("entrypoints"):
+        unit_lines = ["## 2. Identified Entrypoints & Key Components"]
+        for ep in metadata.get("entrypoints", []):
+            unit_lines.append(f"- Entrypoint: `{ep}`")
         sections.append("\n".join(unit_lines))
 
     # 3. Verified Technology Stack
@@ -68,6 +77,20 @@ def generate_deterministic_fallback(
         tech_lines.append("### Declared but Unused Dependencies")
         for c in declared_unused:
             tech_lines.append(f"- **{c.subject}**: Present in manifest but no active application usage detected.")
+    if not strongly_supported and not supported and not declared_unused:
+        frameworks = metadata.get("frameworks", [])
+        if frameworks:
+            tech_lines.append("### Detected Frameworks")
+            for fw in frameworks:
+                tech_lines.append(f"- **{fw}**: Verified from static analysis.")
+        modules = metadata.get("modules", [])
+        if modules:
+            tech_lines.append("### Key Modules")
+            for m in modules[:5]:
+                mod_name = m.get("name") if isinstance(m, dict) else str(m)
+                tech_lines.append(f"- `{mod_name}`")
+        if not frameworks and not modules:
+            tech_lines.append("Static scan did not detect external framework dependencies.")
     
     sections.append("\n".join(tech_lines))
 
