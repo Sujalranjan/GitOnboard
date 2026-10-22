@@ -89,6 +89,7 @@ class Settings(BaseSettings):
     model_local_default: str = "qwen3.5:2b"
     model_local_fast: str = "qwen3.5:2b"
     model_local_quality: str = "qwen2.5-coder:3b"
+    model_summary: str = "qwen2.5-coder:3b"
     model_local_nemotron: str = "nemotron-mini:latest"
     model_local_max_tokens: int = 8192
 

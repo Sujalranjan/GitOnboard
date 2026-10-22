@@ -31,7 +31,13 @@ def lookup_repo_hash(
 
     try:
         repo = resolve_repository(name, db, current_user)
-        return {"repository_hash": repo.repository_hash, "url": repo.url}
+        from backend.routers.repo.services.analysis import get_repo_display_name
+        project_name = get_repo_display_name(repo, fallback=name)
+        return {
+            "repository_hash": repo.repository_hash,
+            "url": repo.url,
+            "project_name": project_name,
+        }
     except HTTPException as e:
         raise e
 
@@ -378,10 +384,53 @@ def get_summary(repo_name: str, db: Session = Depends(get_db), current_user: Use
     current_status = get_task_status(repo_name, "summary", current_user, db) or "idle"
     summary_art = db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == analysis.id, AnalysisArtifact.type == "summary").first()
     
+    from backend.routers.repo.services.analysis import get_repo_display_name
+    from backend.models.fact_store import FactRoute, FactCapability
+
+    # Gather enriched metadata if available to progressively enhance UI
+    metadata_art = db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == analysis.id, AnalysisArtifact.type == "enriched_metadata").first()
+    metrics_art = db.query(AnalysisArtifact).filter(AnalysisArtifact.analysis_id == analysis.id, AnalysisArtifact.type == "metrics").first()
+    routes_count = db.query(FactRoute).filter(FactRoute.analysis_id == analysis.id).count()
+    caps_count = db.query(FactCapability).filter(FactCapability.analysis_id == analysis.id).count()
+
+    repo_meta = (metadata_art.data or {}).get("repository", {}) if metadata_art else {}
+    langs = repo_meta.get("languages", {})
+    languages_list = list(langs.keys()) if isinstance(langs, dict) else (langs if isinstance(langs, list) else [])
+
+    meta_payload = {
+        "display_name": get_repo_display_name(repo, fallback=repo.repository_hash),
+        "primary_language": repo_meta.get("primary_language", "Unknown"),
+        "languages": languages_list,
+        "frameworks": repo_meta.get("frameworks", []),
+        "routes_count": routes_count,
+        "capabilities_count": caps_count,
+        "total_files": (metrics_art.data or {}).get("total_files", 0) if metrics_art else 0,
+    }
+
     if not summary_art:
-        return {"summary": None, "outdated": False, "status": current_status}
+        return {"summary": None, "outdated": False, "status": current_status, "metadata": meta_payload}
         
-    return {"summary": summary_art.data, "outdated": False, "status": "completed"}
+    return {
+        "summary": summary_art.data,
+        "outdated": False,
+        "status": current_status if current_status == "processing" else "completed",
+        "metadata": meta_payload
+    }
+
+@core_router.post("/{repo_name}/summary/cancel")
+def cancel_summary_generation(
+    repo_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Cancels an in-progress summary generation task and resets status.
+    """
+    current_status = get_task_status(repo_name, "summary", current_user, db)
+    if current_status == "processing":
+        set_task_status(repo_name, "summary", "cancelled", current_user, db)
+        return {"status": "cancelled", "message": "Summary generation cancelled."}
+    return {"status": current_status or "idle", "message": "No active summary generation to cancel."}
 
 @core_router.post("/{repo_name}/summary/generate")
 def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -394,12 +443,25 @@ def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Sess
         import asyncio
         from backend.database import SessionLocal
         from backend.summary import SummaryPipeline
+        from backend.summary.fallback import generate_deterministic_fallback
         from backend.repository_tools import resolve_repo_root
 
         bg_db = SessionLocal()
+        metadata = {}
+        metrics = {}
+        friendly_repo_name = repo_name
+        analysis = None
         try:
+            # Check if task was cancelled before starting
+            current_status = get_task_status(repo_name, "summary", current_user, bg_db)
+            if current_status == "cancelled":
+                logger.info(f"Summary generation for {repo_name} aborted before start: cancelled by user.")
+                return
+
             query_layer = get_or_build_model(repo_name, bg_db, current_user)
             repo, analysis = get_latest_analysis(repo_name, bg_db, current_user)
+            from backend.routers.repo.services.analysis import get_repo_display_name
+            friendly_repo_name = get_repo_display_name(repo, fallback=repo_name)
             
             em_art = bg_db.query(AnalysisArtifact).filter(
                 AnalysisArtifact.analysis_id == analysis.id,
@@ -414,12 +476,17 @@ def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Sess
             
             if em_art and em_art.data:
                 metadata = em_art.data
+                # Ensure repository name in metadata is friendly
+                if "repository" in metadata and isinstance(metadata["repository"], dict):
+                    curr_name = metadata["repository"].get("name", "")
+                    if not curr_name or len(curr_name) == 36:
+                        metadata["repository"]["name"] = friendly_repo_name
             else:
                 metadata = {
                     "schema_version": 1,
                     "note": "Basic metadata only. Re-analyze the repository to generate enriched metadata.",
                     "repository": {
-                        "name": repo_name,
+                        "name": friendly_repo_name,
                     },
                     "statistics": {
                         "files": metrics.get("total_files", "unknown"),
@@ -441,7 +508,7 @@ def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Sess
             pipeline = SummaryPipeline()
             result = asyncio.run(
                 pipeline.run(
-                    repo_name=repo_name,
+                    repo_name=friendly_repo_name,
                     metadata=metadata,
                     metrics=metrics,
                     repo_root=repo_root,
@@ -452,6 +519,12 @@ def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Sess
                 )
             )
             
+            # Check if task was cancelled while LLM pipeline was running
+            status_during_run = get_task_status(repo_name, "summary", current_user, bg_db)
+            if status_during_run == "cancelled":
+                logger.info(f"Summary generation for {repo_name} finished but discarded: cancelled by user.")
+                return
+
             # Save or update summary artifact
             summary_art = bg_db.query(AnalysisArtifact).filter(
                 AnalysisArtifact.analysis_id == analysis.id,
@@ -470,10 +543,51 @@ def generate_summary(repo_name: str, background_tasks: BackgroundTasks, db: Sess
         except Exception as e:
             bg_db.rollback()
             import traceback
-            logger.error(f"Summary generation failed: \n{traceback.format_exc()}")
-            set_task_status(repo_name, "summary", "failed", current_user, bg_db)
+            logger.error(f"Summary generation failed, attempting graceful fallback: \n{traceback.format_exc()}")
+            
+            # Check if user cancelled
+            current_status = get_task_status(repo_name, "summary", current_user, bg_db)
+            if current_status == "cancelled":
+                logger.info(f"Summary generation failure for {repo_name} ignored: cancelled by user.")
+                return
+
+            # Graceful failure: generate deterministic static fallback from metadata and metrics
+            try:
+                fallback_md = generate_deterministic_fallback(
+                    repo_name=friendly_repo_name,
+                    metrics=metrics,
+                    metadata=metadata,
+                )
+                notice = (
+                    "> [!NOTE]\n"
+                    "> **Static Analysis Summary (Graceful Fallback)**\n"
+                    "> Automated LLM synthesis was interrupted or unavailable. "
+                    "This summary was deterministically generated directly from static analysis and repository facts.\n\n"
+                )
+                graceful_summary = notice + fallback_md
+                
+                if analysis:
+                    summary_art = bg_db.query(AnalysisArtifact).filter(
+                        AnalysisArtifact.analysis_id == analysis.id,
+                        AnalysisArtifact.type == "summary"
+                    ).first()
+                    if summary_art:
+                        summary_art.data = graceful_summary
+                    else:
+                        summary_art = AnalysisArtifact(analysis_id=analysis.id, type="summary", data=graceful_summary)
+                        bg_db.add(summary_art)
+                    bg_db.commit()
+                    set_task_status(repo_name, "summary", "completed", current_user, bg_db)
+                    logger.info(f"Graceful deterministic fallback summary committed for {repo_name}")
+                else:
+                    set_task_status(repo_name, "summary", "failed", current_user, bg_db)
+            except Exception as fallback_err:
+                bg_db.rollback()
+                logger.error(f"Fallback generation also failed: {fallback_err}")
+                set_task_status(repo_name, "summary", "failed", current_user, bg_db)
         finally:
             bg_db.close()
             
     background_tasks.add_task(background_generate_summary)
     return {"status": "processing"}
+

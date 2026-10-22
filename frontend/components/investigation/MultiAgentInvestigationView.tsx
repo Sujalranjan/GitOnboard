@@ -43,6 +43,7 @@ interface MultiAgentInvestigationViewProps {
 export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewProps> = ({ repoName }) => {
   // State
   const [repoHash, setRepoHash] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string>(repoName);
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState<'idle' | 'running' | 'completed' | 'failed' | 'cancelled'>('idle');
   const [currentQuery, setCurrentQuery] = useState('');
@@ -102,13 +103,28 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
       const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(repoName);
       if (isUuid) {
         setRepoHash(repoName);
+        try {
+          const resHash = await fetch(`/api/repos/lookup-hash?name=${encodeURIComponent(repoName)}`);
+          if (resHash.ok) {
+            const hData = await resHash.json();
+            if (hData.project_name) {
+              setDisplayName(hData.project_name);
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to lookup repo friendly name:', err);
+        }
       } else {
+        setDisplayName(repoName);
         try {
           const resHash = await fetch(`/api/repos/lookup-hash?name=${encodeURIComponent(repoName)}`);
           if (resHash.ok) {
             const hData = await resHash.json();
             if (hData.repository_hash) {
               setRepoHash(hData.repository_hash);
+            }
+            if (hData.project_name) {
+              setDisplayName(hData.project_name);
             }
           }
         } catch (err) {
@@ -181,10 +197,14 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
 
     // Acknowledge assistant message (starts as normal conversational answer or thinking)
     const botMsgId = `assistant_${Date.now()}`;
+    const targetDisplayName = displayName && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(displayName)
+      ? displayName
+      : "this repository";
+
     const botMsg: ChatMessage = {
       id: botMsgId,
       role: 'assistant',
-      content: `I'm analyzing your request for **${repoName}**...`,
+      content: `I'm analyzing your request for **${targetDisplayName}**...`,
       timestamp: formatTimestamp(),
     };
 

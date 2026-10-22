@@ -12,37 +12,46 @@ from .schemas import BudgetedDocContext
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are an expert software architect and technical documentation writer.
-Your task is to produce a grounded, comprehensive, high-integrity Markdown repository summary.
+SYSTEM_PROMPT = """You are a senior software architect creating a concise, developer-friendly project overview.
+Your goal is to explain the project clearly so a developer can immediately understand what it does, how it is organized, and how to get started.
 
-EVIDENCE TRUST HIERARCHY:
-1. [VERIFIED CODE EVIDENCE] (Static analysis, language profiles, detected routes, functions, entrypoints) is the HIGHEST ground truth.
-2. [PRIMARY DOCUMENTATION] (README.md, ARCHITECTURE.md, core docs) describes official design and product intent.
-3. [SUPPORTING DOCUMENTATION] (API references, guides, diagrams) provides operational context.
-4. [AGENT / TOOL INSTRUCTIONS] (AGENTS.md, CLAUDE.md, skill.md) are contextual developer tool instructions ONLY.
-   CRITICAL RULE: NEVER treat agent/tool instructions as architectural evidence or software implementation facts.
+GUIDING PRINCIPLES:
+1. Synthesize & Explain: Focus on project purpose, architecture, core features, key workflows, and setup. Explain concepts in clear, direct technical language.
+2. Be as Concise as Possible, but as Detailed as Necessary:
+   - For focused repositories, maintain a clean, high-impact 4-5 section summary.
+   - For complex, multi-service, or large systems, allow the summary to expand to explain critical architectural layers, verified API endpoints, or data flows without omitting key details.
+3. DO NOT Dump Configuration Files or File Trees: Never copy-paste entire .env files, Dockerfiles, docker-compose files, shell script blocks, raw file trees, or boilerplate contribution guides.
+4. DO NOT Enumerate Function Counts or Raw Metrics: Avoid reciting mechanical AST statistics (e.g., 'has 12 functions, 64 total functions'). Instead, describe the functional roles of the primary modules.
+5. Grounding & Accuracy: Use ONLY the supplied evidence. Never invent features, endpoints, CLI commands, or relationships. If a detail requires deeper investigation or is omitted from the evidence, state the limitation or omit it.
+6. Repository Naming: Always identify the repository as '{repo_name}'. NEVER use raw internal UUID hashes as the project title or in the text.
+7. Visual Architecture Diagram: Where an architectural relationship or data flow is evidenced, include a clean, valid ```mermaid flowchart or diagram (e.g., ```mermaid graph TD / flowchart LR) showing services and data boundaries. NEVER print diagram nodes as plain text lines outside a ```mermaid code fence.
+8. Conditional Tables & Commands: Include copyable quickstart commands (in bash/sh code blocks) or verified API endpoint tables ONLY when genuine supporting data exists in the evidence.
+9. Single Pass Generation: Output the document EXACTLY ONCE from start to finish. Never duplicate or restart the document.
 
-DISCREPANCY DETECTION:
-If documentation claims something that contradicts verified code evidence (e.g. docs state 'Django' but code uses 'FastAPI', or docs list obsolete endpoints), prioritize the verified code evidence and explicitly list the contradiction in a 'Discrepancies & Notes' section.
+REQUIRED STRUCTURE:
+Output ONLY the final summary document in clean Markdown. Do NOT repeat instructions, do NOT repeat the document, and do NOT include meta-commentary.
 
-REQUIRED OUTPUT STRUCTURE:
-# {repo_name} — Repository Summary
+# {repo_name} — Project Overview
 
-## 1. Overview & Purpose
-(High-level summary of what the software does, who it is for, and its primary capabilities)
+## 1. Purpose & Core Value
+A concise explanation (1-2 paragraphs) of what the system does, the problems it solves, and its primary end-user or API capabilities.
 
-## 2. Tech Stack & Architecture
-(Core languages, frameworks, architectural pattern, and structural layers confirmed by static analysis)
+## 2. Architecture & System Flow
+High-level architectural pattern (e.g., microservices, modular monolith, event-driven) and how components connect.
+Include a clean ```mermaid diagram illustrating primary service boundaries, inter-service communication, and persistent stores.
 
-## 3. Key Components & Workflows
-(Main modules, entrypoints, database models, background tasks, API endpoints)
+## 3. Major Components & Key Features
+A breakdown of the principal services or modules and their responsibilities:
+- Group related components logically (e.g., Core API, Worker/Inference Engine, Data Access, Security).
+- Highlight key capabilities (e.g., authentication, async jobs, streaming, external integrations).
+- If evidenced, include a compact table of core endpoints or workflows.
 
-## 4. Developer & Operational Context
-(Setup, testing practices, and guidelines found in project documentation)
+## 4. Operational & Deployment Model
+A developer-focused summary of how the system runs (e.g., Docker containerization, exposed ports, runtime dependencies).
+- Include verified quickstart / run commands in code blocks when present in evidence.
 
-## 5. Discrepancies & Notes (if any)
-(Any mismatches between documentation and verified code facts)
-"""
+## 5. Notes & Observations (Optional)
+Notable design constraints, verified discrepancies between documentation and implementation, or areas requiring deeper investigation."""
 
 
 class SummaryGenerator:
@@ -50,8 +59,9 @@ class SummaryGenerator:
     Builds the source-delineated prompt and invokes LLMService to produce a grounded summary.
     """
 
-    def __init__(self, llm_service: LLMService):
+    def __init__(self, llm_service: LLMService, model: Optional[str] = None):
         self.llm = llm_service
+        self.model = model
 
     def build_prompt_context(
         self,
@@ -73,20 +83,21 @@ class SummaryGenerator:
             ]
 
 
+        # Format modules by name and purpose/role if available
+        module_names = [
+            m.get("name") if isinstance(m, dict) else str(m)
+            for m in resolved_modules[:8]
+            if m
+        ]
+
         code_summary = {
             "name": repo_info.get("name", "Unknown"),
             "primary_language": repo_info.get("primary_language", "Unknown"),
             "languages": repo_info.get("languages", {}),
             "frameworks": metadata.get("frameworks") or repo_info.get("frameworks", []),
             "entrypoints": metadata.get("entrypoints", []),
-            "modules": resolved_modules[:6],
-            "metrics": {
-                "total_files": metrics.get("total_files", "unknown"),
-                "lines_of_code": metrics.get("lines_of_code", "unknown"),
-                "total_functions": metrics.get("total_functions", "unknown"),
-                "total_classes": metrics.get("total_classes", "unknown"),
-                "largest_modules": metrics.get("largest_modules", [])[:5],
-            }
+            "key_modules": module_names,
+            "architecture_style": metadata.get("architecture", {}).get("style", "modular"),
         }
 
         sections.append(
@@ -153,6 +164,7 @@ class SummaryGenerator:
                 Message(role=MessageRole.SYSTEM, content=system_msg),
                 Message(role=MessageRole.USER, content=user_msg),
             ],
+            model=self.model,
             temperature=0.3,
             max_tokens=2500,
         )
