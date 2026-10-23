@@ -75,7 +75,7 @@ def build_default_service() -> "LLMService":
     else:
         # LOCAL Mode (Default): primary Qwen 3.5 2B (fast, native tools) with Qwen 2.5 Coder 3B fallback
         from backend.config import settings
-        ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+        ollama_url = settings.effective_ollama_base_url
         # Primary: Qwen 3.5 2B (fast, fits in memory, native tool calling)
         ollama_model = os.environ.get("OLLAMA_MODEL", settings.model_local_default)
         # Fallback: Qwen 2.5 coder (3B)

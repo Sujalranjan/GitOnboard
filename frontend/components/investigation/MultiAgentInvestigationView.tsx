@@ -73,9 +73,11 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
-  // Models
+  // Models & Worker Execution Mode
   const [availableModels, setAvailableModels] = useState<Record<string, string>>({});
-  const [selectedModel, setSelectedModel] = useState<string>('qwen3:4b-instruct');
+  const [selectedModel, setSelectedModel] = useState<string>('qwen3.5:2b');
+  const [workerModel, setWorkerModel] = useState<string>('qwen2.5-coder:3b');
+  const [workerType, setWorkerType] = useState<'local' | 'cloud'>('local');
 
   // Timer & abort controller
   const startTimeRef = useRef<number>(0);
@@ -91,8 +93,11 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
           const mData = await resModels.json();
           if (mData.models) {
             setAvailableModels(mData.models);
-            const firstModel = Object.keys(mData.models)[0];
-            if (firstModel) setSelectedModel(firstModel);
+            const modelKeys = Object.keys(mData.models);
+            if (modelKeys.length > 0) {
+              setSelectedModel((prev) => (mData.models[prev] ? prev : modelKeys[0]));
+              setWorkerModel((prev) => (mData.models[prev] ? prev : (modelKeys[1] || modelKeys[0])));
+            }
           }
         }
       } catch (err) {
@@ -228,8 +233,10 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
           query: queryText,
           repo_hash: repoHash || repoName,
           model: selectedModel,
+          worker_model: workerModel,
           show_tool_details: true,
           investigation_mode: 'multi_agent',
+          worker_type: workerType,
         }),
       });
 
@@ -674,6 +681,10 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
         }}
         selectedModel={selectedModel}
         onSelectModel={setSelectedModel}
+        workerModel={workerModel}
+        onSelectWorkerModel={setWorkerModel}
+        workerType={workerType}
+        onSelectWorkerType={setWorkerType}
         availableModels={availableModels}
         tasks={tasks}
         hasTriggeredBrain={hasTriggeredBrain}

@@ -33,6 +33,10 @@ interface ChatPanelProps {
   onNewInvestigation: () => void;
   selectedModel: string;
   onSelectModel: (m: string) => void;
+  workerModel?: string;
+  onSelectWorkerModel?: (m: string) => void;
+  workerType?: 'local' | 'cloud';
+  onSelectWorkerType?: (type: 'local' | 'cloud') => void;
   availableModels: Record<string, string>;
   tasks: TaskItem[];
   hasTriggeredBrain?: boolean;
@@ -46,6 +50,10 @@ interface ChatInputProps {
   onSendMessage: (query: string) => void;
   selectedModel: string;
   onSelectModel: (m: string) => void;
+  workerModel: string;
+  onSelectWorkerModel: (m: string) => void;
+  workerType: 'local' | 'cloud';
+  onSelectWorkerType: (type: 'local' | 'cloud') => void;
   modelOptions: Record<string, string>;
 }
 
@@ -54,6 +62,10 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
   onSendMessage,
   selectedModel,
   onSelectModel,
+  workerModel,
+  onSelectWorkerModel,
+  workerType,
+  onSelectWorkerType,
   modelOptions,
 }) => {
   const [input, setInput] = useState('');
@@ -87,38 +99,62 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
             className="flex-1 px-4 py-2.5 rounded-full glass-input text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-transparent transition-all disabled:opacity-50 text-sm"
           />
 
-          {/* Model Pill / Settings Dropdown */}
+          {/* Model & Worker Pill / Settings Dropdown */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
               className="p-2 rounded-full glass-panel-subtle hover:bg-slate-200/60 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors border border-slate-200/70 dark:border-slate-700/60"
-              title="Model Settings"
+              title="Execution & Model Settings"
             >
               <Settings className="w-5 h-5" />
             </button>
 
             {modelDropdownOpen && (
-              <div className="absolute bottom-full right-0 mb-2 glass-panel border border-slate-200/80 dark:border-slate-800/80 rounded-xl shadow-2xl z-50 min-w-56 text-slate-800 dark:text-slate-200 py-2">
-                <div className="px-3 py-1.5 text-xs font-semibold text-slate-400 dark:text-slate-400 uppercase tracking-wider">
-                  Select Model
+              <div className="absolute bottom-full right-0 mb-2 glass-panel border border-slate-200/80 dark:border-slate-800/80 rounded-xl shadow-2xl z-50 w-72 max-h-96 overflow-y-auto text-slate-800 dark:text-slate-200 py-2">
+                {/* Planner Model Header */}
+                <div className="px-3 py-1 text-xs font-semibold text-slate-400 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>Planner Model</span>
+                  <span className="text-[10px] text-indigo-500 dark:text-indigo-400 font-mono">Brain</span>
                 </div>
-                {Object.entries(modelOptions).map(([key, name]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => {
-                      onSelectModel(key);
-                      setModelDropdownOpen(false);
-                    }}
-                    className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100/60 dark:hover:bg-slate-800/60 flex items-center justify-between ${
-                      selectedModel === key ? 'text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    <span className="truncate">{name}</span>
-                    {selectedModel === key && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
-                  </button>
-                ))}
+                <div className="px-1 mb-2">
+                  {Object.entries(modelOptions).map(([key, name]) => (
+                    <button
+                      key={`planner-${key}`}
+                      type="button"
+                      onClick={() => onSelectModel(key)}
+                      className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs hover:bg-slate-100/60 dark:hover:bg-slate-800/60 flex items-center justify-between transition-colors ${
+                        selectedModel === key ? 'text-indigo-600 dark:text-indigo-400 font-semibold bg-indigo-50/50 dark:bg-indigo-950/40' : 'text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span className="truncate">{name}</span>
+                      {selectedModel === key && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="border-t border-slate-200/50 dark:border-slate-800/50 my-2" />
+
+                {/* Worker Model Header */}
+                <div className="px-3 py-1 text-xs font-semibold text-slate-400 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>Worker Model</span>
+                  <span className="text-[10px] text-emerald-500 dark:text-emerald-400 font-mono">Execution</span>
+                </div>
+                <div className="px-1 mb-1">
+                  {Object.entries(modelOptions).map(([key, name]) => (
+                    <button
+                      key={`worker-${key}`}
+                      type="button"
+                      onClick={() => onSelectWorkerModel(key)}
+                      className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs hover:bg-slate-100/60 dark:hover:bg-slate-800/60 flex items-center justify-between transition-colors ${
+                        workerModel === key ? 'text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50/50 dark:bg-emerald-950/40' : 'text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span className="truncate">{name}</span>
+                      {workerModel === key && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -333,6 +369,10 @@ const InvestigationChatPanelComponent: React.FC<ChatPanelProps> = ({
   onNewInvestigation,
   selectedModel,
   onSelectModel,
+  workerModel = 'qwen2.5-coder:3b',
+  onSelectWorkerModel = () => {},
+  workerType = 'local',
+  onSelectWorkerType = () => {},
   availableModels,
   tasks,
   hasTriggeredBrain = false,
@@ -483,6 +523,10 @@ const InvestigationChatPanelComponent: React.FC<ChatPanelProps> = ({
         onSendMessage={onSendMessage}
         selectedModel={selectedModel}
         onSelectModel={onSelectModel}
+        workerModel={workerModel}
+        onSelectWorkerModel={onSelectWorkerModel}
+        workerType={workerType}
+        onSelectWorkerType={onSelectWorkerType}
         modelOptions={modelOptions}
       />
     </div>
