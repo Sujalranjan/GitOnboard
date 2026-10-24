@@ -181,18 +181,10 @@ def get_valid_models() -> Dict[str, str]:
         settings.model_local_nemotron: "Nemotron Mini (Local - Ollama)",
     }
 
-    if settings.deployment_type == "PROD":
-        # In PROD mode, return available cloud models.
-        # If no cloud keys are configured, fallback gracefully to local models so the system does not crash.
-        if cloud_models:
-            return cloud_models
-        logger.warning("PROD mode configured but no cloud API keys found. Falling back to local models.")
-        return local_models
-    else:
-        # LOCAL mode: local models + whichever cloud models have API keys configured
-        models = dict(local_models)
-        models.update(cloud_models)
-        return models
+    # Combine all local and configured cloud models so users can pick any model for planner and worker
+    models = dict(local_models)
+    models.update(cloud_models)
+    return models
 
 
 class SetModelRequest(BaseModel):
@@ -214,9 +206,11 @@ class ModelsListResponse(BaseModel):
 class AnalyzeRequest(BaseModel):
     query: str
     repo_hash: str
-    model: str = None
+    model: str = None  # Planner model (or single-agent model)
+    worker_model: Optional[str] = None  # Explicit worker model (e.g. qwen2.5-coder:3b, gemini-3.8-flash, etc.)
     show_tool_details: bool = True
     investigation_mode: Optional[str] = "single_agent"  # "single_agent" or "multi_agent"
+    worker_type: Optional[str] = None  # "local" | "cloud" (if worker_model is not given)
 
 
 @router.get("/models", response_model=ModelsListResponse)
@@ -397,7 +391,7 @@ async def analyze_repository_stream(
             elif model.startswith("qwen") or ("nemotron" in model.lower() and "nvidia" not in model.lower()):
                 # Local Qwen or Nemotron model - Ollama-only service
                 from backend.ai.providers.ollama import OllamaProvider
-                ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+                ollama_url = settings.effective_ollama_base_url
                 ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
                 planner_ctx = int(os.environ.get("INVESTIGATION_PLANNER_CONTEXT", str(settings.investigation_planner_context)))
                 primary_provider = OllamaProvider(base_url=ollama_url, model=model, timeout=ollama_timeout, num_ctx=planner_ctx)
@@ -521,6 +515,8 @@ async def analyze_repository_stream(
                 request_id=request_id,
                 repository=repo_display_name,
                 mode=service_mode,
+                worker_type=request.worker_type or "local",
+                worker_model=request.worker_model,
             )
 
             # Run analysis as background task

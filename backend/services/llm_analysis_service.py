@@ -32,6 +32,8 @@ class LLMAnalysisService:
         request_id: Optional[str] = None,
         repository: Optional[str] = None,
         mode: Optional[str] = None,
+        worker_type: Optional[str] = "local",
+        worker_model: Optional[str] = None,
     ):
         self.llm_service = llm_service
         self.tool_layer = tool_layer
@@ -46,6 +48,8 @@ class LLMAnalysisService:
         self.request_id = request_id
         self.repository = repository
         self.mode = mode
+        self.worker_type = worker_type or "local"
+        self.worker_model = worker_model
         self.last_prompt_parts = None
         self.last_tool_dispatch = None
 
@@ -59,7 +63,7 @@ class LLMAnalysisService:
         Returns:
             QALoopResult with answer and metadata
         """
-        # Multi-Agent Mode (Main Planner + Local Worker + Persistent State Store)
+        # Multi-Agent Mode (Main Planner + Local/Cloud Worker + Persistent State Store)
         if self.mode == "multi_agent":
             from backend.agent.investigation.planner import MainInvestigationPlanner
             from backend.agent.investigation.worker import LocalInvestigationWorker
@@ -76,25 +80,55 @@ class LLMAnalysisService:
             # Main Planner uses the selected model (cloud or local depending on user choice)
             planner = MainInvestigationPlanner(self.llm_service, model=self.model)
 
-            # Worker model resolution:
-            # - In PROD: uses settings.investigation_worker_model_prod ("nemotron-3-ultra:cloud") with 256K context
-            # - In LOCAL: uses settings.investigation_worker_model_local ("qwen2.5-coder:3b") with 32K context
-            worker_model = os.environ.get("INVESTIGATION_WORKER_MODEL", settings.investigation_worker_model)
-            worker_ctx = int(os.environ.get("INVESTIGATION_WORKER_CONTEXT", str(settings.investigation_worker_context)))
-            worker_provider = "ollama"
-
-            # Always configure dedicated Ollama provider for worker with the required context window (e.g. 256K in PROD)
             from backend.ai.service import LLMService
-            from backend.ai.providers.ollama import OllamaProvider
-            ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-            ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
-            worker_llm_provider = OllamaProvider(
-                base_url=ollama_url,
-                model=worker_model,
-                timeout=ollama_timeout,
-                num_ctx=worker_ctx,
-            )
-            worker_llm_service = LLMService(providers=[worker_llm_provider])
+
+            # Configure worker model & provider based on user selection or defaults
+            target_worker_model = self.worker_model
+            if not target_worker_model:
+                if self.worker_type == "cloud":
+                    target_worker_model = os.environ.get("INVESTIGATION_WORKER_MODEL", settings.investigation_worker_model_prod)
+                else:
+                    target_worker_model = os.environ.get("INVESTIGATION_WORKER_MODEL", settings.investigation_worker_model_local)
+
+            # Determine if target_worker_model is local (Ollama) or cloud
+            is_ollama_model = (
+                target_worker_model.startswith("qwen")
+                or ("nemotron" in target_worker_model.lower() and "nvidia" not in target_worker_model.lower())
+                or self.worker_type == "local"
+            ) and not (target_worker_model in [settings.gemini_model, settings.groq_model, settings.openrouter_model])
+
+            if is_ollama_model:
+                from backend.ai.providers.ollama import OllamaProvider
+                worker_ctx = int(os.environ.get("INVESTIGATION_WORKER_CONTEXT", str(settings.investigation_worker_context_local)))
+                worker_provider = "ollama"
+                ollama_url = settings.effective_ollama_base_url
+                ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
+                worker_llm_provider = OllamaProvider(
+                    base_url=ollama_url,
+                    model=target_worker_model,
+                    timeout=ollama_timeout,
+                    num_ctx=worker_ctx,
+                )
+                worker_llm_service = LLMService(providers=[worker_llm_provider])
+            elif target_worker_model == settings.gemini_model:
+                from backend.ai.providers.gemini import GeminiProvider
+                gemini_api_key = os.environ.get("GEMINI_API_KEY", "") or getattr(settings, "gemini_api_key", "")
+                worker_llm_service = LLMService(providers=[GeminiProvider(api_key=gemini_api_key, model=target_worker_model)])
+                worker_provider = "gemini"
+            elif target_worker_model == settings.groq_model:
+                from backend.ai.providers.groq import GroqProvider
+                groq_api_key = os.environ.get("GROQ_API_KEY", "") or getattr(settings, "groq_api_key", "")
+                worker_llm_service = LLMService(providers=[GroqProvider(api_key=groq_api_key, model=target_worker_model)])
+                worker_provider = "groq"
+            elif target_worker_model == settings.openrouter_model:
+                from backend.ai.providers.openrouter import OpenRouterProvider
+                openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "") or getattr(settings, "openrouter_api_key", "")
+                worker_llm_service = LLMService(providers=[OpenRouterProvider(api_key=openrouter_api_key, model=target_worker_model)])
+                worker_provider = "openrouter"
+            else:
+                from backend.ai.service import get_llm_service
+                worker_llm_service = get_llm_service()
+                worker_provider = "cloud"
 
             worker_turns = int(os.environ.get("INVESTIGATION_WORKER_MAX_TURNS", str(settings.investigation_max_turns)))
             worker_max_obs = int(os.environ.get("INVESTIGATION_MAX_OBS_CHARS", str(settings.investigation_max_observation_chars)))
@@ -102,7 +136,7 @@ class LLMAnalysisService:
             worker = LocalInvestigationWorker(
                 tool_dispatch=tool_dispatch,
                 llm_service=worker_llm_service,
-                model=worker_model,
+                model=target_worker_model,
                 provider=worker_provider,
                 max_turns=worker_turns,
                 max_observation_chars=worker_max_obs,
@@ -176,6 +210,8 @@ def build_analysis_service(
     request_id: Optional[str] = None,
     repository: Optional[str] = None,
     mode: Optional[str] = None,
+    worker_type: Optional[str] = "local",
+    worker_model: Optional[str] = None,
 ) -> LLMAnalysisService:
     """Factory function to create LLMAnalysisService with unified configuration.
 
@@ -201,6 +237,8 @@ def build_analysis_service(
         request_id: Request ID for logging
         repository: Repository name for logging
         mode: Mode name (e.g., "baseline", "rim") for logging
+        worker_type: Worker runtime type ("local" or "cloud")
+        worker_model: Specific worker model identifier
 
     Returns:
         LLMAnalysisService instance ready to run queries
@@ -239,4 +277,6 @@ def build_analysis_service(
         request_id=request_id,
         repository=repository,
         mode=mode,
+        worker_type=worker_type,
+        worker_model=worker_model,
     )

@@ -134,13 +134,16 @@ class InvestigationOrchestrator:
             current_task.status = SubtaskStatus.RUNNING
             worker_id = f"worker-{current_task.id}"
 
+            is_worker_local = (getattr(self.worker, "provider", "ollama") != "cloud")
+            worker_role = "Local Repository Explorer" if is_worker_local else "Cloud Repository Explorer"
+
             await self._emit_event({
                 "type": "agent-spawn",
                 "agent_id": worker_id,
-                "role": "Local Repository Explorer",
+                "role": worker_role,
                 "model": getattr(self.worker, "model", "qwen2.5-coder:3b"),
                 "provider": getattr(self.worker, "provider", "ollama"),
-                "is_local": True,
+                "is_local": is_worker_local,
                 "status": "running",
                 "current_task": current_task.title,
                 "task_id": current_task.id,

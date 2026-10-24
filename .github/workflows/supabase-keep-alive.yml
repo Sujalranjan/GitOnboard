@@ -1,0 +1,76 @@
+name: Supabase Keep-Alive Daily Ping
+
+on:
+  schedule:
+    # Run once every 24 hours at 04:00 UTC (9:30 AM IST)
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    # Allows manual triggering from the GitHub Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  ping-supabase:
+    name: Ping Supabase Database
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install "psycopg[binary]"
+
+      - name: Query Supabase to prevent project pausing
+        env:
+          SUPABASE_DB_URL: ${{ secrets.PROD_DATABASE_URL || secrets.SUPABASE_DB_URL }}
+        run: |
+          python - << 'EOF'
+          import os
+          import sys
+          import psycopg
+
+          db_url = os.environ.get("SUPABASE_DB_URL")
+          if not db_url:
+              print("::error::Neither PROD_DATABASE_URL nor SUPABASE_DB_URL secret is set in GitHub repository settings.")
+              sys.exit(1)
+
+          # Convert SQLAlchemy format if present (e.g. postgresql+psycopg:// -> postgresql://)
+          if "+psycopg" in db_url:
+              db_url = db_url.replace("+psycopg", "")
+
+          try:
+              print("Connecting to Supabase PostgreSQL database...")
+              with psycopg.connect(db_url, connect_timeout=15) as conn:
+                  with conn.cursor() as cur:
+                      cur.execute("SELECT 1 AS heartbeat, current_timestamp AS ts;")
+                      row = cur.fetchone()
+                      print(f"✅ Supabase query successful: {row}")
+
+                      # Fetch sample data from repositories or tables to ensure real query traffic
+                      cur.execute("""
+                          SELECT table_name 
+                          FROM information_schema.tables 
+                          WHERE table_schema = 'public' 
+                          LIMIT 5;
+                      """)
+                      tables = [r[0] for r in cur.fetchall()]
+                      print(f"✅ Active public tables found: {tables}")
+
+                      if "repositories" in tables:
+                          cur.execute("SELECT count(*) FROM repositories;")
+                          repo_count = cur.fetchone()[0]
+                          print(f"✅ Sample data fetched: {repo_count} repositories registered.")
+
+              print("🎉 Supabase keep-alive ping completed successfully.")
+          except Exception as exc:
+              print(f"::error::Failed to query Supabase: {exc}")
+              sys.exit(1)
+          EOF

@@ -86,6 +86,8 @@ class Settings(BaseSettings):
     model_terminal_implement: str = "qwen3:4b-instruct"
 
     # LOCAL mode models (Ollama/Qwen/Nemotron)
+    local_ollama_base_url: str = "http://127.0.0.1:11434"
+    prod_ollama_base_url: str = "https://dheeraj.tailf34a27.ts.net"
     model_local_default: str = "qwen3.5:2b"
     model_local_fast: str = "qwen3.5:2b"
     model_local_quality: str = "qwen2.5-coder:3b"
@@ -216,6 +218,16 @@ class Settings(BaseSettings):
         if self.deployment_type == "PROD" and self.prod_azure_storage_container.strip():
             return self.prod_azure_storage_container.strip()
         return self.azure_storage_container.strip()
+
+    @property
+    def effective_ollama_base_url(self) -> str:
+        import os
+        explicit_url = os.environ.get("OLLAMA_BASE_URL", "").strip()
+        if explicit_url:
+            return explicit_url
+        if self.is_prod and self.prod_ollama_base_url.strip():
+            return self.prod_ollama_base_url.strip()
+        return self.local_ollama_base_url.strip()
 
     @property
     def is_prod(self) -> bool:
