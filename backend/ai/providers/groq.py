@@ -211,8 +211,14 @@ class GroqProvider:
         # Groq max_tokens ceiling for openai/gpt-oss-120b is 65536
         max_tokens = min(request.max_tokens, 65536) if request.max_tokens else 65536
 
+        # If request explicitly specifies a model valid for Groq or starts with a known Groq prefix, use it.
+        # Otherwise fallback to the provider's default model (e.g. if the caller passed gemini-3.8-flash).
+        target_model = request.model
+        if not target_model or "gemini" in target_model.lower() or "nemotron" in target_model.lower() or "qwen" in target_model.lower():
+            target_model = self.default_model
+
         body: Dict[str, Any] = {
-            "model": request.model or self.default_model,
+            "model": target_model,
             "messages": messages,
             "temperature": request.temperature,
             "max_tokens": max_tokens,

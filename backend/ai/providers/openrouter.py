@@ -159,8 +159,14 @@ class OpenRouterProvider:
                 msg_dict["tool_calls"] = m.tool_calls
             messages.append(msg_dict)
 
+        # If request explicitly specifies a model valid for OpenRouter or known OpenRouter prefix, use it.
+        # Otherwise fallback to the provider's default model (e.g. if the caller passed gemini-3.8-flash).
+        target_model = request.model
+        if not target_model or "gemini" in target_model.lower() or target_model.startswith("openai/gpt-oss"):
+            target_model = self.default_model
+
         body: Dict[str, Any] = {
-            "model": request.model or self.default_model,
+            "model": target_model,
             "messages": messages,
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,

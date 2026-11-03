@@ -35,11 +35,28 @@ class SummaryPipeline:
         model: Optional[str] = None,
     ):
         from backend.config import settings
-        self.llm = llm_service or get_llm_service()
         self.classifier = classifier or DocClassifier()
         self.discovery = discovery or DocDiscovery(classifier=self.classifier)
         self.budgeter = budgeter or DocContextBudgeter()
+
+        # Configured summary model (user preference: Qwen 2.5 Coder)
         resolved_model = model or getattr(settings, "model_summary", "qwen2.5-coder:3b")
+
+        # If user explicitly requests a local model (e.g. qwen2.5-coder:3b) or llm_service is not supplied,
+        # route to OllamaProvider so it calls Ollama directly even if the global deployment is PROD.
+        if llm_service:
+            self.llm = llm_service
+        elif resolved_model.startswith("qwen") or "nemotron" in resolved_model.lower():
+            from backend.ai.providers.ollama import OllamaProvider
+            ollama_url = settings.effective_ollama_base_url
+            ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
+            ollama_ctx = int(os.environ.get("SUMMARY_CONTEXT_WINDOW", "32768"))
+            prov = OllamaProvider(base_url=ollama_url, model=resolved_model, timeout=ollama_timeout, num_ctx=ollama_ctx)
+            self.llm = LLMService(providers=[prov])
+            logger.info(f"SummaryPipeline: Using dedicated OllamaProvider for summary model '{resolved_model}' ({ollama_url})")
+        else:
+            self.llm = get_llm_service()
+
         self.generator = SummaryGenerator(llm_service=self.llm, model=resolved_model)
 
     async def run(
