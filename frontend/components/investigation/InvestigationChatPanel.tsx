@@ -314,71 +314,24 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = React.memo(({
           </ReactMarkdown>
         </div>
 
-        {/* Notice if agents were spawned for this query */}
-        {hasTriggeredBrain && !isBrainVisible && onToggleBrain && (
-          <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-medium">
-              <Bot className="w-3.5 h-3.5" />
-              <span>Multi-agent brain investigated this query</span>
+        {/* Action controls (Copy response) */}
+        {msg.role === 'assistant' && msg.content && (
+          <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between text-xs text-slate-500">
+            <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400">
+              {msg.timestamp && <span>{msg.timestamp}</span>}
             </div>
-            <button
-              onClick={onToggleBrain}
-              className="text-indigo-600 dark:text-indigo-400 hover:underline font-mono"
-            >
-              Show Agent Brain &rarr;
-            </button>
-          </div>
-        )}
-
-        {/* Collapsible Multi-agent investigation plan card if present */}
-        {tasks.length > 0 && isBrainVisible && (
-          <div className="rounded-xl glass-panel-subtle border border-slate-200/80 dark:border-slate-800/80 overflow-hidden shadow-sm">
-            <button
-              onClick={onTogglePlanExpanded}
-              className="w-full px-3 py-2 flex items-center justify-between text-left text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/50 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Multi-agent investigation plan</span>
-              </div>
-              <ChevronDown
-                className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
-                  planExpanded ? 'transform rotate-180' : ''
-                }`}
-              />
-            </button>
-
-            {planExpanded && (
-              <div className="px-3 pb-3 pt-1 space-y-2 text-xs border-t border-slate-200/60 dark:border-slate-800/60">
-                {tasks.map((t, idx) => {
-                  const isDone = t.status === 'COMPLETED';
-                  const isRun = t.status === 'RUNNING';
-                  return (
-                    <div key={t.id || idx} className="flex items-start gap-2 text-slate-700 dark:text-slate-300">
-                      <div className="mt-0.5">
-                        {isDone ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                        ) : isRun ? (
-                          <div className="w-3.5 h-3.5 rounded-full border-2 border-indigo-600 dark:border-indigo-400 border-t-transparent animate-spin" />
-                        ) : (
-                          <div className="w-3.5 h-3.5 rounded-full border border-slate-400 dark:border-slate-600" />
-                        )}
-                      </div>
-                      <div className="flex-1 truncate">
-                        <span className={isDone ? 'line-through text-slate-400 dark:text-slate-500' : ''}>
-                          {idx + 1}. {t.title}
-                        </span>
-                        {t.assigned_agent && (
-                          <span className="ml-2 text-[10px] text-indigo-600 dark:text-indigo-400 font-mono px-1.5 py-0.5 rounded bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-200/50 dark:border-indigo-800/50">
-                            @{t.assigned_agent}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(msg.content);
+                }}
+                className="px-2 py-1 rounded hover:bg-slate-100/60 dark:hover:bg-slate-800/60 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors flex items-center gap-1 text-xs"
+                title="Copy response"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Copy</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -450,15 +403,15 @@ const InvestigationChatPanelComponent: React.FC<ChatPanelProps> = ({
         </button>
 
         <div className="flex items-center gap-2">
-          {/* Unhide / Hide Agent Brain button if triggered */}
-          {hasTriggeredBrain && onToggleBrain && (
+          {/* Toggle Brain button (always available once started or manually clicked) */}
+          {onToggleBrain && (
             <button
               onClick={onToggleBrain}
-              title={isBrainVisible ? 'Hide Agent Brain & Visualizer' : 'Show Agent Brain & Visualizer'}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+              title={isBrainVisible ? 'Hide Brain' : 'Show Brain'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all shadow-sm ${
                 isBrainVisible
-                  ? 'bg-indigo-50/70 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-950/60'
-                  : 'glass-panel-subtle border-slate-200/70 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+                  ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-950/60'
+                  : 'glass-panel-subtle border-slate-200/70 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
               }`}
             >
               <Bot className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
@@ -484,27 +437,29 @@ const InvestigationChatPanelComponent: React.FC<ChatPanelProps> = ({
       <div className="flex-1 overflow-y-auto px-6 py-8">
         <div className="max-w-4xl mx-auto space-y-6 text-sm">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <MessageCircle className="w-16 h-16 text-slate-300 dark:text-slate-600 mb-6" />
-              <p className="text-xl font-medium text-slate-700 dark:text-slate-300 mb-8">
-                Ask a question to get started
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center mb-6 text-indigo-600 dark:text-indigo-400 shadow-sm">
+                <Bot className="w-9 h-9" />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">
+                Ask about your codebase
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mb-8">
+                Get answers, trace features, explore architecture, and more with verified multi-agent analysis.
               </p>
 
               {/* Suggested Queries */}
-              <div className="w-full">
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider text-left">
-                  Try asking about:
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {suggestedQueries.map((q, idx) => (
+              <div className="w-full max-w-2xl">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {suggestedQueries.slice(0, 3).map((q, idx) => (
                     <button
                       key={idx}
                       onClick={() => {
                         onSendMessage(q);
                       }}
-                      className="text-left px-4 py-3 rounded-xl glass-panel-subtle hover:border-violet-500/50 dark:hover:border-violet-400/50 text-slate-700 dark:text-slate-200 text-sm transition-all shadow-sm hover:shadow-md"
+                      className="px-4 py-2.5 rounded-full glass-panel-subtle hover:border-indigo-500/50 dark:hover:border-indigo-400/50 text-slate-700 dark:text-slate-200 text-xs font-medium transition-all shadow-sm hover:shadow-md truncate"
                     >
-                      → {q}
+                      {q}
                     </button>
                   ))}
                 </div>
@@ -527,12 +482,22 @@ const InvestigationChatPanelComponent: React.FC<ChatPanelProps> = ({
 
           {running && messages.length > 0 && (
             <div className="flex justify-start">
-              <div className="glass-panel border border-slate-200/60 dark:border-slate-800/60 shadow-sm px-4 py-3 rounded-lg rounded-bl-none">
-                <div className="flex gap-2 items-center">
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
-                  <span className="text-xs text-slate-500 dark:text-slate-400 ml-2">Investigating codebase...</span>
+              <div className="glass-panel border border-slate-200/60 dark:border-slate-800/60 shadow-sm px-4 py-3 rounded-xl rounded-bl-none max-w-sm">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-5 h-5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                    <Bot className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Investigation in progress...
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+                  Analyzing repository, collecting evidence, and synthesizing results.
+                </p>
+                <div className="flex gap-1.5 items-center">
+                  <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
+                  <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                  <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
                 </div>
               </div>
             </div>

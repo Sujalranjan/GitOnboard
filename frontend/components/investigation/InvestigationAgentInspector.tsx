@@ -44,20 +44,21 @@ export const InvestigationAgentInspector: React.FC<AgentInspectorProps> = ({
   const isPlanner = agent.agent_id === 'planner-main' || agent.role.toLowerCase().includes('planner');
 
   return (
-    <div className="w-[320px] flex-shrink-0 glass-panel border-l border-slate-200/70 dark:border-slate-800/70 flex flex-col h-full text-slate-800 dark:text-slate-200 select-none">
+    <div className="w-[340px] flex-shrink-0 glass-panel border-l border-slate-200/70 dark:border-slate-800/70 flex flex-col h-full text-slate-800 dark:text-slate-200 select-none animate-in slide-in-from-right-4 duration-200">
       {/* Header with Agent ID & Controls */}
       <div className="h-14 px-4 border-b border-slate-200/70 dark:border-slate-800/70 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <Bot className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
           <span className="text-xs font-bold text-slate-900 dark:text-white tracking-wide">Agent Inspector</span>
         </div>
-        <div className="flex items-center gap-1.5 text-slate-400">
+        <div className="flex items-center gap-1 text-slate-400">
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 rounded hover:bg-slate-100/60 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white transition-colors"
+              title="Close Inspector"
+              className="p-1.5 rounded-lg hover:bg-slate-100/60 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white transition-colors"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>

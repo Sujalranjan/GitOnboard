@@ -52,11 +52,13 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
   const [copied, setCopied] = useState(false);
 
   // Agent Brain visibility preferences:
-  // - Starts false (user opens tab as normal chatbot)
-  // - Turns true automatically when backend emits agent/plan events
-  // - User can toggle hide/unhide anytime
+  // - Starts false (user opens tab as clean chatbot workspace)
+  // - Automatically opens when user submits prompt or backend emits agent events
+  // - Automatically hides when final answer arrives or investigation finishes
+  // - User can manually toggle anytime without resetting/interrupting investigation
   const [hasTriggeredBrain, setHasTriggeredBrain] = useState<boolean>(false);
   const [isBrainVisible, setIsBrainVisible] = useState<boolean>(false);
+  const userManuallyClosedBrainRef = useRef<boolean>(false);
 
   // Filter & Tabs for central visualizer
   const [activeCenterTab, setActiveCenterTab] = useState<'timeline' | 'tasks' | 'evidence' | 'files'>('timeline');
@@ -191,6 +193,9 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
     setTimelineEvents([]);
     setSelectedAgentId(null);
     setElapsedSeconds(0);
+    setHasTriggeredBrain(true);
+    userManuallyClosedBrainRef.current = false;
+    setIsBrainVisible(true);
 
     // Append user message immediately
     const userMsg: ChatMessage = {
@@ -320,7 +325,7 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
 
   // Process incoming SSE events from backend orchestrator
   const processEvent = (data: any, currentBotMsgId?: string) => {
-    // Whenever an agent or planner activity is detected, mark brain triggered and reveal brain
+    // Whenever an agent or planner activity is detected, mark brain triggered and reveal brain (if not manually closed)
     if (
       data.type === 'agent-spawn' ||
       data.type === 'plan-created' ||
@@ -328,7 +333,9 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
       data.type === 'tool-call'
     ) {
       setHasTriggeredBrain(true);
-      setIsBrainVisible(true);
+      if (!userManuallyClosedBrainRef.current) {
+        setIsBrainVisible(true);
+      }
     }
 
     if (data.type === 'agent-spawn') {
@@ -571,6 +578,9 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
     } else if (data.type === 'final-answer') {
       setFinalAnswer(data.content);
 
+      // Auto-hide the Brain when final answer is ready, returning to clean chat view
+      setIsBrainVisible(false);
+
       // Update the active assistant message with the final grounded answer
       setMessages((prev) => {
         if (currentBotMsgId && prev.some((m) => m.id === currentBotMsgId)) {
@@ -597,6 +607,7 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
     } else if (data.type === 'completed') {
       setStatus('completed');
       setRunning(false);
+      setIsBrainVisible(false);
       appendTimelineEvent({
         type: 'completed',
         agent_id: 'planner-main',
@@ -689,7 +700,17 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
         tasks={tasks}
         hasTriggeredBrain={hasTriggeredBrain}
         isBrainVisible={isBrainVisible}
-        onToggleBrain={() => setIsBrainVisible((prev) => !prev)}
+        onToggleBrain={() => {
+          setIsBrainVisible((prev) => {
+            const next = !prev;
+            if (!next && running) {
+              userManuallyClosedBrainRef.current = true;
+            } else if (next) {
+              userManuallyClosedBrainRef.current = false;
+            }
+            return next;
+          });
+        }}
         isFullScreenChat={!isBrainVisible}
       />
 
@@ -746,7 +767,10 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
 
                 {/* Quick hide visualizer toggle */}
                 <button
-                  onClick={() => setIsBrainVisible(false)}
+                  onClick={() => {
+                    userManuallyClosedBrainRef.current = true;
+                    setIsBrainVisible(false);
+                  }}
                   title="Hide visualizer and return to full chatbot"
                   className="p-1.5 rounded-lg glass-panel-subtle border border-slate-200/70 dark:border-slate-700/60 hover:text-slate-900 dark:hover:text-white text-slate-500 dark:text-slate-400 transition-colors shadow-sm"
                 >
@@ -755,8 +779,8 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
               </div>
             </div>
 
-            {/* Top Agent Overview Grid */}
-            <div className="p-3 border-b border-slate-200/60 dark:border-slate-800/60 glass-panel-subtle flex-shrink-0">
+            {/* Top Agent Overview - Compact Stacked List */}
+            <div className="px-4 py-2.5 border-b border-slate-200/60 dark:border-slate-800/60 glass-panel-subtle flex-shrink-0">
               <InvestigationAgentCards
                 agents={agents}
                 selectedAgentId={selectedAgentId}
