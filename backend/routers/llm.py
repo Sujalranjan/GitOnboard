@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -206,11 +206,22 @@ class ModelsListResponse(BaseModel):
 class AnalyzeRequest(BaseModel):
     query: str
     repo_hash: str
+    session_id: Optional[str] = None  # Unique client session / request ID for lifecycle and cancellation tracking
     model: str = None  # Planner model (or single-agent model)
     worker_model: Optional[str] = None  # Explicit worker model (e.g. qwen2.5-coder:3b, gemini-3.8-flash, etc.)
     show_tool_details: bool = True
     investigation_mode: Optional[str] = "single_agent"  # "single_agent" or "multi_agent"
     worker_type: Optional[str] = None  # "local" | "cloud" (if worker_model is not given)
+
+
+class StopInvestigationRequest(BaseModel):
+    session_id: Optional[str] = None
+    repo_hash: Optional[str] = None
+
+
+# Global registry to track active LLM / investigation tasks for cancellation
+# Keys can be session_id, or f"{user_id}:{repo_hash}"
+_active_investigations: Dict[str, asyncio.Task] = {}
 
 
 @router.get("/models", response_model=ModelsListResponse)
@@ -271,8 +282,37 @@ def set_model(
 
 # ===== Main Streaming Analysis Endpoint =====
 
+@router.post("/analyze/stop")
+async def stop_repository_investigation(
+    stop_req: StopInvestigationRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Cancel an active repository investigation task running in the background.
+    Stops the asyncio task and all child worker executions immediately.
+    """
+    cancelled_count = 0
+    candidate_keys = []
+    if stop_req.session_id:
+        candidate_keys.append(stop_req.session_id)
+    if stop_req.repo_hash:
+        candidate_keys.append(f"{current_user.id}:{stop_req.repo_hash}")
+    # Also user-level key
+    candidate_keys.append(f"user:{current_user.id}")
+
+    for key in candidate_keys:
+        task = _active_investigations.pop(key, None)
+        if task and not task.done():
+            logger.info(f"[llm:stop] Cancelling active investigation task for key={key}")
+            task.cancel()
+            cancelled_count += 1
+
+    return {"status": "ok", "cancelled_tasks": cancelled_count}
+
+
 @router.post("/analyze/stream")
 async def analyze_repository_stream(
+    raw_request: Request,
     request: AnalyzeRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -522,6 +562,15 @@ async def analyze_repository_stream(
             # Run analysis as background task
             loop_task = asyncio.create_task(analysis_service.run(request.query))
 
+            # Register task in active investigations map for cancellation
+            user_repo_key = f"{current_user.id}:{request.repo_hash}"
+            user_key = f"user:{current_user.id}"
+            registered_keys = [user_repo_key, user_key]
+            if request.session_id:
+                registered_keys.append(request.session_id)
+            for k in registered_keys:
+                _active_investigations[k] = loop_task
+
             # 8. Drain event queue in parallel with analysis execution
             total_tool_calls = 0
             total_prompt_tokens = 0
@@ -533,6 +582,12 @@ async def analyze_repository_stream(
             try:
                 last_keepalive = time.time()
                 while not loop_task.done():
+                    # Check if client disconnected
+                    if await raw_request.is_disconnected():
+                        logger.info(f"[router:sse] Client disconnected, cancelling analysis task.")
+                        loop_task.cancel()
+                        break
+
                     try:
                         # Check for queued events with short timeout
                         try:
@@ -561,6 +616,11 @@ async def analyze_repository_stream(
 
                 print(f"[stream_generator] Main loop exited, events_yielded so far={events_yielded}")
 
+                if loop_task.cancelled():
+                    logger.info("[router:sse] Loop task was cancelled.")
+                    yield f"data: {json.dumps({'type': 'cancelled', 'content': 'Investigation stopped by user.'})}\n\n"
+                    return
+
                 # Drain any remaining events after analysis completes
                 while not event_queue.empty():
                     try:
@@ -577,10 +637,23 @@ async def analyze_repository_stream(
                 total_tool_calls = result.tool_call_count
                 # Note: tokens already accumulated in on_turn_callback, no need to re-add
 
+            except asyncio.CancelledError:
+                logger.info("[router:sse] Streaming task received CancelledError.")
+                if not loop_task.done():
+                    loop_task.cancel()
+                yield f"data: {json.dumps({'type': 'cancelled', 'content': 'Investigation stopped by user.'})}\n\n"
+                return
             except Exception as e:
                 logger.error(f"Error during QALoop execution: {e}", exc_info=True)
                 yield f"data: {json.dumps({'type': 'error', 'content': format_error_message(e)})}\n\n"
                 return
+            finally:
+                # Always clean up active task map
+                for k in registered_keys:
+                    if _active_investigations.get(k) is loop_task:
+                        _active_investigations.pop(k, None)
+                if not loop_task.done() and (loop_task.cancelling() if hasattr(loop_task, 'cancelling') else False or raw_request.is_disconnected()):
+                    loop_task.cancel()
 
             # 9. Emit final answer
             final_event = {

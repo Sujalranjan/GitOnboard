@@ -64,7 +64,6 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
   const [activeCenterTab, setActiveCenterTab] = useState<'timeline' | 'tasks' | 'evidence' | 'files'>('timeline');
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
-  const [isFindingsMinimized, setIsFindingsMinimized] = useState<boolean>(false);
 
   // Multi-agent entities
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -85,6 +84,7 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
   const startTimeRef = useRef<number>(0);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const currentSessionIdRef = useRef<string>('');
 
   // 1. Fetch available models & resolve repo hash
   useEffect(() => {
@@ -142,6 +142,77 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
 
     loadModelsAndHash();
   }, [repoName]);
+
+  // Storage key for persisting conversation and investigation state across tab refreshes
+  const storageKey = `gitonboard_investigation_${repoName}`;
+
+  // Restore state from sessionStorage on component mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.messages && parsed.messages.length > 0) {
+          setMessages(parsed.messages);
+          if (parsed.agents) setAgents(parsed.agents);
+          if (parsed.tasks) setTasks(parsed.tasks);
+          if (parsed.findings) setFindings(parsed.findings);
+          if (parsed.toolActivity) setToolActivity(parsed.toolActivity);
+          if (parsed.timelineEvents) setTimelineEvents(parsed.timelineEvents);
+          if (parsed.finalAnswer) setFinalAnswer(parsed.finalAnswer);
+          if (parsed.currentQuery) setCurrentQuery(parsed.currentQuery);
+          if (parsed.hasTriggeredBrain !== undefined) setHasTriggeredBrain(parsed.hasTriggeredBrain);
+          if (parsed.isBrainVisible !== undefined) setIsBrainVisible(parsed.isBrainVisible);
+
+          // If it was marked running before the page refreshed or backend restarted:
+          // Clean up dangling "I'm analyzing..." bot messages that never finished.
+          if (parsed.status === 'running' || !parsed.finalAnswer) {
+            setStatus('idle');
+            setRunning(false);
+            setMessages((prevMsgs) =>
+              prevMsgs.map((m) =>
+                m.role === 'assistant' && m.content.startsWith("I'm analyzing")
+                  ? {
+                      ...m,
+                      content:
+                        '⚠️ *Previous investigation session was terminated or interrupted.* Click **New Conversation** or submit a prompt to begin.',
+                    }
+                  : m
+              )
+            );
+          } else if (parsed.status) {
+            setStatus(parsed.status);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to restore investigation state from sessionStorage:', e);
+    }
+  }, [storageKey]);
+
+  // Persist state to sessionStorage whenever key properties change
+  useEffect(() => {
+    try {
+      if (messages.length > 0) {
+        const payload = {
+          messages,
+          agents,
+          tasks,
+          findings,
+          toolActivity,
+          timelineEvents,
+          finalAnswer,
+          status,
+          currentQuery,
+          hasTriggeredBrain,
+          isBrainVisible,
+        };
+        sessionStorage.setItem(storageKey, JSON.stringify(payload));
+      }
+    } catch (e) {
+      console.warn('Failed to persist investigation state to sessionStorage:', e);
+    }
+  }, [messages, agents, tasks, findings, toolActivity, timelineEvents, finalAnswer, status, currentQuery, hasTriggeredBrain, isBrainVisible, storageKey]);
 
   // Elapsed timer handler
   useEffect(() => {
@@ -226,6 +297,9 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
       description: `Target question: ${queryText}`,
     });
 
+    const sessionId = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    currentSessionIdRef.current = sessionId;
+
     const abortCtrl = new AbortController();
     abortControllerRef.current = abortCtrl;
 
@@ -237,6 +311,7 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
         body: JSON.stringify({
           query: queryText,
           repo_hash: repoHash || repoName,
+          session_id: sessionId,
           model: selectedModel,
           worker_model: workerModel,
           show_tool_details: true,
@@ -575,6 +650,16 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
           coverage_gaps: data.coverage_gaps || [],
         },
       });
+    } else if (data.type === 'cancelled') {
+      setStatus('cancelled');
+      setRunning(false);
+      appendTimelineEvent({
+        type: 'error',
+        agent_id: 'planner-main',
+        title: 'Investigation stopped by user',
+        description: data.content || 'Investigation halted.',
+        status: 'cancelled',
+      });
     } else if (data.type === 'final-answer') {
       setFinalAnswer(data.content);
 
@@ -644,10 +729,53 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
     }
   };
 
-  const handleStop = () => {
+  const handleStop = async () => {
+    // 1. Abort frontend client-side reader
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
+
+    // 2. Notify backend to cancel the active asyncio analysis task
+    try {
+      await fetch('/api/llm/analyze/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: currentSessionIdRef.current || undefined,
+          repo_hash: repoHash || repoName,
+        }),
+      });
+    } catch (e) {
+      console.warn('Failed to send stop signal to backend:', e);
+    }
+
+    // 3. Immediately set frontend state to stopped/cancelled
+    setRunning(false);
+    setStatus('cancelled');
+
+    // Update current bot message to indicate stopped
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'assistant' && last.content.startsWith("I'm analyzing")) {
+        return [
+          ...prev.slice(0, -1),
+          {
+            ...last,
+            content: '🛑 *Investigation stopped by user.*',
+          },
+        ];
+      }
+      return prev;
+    });
+
+    appendTimelineEvent({
+      type: 'error',
+      agent_id: 'planner-main',
+      title: 'Investigation stopped by user',
+      description: 'Execution stopped on request.',
+      status: 'failed',
+    });
   };
 
   const handleCopy = () => {
@@ -680,6 +808,7 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
         running={running}
         onSendMessage={handleStartInvestigation}
         onNewInvestigation={() => {
+          sessionStorage.removeItem(storageKey);
           setMessages([]);
           setTimelineEvents([]);
           setFindings([]);
@@ -981,60 +1110,6 @@ export const MultiAgentInvestigationView: React.FC<MultiAgentInvestigationViewPr
                         <span className="text-[10px] text-slate-400 dark:text-slate-500">Verified</span>
                       </div>
                     ))
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Bottom Verified Findings Banner */}
-            <div className="p-2.5 border-t border-slate-200/70 dark:border-slate-800/70 glass-nav flex-shrink-0 text-xs transition-all">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
-                  <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                  </div>
-                  <span>Verified Findings ({findings.length})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setActiveCenterTab('evidence')}
-                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-mono"
-                  >
-                    View all ({findings.length})
-                  </button>
-                  <button
-                    onClick={() => setIsFindingsMinimized((prev) => !prev)}
-                    className="p-1 rounded hover:bg-slate-100/60 dark:hover:bg-slate-800/60 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-                    title={isFindingsMinimized ? 'Expand Verified Findings' : 'Minimize Verified Findings'}
-                  >
-                    {isFindingsMinimized ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-
-              {!isFindingsMinimized && (
-                <div className="mt-1.5">
-                  {findings.length > 0 ? (
-                    <div className="space-y-1 max-h-20 overflow-y-auto">
-                      {findings.slice(0, 2).map((f, idx) => (
-                        <div
-                          key={f.id}
-                          className="flex items-center justify-between gap-2 p-1.5 rounded-lg glass-panel-subtle border border-slate-200/60 dark:border-slate-800/60 text-[11px]"
-                        >
-                          <div className="flex items-center gap-1.5 truncate">
-                            <span className="text-slate-400 dark:text-slate-500 font-mono">{idx + 1}</span>
-                            <span className="text-slate-700 dark:text-slate-300 truncate">{f.summary}</span>
-                          </div>
-                          <span className="text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-200/50 dark:border-indigo-800/50 font-mono text-[10px] flex-shrink-0">
-                            {f.file_path} {f.line_start && `L${f.line_start}`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
-                      No verified findings recorded yet.
-                    </div>
                   )}
                 </div>
               )}

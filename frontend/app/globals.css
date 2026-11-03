@@ -215,3 +215,49 @@ body,
   }
 }
 
+
+
+/* ==========================================================================
+   Global Unified Themed Scrollbars
+   Applied globally to *, html, body, and all scrollable containers across the project
+   ========================================================================== */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+.dark *::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.45);
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+  background: rgba(129, 140, 248, 0.6);
+}
+
+/* Standard W3C / Firefox scrollbar styling */
+html,
+body,
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.28) transparent;
+}
+
+.dark,
+.dark body,
+.dark * {
+  scrollbar-color: rgba(71, 85, 105, 0.45) transparent;
+}
