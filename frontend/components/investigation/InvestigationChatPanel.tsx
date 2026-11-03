@@ -245,11 +245,36 @@ const markdownComponents = {
     );
   },
   table: ({ children }: any) => (
-    <div className="overflow-x-auto max-w-full my-2.5 border border-slate-200/80 dark:border-slate-700/80 rounded-xl overflow-hidden glass-panel-subtle shadow-sm">
-      <table className="w-full text-xs font-mono border-collapse">
+    <div className="overflow-x-auto my-3 border border-slate-700/70 dark:border-slate-800 rounded-xl bg-slate-950/70 shadow-lg backdrop-blur-sm">
+      <table className="w-full text-xs font-sans border-collapse">
         {children}
       </table>
     </div>
+  ),
+  thead: ({ children }: any) => (
+    <thead className="bg-slate-900/90 text-slate-300 border-b border-slate-700/80 text-[11px] uppercase tracking-wider font-semibold">
+      {children}
+    </thead>
+  ),
+  th: ({ children }: any) => (
+    <th className="py-2.5 px-3.5 text-left font-semibold text-slate-200">
+      {children}
+    </th>
+  ),
+  tbody: ({ children }: any) => (
+    <tbody className="divide-y divide-slate-800/60 font-normal">
+      {children}
+    </tbody>
+  ),
+  tr: ({ children }: any) => (
+    <tr className="hover:bg-slate-800/40 transition-colors">
+      {children}
+    </tr>
+  ),
+  td: ({ children }: any) => (
+    <td className="py-2.5 px-3.5 text-slate-300 align-top leading-relaxed text-xs">
+      {children}
+    </td>
   ),
   blockquote: ({ children }: any) => (
     <blockquote className="border-l-4 border-amber-500/80 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-1.5 my-2 rounded-r text-xs text-slate-700 dark:text-slate-300 break-words overflow-hidden">
@@ -279,7 +304,7 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = React.memo(({
 
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-2xl min-w-0 px-4 py-3 rounded-xl shadow-sm glass-panel text-slate-900 dark:text-slate-100 rounded-bl-none text-sm leading-relaxed space-y-3 break-words overflow-hidden border border-slate-200/60 dark:border-slate-800/60">
+      <div className="w-full max-w-4xl min-w-0 px-5 py-4 rounded-xl shadow-sm glass-panel text-slate-900 dark:text-slate-100 rounded-bl-none text-sm leading-relaxed space-y-3 break-words overflow-hidden border border-slate-200/60 dark:border-slate-800/60">
         <div className="prose dark:prose-invert max-w-none min-w-0 text-sm leading-relaxed text-slate-800 dark:text-slate-200 break-words">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
@@ -457,7 +482,7 @@ const InvestigationChatPanelComponent: React.FC<ChatPanelProps> = ({
 
       {/* Messages stream container (fills full available width, centers message column) */}
       <div className="flex-1 overflow-y-auto px-6 py-8">
-        <div className="max-w-3xl mx-auto space-y-6 text-sm">
+        <div className="max-w-4xl mx-auto space-y-6 text-sm">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <MessageCircle className="w-16 h-16 text-slate-300 dark:text-slate-600 mb-6" />
