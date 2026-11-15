@@ -67,12 +67,22 @@ This is a college-level Final Year Project. See [CLAUDE.md](CLAUDE.md) for engin
 
 ---
 
+## Team / Authors
+
+| Name | Email |
+|------|-------|
+| **Dheeraj Salian** | [dheerajsalian16@gmail.com](mailto:dheerajsalian16@gmail.com) |
+| **Sujal Ranjan** | [sujalranjan02@gmail.com](mailto:sujalranjan02@gmail.com) |
+| **Vedanta Verma** | [vedantverma2005@gmail.com](mailto:vedantverma2005@gmail.com) |
+
+---
+
 ## License & Commercial Use
 
 GitOnboard is licensed under the **[PolyForm Noncommercial License 1.0.0](LICENSE)**.
 
 - **Noncommercial & Educational Use:** GitOnboard is freely available for qualifying educational, academic, personal, hobby, and other noncommercial purposes (such as learning, teaching, experimentation, and research).
-- **Commercial Use Restrictions:** Commercial use is **strictly not permitted** under this license without separate, prior written authorization from the copyright holder.
+- **Commercial Use Restrictions:** Commercial use is **strictly not permitted** under this license without separate, prior written authorization from the copyright holders (Dheeraj Salian, Sujal Ranjan, and Vedanta Verma).
 - **Public Availability:** The public availability of this repository on GitHub does not grant commercial rights or licenses.
 - **Inquiries:** Anyone seeking commercial licensing or permissions should contact the project owner, **Dheeraj Salian**, via GitHub: [https://github.com/salianDheeraj](https://github.com/salianDheeraj) or email: [dheerajsalian16@gmail.com](mailto:dheerajsalian16@gmail.com).
 
